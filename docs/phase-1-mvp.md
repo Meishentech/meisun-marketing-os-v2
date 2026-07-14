@@ -38,6 +38,7 @@
    - 接同一個 Supabase project。
    - 先做只讀，不改舊資料表。
    - 讀取既有 `marketing_campaigns`、`marketing_resources`、`tender_results`。
+   - `app_user_access` 需授權登入者讀取自己的 `role` 欄位，SQL 參考 `sql/phase1_access_role_grants.sql`。
 
 1. 既有資料先進畫面
    - 行銷專案總覽改用真資料。

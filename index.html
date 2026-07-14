@@ -7,7 +7,33 @@
   <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
-  <div class="app-shell">
+  <section class="login-screen" id="loginScreen" aria-label="登入">
+    <div class="login-card">
+      <div class="brand login-brand">
+        <div class="brand-mark">MS</div>
+        <div>
+          <strong>美昇 Marketing OS</strong>
+          <span>v2 secure access</span>
+        </div>
+      </div>
+      <h1>登入新版行銷管理平台</h1>
+      <p>使用公司帳號登入後，系統會依角色顯示總經理、行銷總監或業務畫面。</p>
+      <form class="login-form" id="loginForm">
+        <label>
+          <span>Email</span>
+          <input id="loginEmail" type="email" autocomplete="username" required>
+        </label>
+        <label>
+          <span>密碼</span>
+          <input id="loginPassword" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="primary-button" id="loginButton" type="submit">登入</button>
+      </form>
+      <p class="form-message" id="loginMessage"></p>
+    </div>
+  </section>
+
+  <div class="app-shell is-hidden" id="appShell">
     <aside class="sidebar" aria-label="主要選單">
       <div class="brand">
         <div class="brand-mark">MS</div>
@@ -26,8 +52,9 @@
       <nav class="nav-list" id="navList"></nav>
 
       <div class="sidebar-note">
-        <strong>目前版本</strong>
-        <span>角色操作原型。先確認資訊層級與流程，再接實際資料。</span>
+        <strong id="currentUserLabel">未登入</strong>
+        <span id="currentUserNote">正式登入後依角色顯示功能與資料。</span>
+        <button class="logout-button" id="logoutButton" type="button">登出</button>
       </div>
     </aside>
 

@@ -1,12 +1,34 @@
 const state = {
   role: "executive",
   page: "dashboard",
+  auth: {
+    email: "",
+    role: "",
+    canSwitchRoles: false,
+  },
   data: {
     campaigns: [],
     resources: [],
     tenders: [],
   },
   dataStatus: "loading",
+};
+
+const roleAliases = {
+  executive: "executive",
+  general_manager: "executive",
+  gm: "executive",
+  總經理: "executive",
+  marketing: "marketing",
+  marketing_director: "marketing",
+  director: "marketing",
+  admin: "marketing",
+  行銷總監: "marketing",
+  sales: "sales",
+  salesperson: "sales",
+  business: "sales",
+  member: "sales",
+  業務: "sales",
 };
 
 const roleMeta = {
@@ -815,7 +837,11 @@ function render() {
 
   document.querySelectorAll(".role-button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.role === state.role);
+    button.disabled = !state.auth.canSwitchRoles && button.dataset.role !== state.role;
   });
+
+  const roleSwitch = document.querySelector(".role-switch");
+  roleSwitch.classList.toggle("is-locked", !state.auth.canSwitchRoles);
 }
 
 function buildCurrentSections(page) {
@@ -926,10 +952,43 @@ function renderSection(section) {
 
 document.querySelectorAll(".role-button").forEach((button) => {
   button.addEventListener("click", () => {
+    if (!state.auth.canSwitchRoles && button.dataset.role !== state.role) return;
     state.role = button.dataset.role;
     state.page = "dashboard";
     render();
   });
+});
+
+document.getElementById("loginForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const email = document.getElementById("loginEmail").value.trim();
+  const password = document.getElementById("loginPassword").value;
+  const button = document.getElementById("loginButton");
+  const message = document.getElementById("loginMessage");
+
+  if (!email || !password) {
+    message.textContent = "請輸入 email 與密碼。";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "登入中...";
+  message.textContent = "";
+
+  try {
+    await signInWithPassword(email, password);
+    await bootAuthenticatedApp(email);
+  } catch (error) {
+    message.textContent = error.message || "登入失敗，請確認帳號密碼。";
+  }
+
+  button.disabled = false;
+  button.textContent = "登入";
+});
+
+document.getElementById("logoutButton").addEventListener("click", async () => {
+  await signOut();
+  showLogin();
 });
 
 async function loadExistingData() {
@@ -958,4 +1017,76 @@ async function loadExistingData() {
 }
 
 render();
-loadExistingData();
+init();
+
+async function init() {
+  if (!(await hasValidSession())) {
+    showLogin();
+    return;
+  }
+
+  const user = await getCurrentUser();
+  const email = user?.email || sessionStorage.getItem("ms_email") || "";
+  if (!email) {
+    showLogin();
+    return;
+  }
+
+  await bootAuthenticatedApp(email);
+}
+
+async function bootAuthenticatedApp(email) {
+  const access = await loadUserAccess(email);
+  if (!access.allowed) {
+    await signOut();
+    showLogin("此帳號尚未開通平台權限，請聯絡管理者。");
+    return;
+  }
+  if (access.mustChange) {
+    await signOut();
+    showLogin("此帳號需要先完成密碼變更，請先到原平台登入並更新密碼。");
+    return;
+  }
+
+  const normalizedRole = normalizeRole(access.role);
+  state.auth.email = email;
+  state.auth.role = access.role || normalizedRole;
+  state.auth.canSwitchRoles = ["admin", "administrator", "系統管理者"].includes(String(access.role || "").toLowerCase());
+  state.role = normalizedRole;
+  state.page = "dashboard";
+  sessionStorage.setItem("ms_email", email);
+  sessionStorage.setItem("ms_role", access.role || normalizedRole);
+
+  showApp();
+  await loadExistingData();
+}
+
+function normalizeRole(role) {
+  const key = String(role || "").trim().toLowerCase();
+  return roleAliases[key] || "sales";
+}
+
+function showLogin(message = "") {
+  document.getElementById("appShell").classList.add("is-hidden");
+  document.getElementById("loginScreen").classList.remove("is-hidden");
+  document.getElementById("loginMessage").textContent = message;
+  state.dataStatus = "fallback";
+}
+
+function showApp() {
+  document.getElementById("loginScreen").classList.add("is-hidden");
+  document.getElementById("appShell").classList.remove("is-hidden");
+  document.getElementById("currentUserLabel").textContent = state.auth.email || "已登入";
+  document.getElementById("currentUserNote").textContent = state.auth.canSwitchRoles
+    ? "管理者模式，可切換角色檢查畫面。"
+    : `目前角色：${roleLabel(state.role)}`;
+  render();
+}
+
+function roleLabel(role) {
+  return {
+    executive: "總經理",
+    marketing: "行銷總監",
+    sales: "業務",
+  }[role] || "業務";
+}
