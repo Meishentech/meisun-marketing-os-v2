@@ -10,6 +10,7 @@ const state = {
     campaigns: [],
     resources: [],
     tenders: [],
+    leads: [],
   },
   dataStatus: "loading",
 };
@@ -407,6 +408,21 @@ function subsidySection() {
 }
 
 function leadFunnelSection() {
+  if (state.data.leads.length) {
+    const stages = ["詢問", "有效名單", "業務跟進", "形成商機", "需主管協助"];
+    const rows = stages.map((stage) => {
+      const count = state.data.leads.filter((lead) => lead.stage === stage).length;
+      return [stage, String(count), leadStageDescription(stage)];
+    });
+
+    return {
+      type: "table",
+      title: "名單漏斗",
+      headers: ["階段", "數量", "說明"],
+      rows,
+    };
+  }
+
   return {
     type: "table",
     title: "名單漏斗",
@@ -421,7 +437,34 @@ function leadFunnelSection() {
   };
 }
 
+function leadStageDescription(stage) {
+  return {
+    詢問: "初步接觸或尚待判斷",
+    有效名單: "資料完整且可分派業務",
+    業務跟進: "已建立跟進紀錄或下一步",
+    形成商機: "具體需求與時程",
+    需主管協助: "需要高階拜訪或資源協調",
+  }[stage] || "自訂階段";
+}
+
 function executiveLeadRiskSection() {
+  const priorityLeads = state.data.leads
+    .filter((lead) => lead.stage === "需主管協助" || lead.importance === "高")
+    .slice(0, 5);
+
+  if (priorityLeads.length) {
+    return {
+      type: "list",
+      title: "需主管協助商機",
+      items: priorityLeads.map((lead) => [
+        lead.company_name || "未命名名單",
+        lead.requirement_note || lead.next_step || `來源：${lead.source_channel || "未分類"}`,
+        lead.importance || "中",
+        lead.importance === "高" || lead.stage === "需主管協助" ? "high" : "medium",
+      ]),
+    };
+  }
+
   return {
     type: "list",
     title: "需主管協助商機",
@@ -712,7 +755,7 @@ function tenderSection() {
         tender.title || "未命名標案",
         formatDate(tender.published_at) || "未標示",
         tag(tender.status || "未讀", statusTone(tender.status)),
-        tender.status === "已追蹤" ? "轉名單" : "查看",
+        tender.converted_lead_id ? "已轉名單" : tender.status === "已追蹤" ? "轉名單" : "查看",
       ]),
     };
   }
@@ -756,6 +799,21 @@ function tenderRuleSection() {
 }
 
 function salesLeadSection() {
+  const leads = visibleSalesLeads();
+  if (leads.length) {
+    return {
+      type: "table",
+      title: "我的名單",
+      headers: ["公司 / 案件", "來源", "狀態", "下次追蹤"],
+      rows: leads.slice(0, 8).map((lead) => [
+        lead.company_name || "未命名名單",
+        lead.source_channel || "未分類",
+        tag(lead.stage || "詢問", leadStageTone(lead.stage)),
+        formatDate(lead.next_followup_date) || "未設定",
+      ]),
+    };
+  }
+
   return {
     type: "table",
     title: "我的名單",
@@ -766,6 +824,22 @@ function salesLeadSection() {
       ["商辦大樓管委會", "官網", tag("初談"), "7/25"],
     ],
   };
+}
+
+function visibleSalesLeads() {
+  if (!state.data.leads.length) return [];
+  if (state.auth.canSwitchRoles) return state.data.leads;
+
+  const email = String(state.auth.email || "").toLowerCase();
+  const assigned = state.data.leads.filter((lead) => String(lead.assigned_sales || "").toLowerCase() === email);
+  return assigned.length ? assigned : state.data.leads;
+}
+
+function leadStageTone(stage = "") {
+  if (stage === "形成商機") return "green";
+  if (stage === "需主管協助") return "amber";
+  if (stage === "業務跟進") return "";
+  return "gray";
 }
 
 function leadFollowUpSection() {
@@ -848,11 +922,13 @@ function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
     "executive:dashboard": [projectOverviewSection(), decisionListSection(), channelSummarySection(true)],
+    "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
     "sales:tenders": [tenderSection(), tenderRuleSection()],
+    "sales:leads": [salesLeadSection(), leadFollowUpSection()],
   };
 
   return dynamicSections[key] || page.sections;
@@ -996,17 +1072,19 @@ async function loadExistingData() {
   render();
 
   try {
-    const [campaigns, resources, tenders] = await Promise.all([
+    const [campaigns, resources, tenders, leads] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=20"),
       safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
-      safeGET("tender_results?select=id,title,published_at,status,last_seen_at,matched_keywords,snippet,url&order=last_seen_at.desc&limit=20"),
+      loadTenderResults(),
+      safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? campaigns : [];
     state.data.resources = Array.isArray(resources) ? resources : [];
     state.data.tenders = Array.isArray(tenders) ? tenders : [];
+    state.data.leads = Array.isArray(leads) ? leads : [];
 
-    const liveCount = state.data.campaigns.length + state.data.resources.length + state.data.tenders.length;
+    const liveCount = state.data.campaigns.length + state.data.resources.length + state.data.tenders.length + state.data.leads.length;
     state.dataStatus = liveCount > 0 ? "live" : "fallback";
   } catch (error) {
     console.warn("Existing data load failed", error);
@@ -1014,6 +1092,13 @@ async function loadExistingData() {
   }
 
   render();
+}
+
+async function loadTenderResults() {
+  const withLead = await safeGET("tender_results?select=id,title,published_at,status,last_seen_at,matched_keywords,snippet,url,converted_lead_id&order=last_seen_at.desc&limit=20", null);
+  if (Array.isArray(withLead)) return withLead;
+
+  return safeGET("tender_results?select=id,title,published_at,status,last_seen_at,matched_keywords,snippet,url&order=last_seen_at.desc&limit=20");
 }
 
 render();

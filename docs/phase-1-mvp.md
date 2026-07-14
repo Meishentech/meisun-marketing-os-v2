@@ -49,6 +49,8 @@
 2. 新增商機 / 名單資料模型
    - 建立 `leads`、`lead_follow_ups`。
    - `tender_results` 新增 `converted_lead_id`，支援標案轉名單。
+   - SQL 檔：`sql/phase1_batch1_leads.sql`。
+   - 驗收：手動新增一筆 lead，確認總經理商機漏斗與業務「我的名單」可讀到資料；標案可記錄 `converted_lead_id`。
 
 3. 公會管理升級
    - 建立 `association_stage_options`。
