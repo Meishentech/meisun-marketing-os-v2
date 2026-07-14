@@ -906,7 +906,7 @@ function render() {
   document.getElementById("primaryAction").textContent = meta.primaryAction;
 
   renderNav(meta.nav);
-  renderKpis(page.kpis);
+  renderKpis(buildCurrentKpis(page));
   renderSections(buildCurrentSections(page));
 
   document.querySelectorAll(".role-button").forEach((button) => {
@@ -916,6 +916,32 @@ function render() {
 
   const roleSwitch = document.querySelector(".role-switch");
   roleSwitch.classList.toggle("is-locked", !state.auth.canSwitchRoles);
+}
+
+function buildCurrentKpis(page) {
+  const key = `${state.role}:${state.page}`;
+  const dynamicKpis = {
+    "executive:leads": leadKpis(),
+  };
+
+  return dynamicKpis[key] || page.kpis;
+}
+
+function leadKpis() {
+  if (!state.data.leads.length) return pages.executive.leads.kpis;
+
+  const total = state.data.leads.length;
+  const qualified = state.data.leads.filter((lead) => ["有效名單", "業務跟進", "形成商機", "需主管協助"].includes(lead.stage)).length;
+  const opportunities = state.data.leads.filter((lead) => ["形成商機", "需主管協助"].includes(lead.stage)).length;
+  const needsExecutive = state.data.leads.filter((lead) => lead.stage === "需主管協助").length;
+  const conversionRate = qualified ? Math.round((opportunities / qualified) * 100) : 0;
+
+  return [
+    ["詢問 / 接觸", String(total), "已建立於 leads 的名單總數"],
+    ["有效名單", String(qualified), "可分派業務追蹤"],
+    ["形成商機", String(opportunities), `${needsExecutive} 件需主管協助`],
+    ["平均轉換", `${conversionRate}%`, "以有效名單轉商機計算"],
+  ];
 }
 
 function buildCurrentSections(page) {
