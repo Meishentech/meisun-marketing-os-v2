@@ -1,6 +1,12 @@
 const state = {
   role: "executive",
   page: "dashboard",
+  data: {
+    campaigns: [],
+    resources: [],
+    tenders: [],
+  },
+  dataStatus: "loading",
 };
 
 const roleMeta = {
@@ -21,6 +27,9 @@ const roleMeta = {
     nav: [
       ["dashboard", "行銷總監工作台"],
       ["campaigns", "行銷專案管理"],
+      ["budget", "預算 / 補助 / 付款"],
+      ["channels", "Channel 成效"],
+      ["tenders", "招標工具管理"],
       ["vendors", "合作廠商 / 交付物"],
       ["associations", "公會管理"],
       ["knowledge", "產品知識庫"],
@@ -125,6 +134,39 @@ const pages = {
         ["待補資料", "6", "素材、預算或成效未完整"],
       ],
       sections: [projectOverviewSection(), campaignDetailCardsSection()],
+    },
+    budget: {
+      title: "預算 / 補助 / 付款",
+      subtitle: "行銷總監維護預算申請、核銷、補助與付款細節，總經理看摘要與待核准。",
+      kpis: [
+        ["預算項目", "18", "行銷案與公會費用"],
+        ["待送核准", "4", "含廠商追加與活動贊助"],
+        ["核銷中", "5", "補助相關 2 件"],
+        ["待付款", "73萬", "3 筆廠商或活動費用"],
+      ],
+      sections: [budgetSection(), subsidySection()],
+    },
+    channels: {
+      title: "Channel 成效",
+      subtitle: "行銷總監追蹤各通路的詢問、名單、商機與轉換率，調整資源配置。",
+      kpis: [
+        ["最佳來源", "公會", "有效名單 31，商機 9"],
+        ["標案工具", "33%", "名單轉商機率最高"],
+        ["待調整", "Facebook", "觸及高但有效名單低"],
+        ["待補資料", "官網", "需補產品線與產業分類"],
+      ],
+      sections: [channelSummarySection(false), channelDecisionSection()],
+    },
+    tenders: {
+      title: "招標工具管理",
+      subtitle: "管理監測專案、關鍵字、掃描規則與排除條件，業務端使用結果找案。",
+      kpis: [
+        ["監測專案", "5", "冰水主機、節能、醫院、商辦"],
+        ["啟用關鍵字", "18", "依產品與應用場景維護"],
+        ["本週新標案", "8", "2 件建議追蹤"],
+        ["已轉商機", "6", "回到名單管理追蹤"],
+      ],
+      sections: [tenderSection(), tenderAdminSection()],
     },
     vendors: {
       title: "合作廠商 / 交付物",
@@ -242,6 +284,16 @@ const pages = {
 };
 
 function projectOverviewSection() {
+  if (state.data.campaigns.length) {
+    return {
+      type: "table",
+      title: "上下半年行銷專案總覽",
+      wide: true,
+      headers: ["專案", "重要性", "進度", "預算", "待處理"],
+      rows: state.data.campaigns.slice(0, 6).map(formatCampaignRow),
+    };
+  }
+
   return {
     type: "table",
     title: "上下半年行銷專案總覽",
@@ -254,6 +306,29 @@ function projectOverviewSection() {
       ["LINE 客戶培育", tag("中", "green"), progress("74%", "green"), "12萬", "持續追蹤轉換"],
     ],
   };
+}
+
+function formatCampaignRow(campaign) {
+  const priority = campaign.priority || "中";
+  const priorityTone = priority === "高" ? "red" : priority === "低" ? "green" : "amber";
+  const budget = formatMoney(campaign.budget);
+  const progressLabel = campaignProgress(campaign.status);
+  const nextStep = campaign.notes || campaign.purpose || campaign.partner || "待補下一步";
+
+  return [
+    campaign.name || "未命名專案",
+    tag(priority, priorityTone),
+    progress(progressLabel.label, progressLabel.tone),
+    budget,
+    nextStep,
+  ];
+}
+
+function campaignProgress(status = "") {
+  if (["結案", "已完成", "完成"].includes(status)) return { label: "100%", tone: "green" };
+  if (["進行中", "執行中"].includes(status)) return { label: "65%", tone: "" };
+  if (["預計規劃", "規劃中", "估價中"].includes(status)) return { label: "25%", tone: "amber" };
+  return { label: "40%", tone: "amber" };
 }
 
 function decisionListSection() {
@@ -522,6 +597,20 @@ function requestKanbanSection() {
 }
 
 function salesHomeResourcesSection() {
+  if (state.data.resources.length) {
+    return {
+      type: "table",
+      title: "常用資料",
+      headers: ["資料", "版本", "適用", "操作"],
+      rows: state.data.resources.slice(0, 5).map((resource) => [
+        resource.title || "未命名資料",
+        resource.version || "未標示",
+        resource.audience || resource.product_line || "未分類",
+        resource.resource_url || resource.file_path ? "下載" : "查看",
+      ]),
+    };
+  }
+
   return {
     type: "table",
     title: "常用資料",
@@ -547,6 +636,23 @@ function salesTodoSection() {
 }
 
 function resourceLibrarySection() {
+  if (state.data.resources.length) {
+    return {
+      type: "table",
+      title: "文宣 / 資源資料庫",
+      wide: true,
+      headers: ["檔案名稱", "類型", "產品線", "適用客群", "狀態", "操作"],
+      rows: state.data.resources.slice(0, 8).map((resource) => [
+        resource.title || "未命名資料",
+        resource.resource_type || "其他",
+        resource.product_line || "未分類",
+        resource.audience || "未設定",
+        resource.is_external_usable ? tag("可對外", "green") : tag("內部 / 待確認", "amber"),
+        resource.resource_url || resource.file_path ? "下載" : "查看",
+      ]),
+    };
+  }
+
   return {
     type: "table",
     title: "搜尋結果：冰水主機",
@@ -575,6 +681,20 @@ function resourceUsageRuleSection() {
 }
 
 function tenderSection() {
+  if (state.data.tenders.length) {
+    return {
+      type: "table",
+      title: "標案結果",
+      headers: ["標案", "截止", "狀態", "操作"],
+      rows: state.data.tenders.slice(0, 8).map((tender) => [
+        tender.title || "未命名標案",
+        formatDate(tender.published_at) || "未標示",
+        tag(tender.status || "未讀", statusTone(tender.status)),
+        tender.status === "已追蹤" ? "轉名單" : "查看",
+      ]),
+    };
+  }
+
   return {
     type: "table",
     title: "標案結果",
@@ -583,6 +703,19 @@ function tenderSection() {
       ["醫院冰水主機汰換", "8/12", tag("評估中", "amber"), "轉名單"],
       ["商辦節能改善", "8/28", tag("已追蹤", "green"), "跟進"],
       ["校園空調採購", "9/03", tag("排除", "gray"), "查看原因"],
+    ],
+  };
+}
+
+function tenderAdminSection() {
+  return {
+    type: "cards",
+    title: "招標管理功能",
+    cards: [
+      ["監測專案", "管理來源網址、頁數、啟用狀態與最近掃描結果。"],
+      ["關鍵字", "維護冰水主機、節能、磁浮、中央空調等關鍵字。"],
+      ["篩選規則", "設定排除條件與相關度，避免低關聯標案進名單。"],
+      ["轉商機", "標案先評估、再追蹤，確認後才轉入商機 / 名單。"],
     ],
   };
 }
@@ -643,6 +776,25 @@ function tag(label, tone = "") {
   return `<span class="tag ${tone}">${label}</span>`;
 }
 
+function statusTone(status = "") {
+  if (["已追蹤", "已完成", "可對外"].includes(status)) return "green";
+  if (["評估中", "待確認", "待付款", "待核准"].includes(status)) return "amber";
+  if (["已排除", "逾期"].includes(status)) return "gray";
+  return "";
+}
+
+function formatMoney(value) {
+  const number = Number(value || 0);
+  if (!number) return "未填";
+  if (number >= 10000) return `${Math.round(number / 10000)}萬`;
+  return `${number.toLocaleString("zh-Hant-TW")}元`;
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
 function progress(label, tone = "") {
   const value = Number.parseInt(label, 10);
   return `${label}<div class="progress-track"><div class="progress-fill ${tone}" style="width:${value}%"></div></div>`;
@@ -654,16 +806,37 @@ function render() {
 
   document.getElementById("roleEyebrow").textContent = meta.eyebrow;
   document.getElementById("pageTitle").textContent = page.title;
-  document.getElementById("pageSubtitle").textContent = page.subtitle;
+  document.getElementById("pageSubtitle").innerHTML = `${page.subtitle} <span class="data-status">${dataStatusText()}</span>`;
   document.getElementById("primaryAction").textContent = meta.primaryAction;
 
   renderNav(meta.nav);
   renderKpis(page.kpis);
-  renderSections(page.sections);
+  renderSections(buildCurrentSections(page));
 
   document.querySelectorAll(".role-button").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.role === state.role);
   });
+}
+
+function buildCurrentSections(page) {
+  const key = `${state.role}:${state.page}`;
+  const dynamicSections = {
+    "executive:dashboard": [projectOverviewSection(), decisionListSection(), channelSummarySection(true)],
+    "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
+    "marketing:tenders": [tenderSection(), tenderAdminSection()],
+    "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
+    "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
+    "sales:tenders": [tenderSection(), tenderRuleSection()],
+  };
+
+  return dynamicSections[key] || page.sections;
+}
+
+function dataStatusText() {
+  if (state.dataStatus === "live") return "目前已接 Supabase 既有資料。";
+  if (state.dataStatus === "fallback") return "目前使用示範資料；未登入或權限未開時會維持此狀態。";
+  if (state.dataStatus === "error") return "Supabase 讀取失敗，暫時使用示範資料。";
+  return "資料讀取中。";
 }
 
 function renderNav(navItems) {
@@ -759,4 +932,30 @@ document.querySelectorAll(".role-button").forEach((button) => {
   });
 });
 
+async function loadExistingData() {
+  state.dataStatus = "loading";
+  render();
+
+  try {
+    const [campaigns, resources, tenders] = await Promise.all([
+      safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=20"),
+      safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
+      safeGET("tender_results?select=id,title,published_at,status,last_seen_at,matched_keywords,snippet,url&order=last_seen_at.desc&limit=20"),
+    ]);
+
+    state.data.campaigns = Array.isArray(campaigns) ? campaigns : [];
+    state.data.resources = Array.isArray(resources) ? resources : [];
+    state.data.tenders = Array.isArray(tenders) ? tenders : [];
+
+    const liveCount = state.data.campaigns.length + state.data.resources.length + state.data.tenders.length;
+    state.dataStatus = liveCount > 0 ? "live" : "fallback";
+  } catch (error) {
+    console.warn("Existing data load failed", error);
+    state.dataStatus = "error";
+  }
+
+  render();
+}
+
 render();
+loadExistingData();

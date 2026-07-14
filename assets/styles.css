@@ -201,6 +201,18 @@ h1 {
   font-weight: 700;
 }
 
+.page-subtitle .data-status {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .top-actions {
   display: flex;
   flex-wrap: wrap;

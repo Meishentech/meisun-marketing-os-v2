@@ -8,22 +8,63 @@
 
 1. 角色入口
    - 總經理：戰情室、預算、商機、Channel、待決策。
-   - 行銷總監：工作台、行銷案、公會、廠商交付物、產品知識、業務需求。
+   - 行銷總監：工作台、行銷案、預算 / 補助 / 付款、Channel 成效、招標工具管理、公會、廠商交付物、產品知識、業務需求。
    - 業務：資料中心、文宣下載、產品知識、招標工具、我的名單、需求單。
 
 2. 核心資料模型
    - 商機 / 名單：`leads`、`lead_follow_ups`。
    - 多廠商交付：`vendors`、`marketing_campaign_vendors`、`marketing_campaign_vendor_deliverables`。
    - 審核與需求：`approval_requests`、`sales_requests`。
-   - 公會彈性狀態：`association_stage_options`。
-   - 產品知識庫：`product_knowledge_items` 與來源關聯表。
+   - 公會彈性狀態：`association_stage_options`、`association_relationship_tags`。
+   - 產品知識庫：`product_knowledge_items`、`product_knowledge_sources`、`product_knowledge_item_sources`、`product_knowledge_resource_links`。
 
-3. 優先接資料的頁面
+3. 彙總 view
+   - `association_cooperation_overview`：整合公會任務、活動、期刊合作紀錄。
+   - `all_expenses_overview`：整合行銷案預算、公會費用、公會任務費用。
+
+4. 優先接資料的頁面
+   - 行銷專案總覽：先接既有 `marketing_campaigns`。
+   - 文宣 / 資源下載：先接既有 `marketing_resources`。
+   - 招標結果：先接既有 `tender_results`。
    - 商機 / 名單管理。
    - 行銷專案詳情。
    - 合作廠商 / 交付物。
    - 業務需求單。
    - 公會合作紀錄。
+
+## 建議開發順序
+
+0. 後端連線骨架
+   - 接同一個 Supabase project。
+   - 先做只讀，不改舊資料表。
+   - 讀取既有 `marketing_campaigns`、`marketing_resources`、`tender_results`。
+
+1. 既有資料先進畫面
+   - 行銷專案總覽改用真資料。
+   - 業務文宣下載改用真資料。
+   - 招標結果改用真資料。
+   - 若未登入或權限未開，畫面維持示範資料 fallback。
+
+2. 新增商機 / 名單資料模型
+   - 建立 `leads`、`lead_follow_ups`。
+   - `tender_results` 新增 `converted_lead_id`，支援標案轉名單。
+
+3. 公會管理升級
+   - 建立 `association_stage_options`。
+   - 建立 `association_relationship_tags`。
+   - 建立 `association_cooperation_overview`。
+
+4. 多廠商與交付物
+   - 建立 `vendors`、`marketing_campaign_vendors`、`marketing_campaign_vendor_deliverables`。
+   - `marketing_campaign_documents` 新增 `vendor_id`、`deliverable_id`。
+
+5. 審核與業務需求
+   - 建立 `sales_requests`。
+   - 建立 `approval_requests`。
+
+6. 產品知識庫與費用彙總
+   - 建立產品知識庫四表。
+   - 建立 `all_expenses_overview`。
 
 ## 暫緩到 Phase 2
 
