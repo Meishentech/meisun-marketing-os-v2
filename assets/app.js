@@ -583,14 +583,14 @@ function associationSection() {
         item.item_type || sourceTableLabel(item.source_table),
         tag(item.stage || "未填", statusTone(item.stage)),
         formatDate(item.due_date) || "未排定",
-        item.next_step || item.notes || item.owner || "待補下一步",
+        associationNextStep(item),
       ]);
 
     return {
       type: "table",
       title: "公會合作紀錄",
       wide: true,
-      headers: ["項目", "類型", "階段", "日期", "下一步"],
+      headers: ["項目", "類型", "階段", "日期", "負責 / 下一步"],
       rows,
     };
   }
@@ -695,6 +695,13 @@ function sourceTableLabel(source = "") {
 
 function associationDisplayName(association = {}) {
   return association.name || association.association_name || association.title || association.short_name || "未命名公會";
+}
+
+function associationNextStep(item = {}) {
+  if (item.next_step) return item.next_step;
+  if (item.notes) return item.notes;
+  if (item.owner) return `負責：${item.owner}`;
+  return "待補下一步";
 }
 
 function knowledgeSection(isMarketing) {
