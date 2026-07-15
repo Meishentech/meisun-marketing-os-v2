@@ -283,9 +283,9 @@ button {
 .eyebrow {
   margin: 0 0 7px;
   color: var(--blue);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
-  letter-spacing: .12em;
+  letter-spacing: 0;
 }
 
 h1 {

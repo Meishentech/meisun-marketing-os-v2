@@ -3,6 +3,7 @@ const state = {
   page: "dashboard",
   auth: {
     email: "",
+    displayName: "",
     role: "",
     canSwitchRoles: false,
   },
@@ -2131,7 +2132,7 @@ function render() {
   const meta = roleMeta[state.role];
   const page = pages[state.role][state.page];
 
-  document.getElementById("roleEyebrow").textContent = meta.eyebrow;
+  document.getElementById("roleEyebrow").textContent = welcomeLine();
   document.getElementById("pageTitle").textContent = page.title;
   document.getElementById("pageSubtitle").textContent = page.subtitle;
   document.getElementById("primaryAction").textContent = primaryActionLabel(meta);
@@ -2146,7 +2147,43 @@ function render() {
   });
 
   const roleSwitch = document.querySelector(".role-switch");
-  roleSwitch.classList.toggle("is-locked", !state.auth.canSwitchRoles);
+  roleSwitch.classList.add("is-hidden");
+}
+
+function welcomeLine() {
+  const role = roleLabel(state.role);
+  const name = displayUserName();
+  return `${role} ${name}，歡迎回來。${dailyGreetingMessage()}`;
+}
+
+function displayUserName() {
+  return state.auth.displayName || inferNameFromEmail(state.auth.email) || "夥伴";
+}
+
+function inferNameFromEmail(email = "") {
+  const localPart = String(email).split("@")[0] || "";
+  if (!localPart) return "";
+  return localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function dailyGreetingMessage() {
+  const messages = [
+    "今天又是美好的一天。",
+    "今天適合把重要的事往前推一點。",
+    "願今天的決策清楚、行動順利。",
+    "今天也穩穩掌握節奏。",
+    "把關鍵事項看清楚，剩下的就交給團隊推進。",
+    "今天適合聚焦在最有價值的機會上。",
+    "每個進度都有脈絡，今天就從最重要的一項開始。",
+  ];
+  const today = new Date().toISOString().slice(0, 10);
+  const seed = `${state.auth.email || state.role}-${today}`;
+  const index = [...seed].reduce((sum, char) => sum + char.charCodeAt(0), 0) % messages.length;
+  return messages[index];
 }
 
 function primaryActionLabel(meta) {
@@ -2712,6 +2749,7 @@ async function bootAuthenticatedApp(email) {
 
   const normalizedRole = normalizeRole(access.role);
   state.auth.email = email;
+  state.auth.displayName = access.displayName || "";
   state.auth.role = access.role || normalizedRole;
   state.auth.canSwitchRoles = ["admin", "administrator", "系統管理者"].includes(String(access.role || "").toLowerCase());
   state.role = normalizedRole;
@@ -2738,10 +2776,9 @@ function showLogin(message = "") {
 function showApp() {
   document.getElementById("loginScreen").classList.add("is-hidden");
   document.getElementById("appShell").classList.remove("is-hidden");
-  document.getElementById("currentUserLabel").textContent = state.auth.email || "已登入";
-  document.getElementById("currentUserNote").textContent = state.auth.canSwitchRoles
-    ? "管理者模式，可切換角色檢查畫面。"
-    : `目前角色：${roleLabel(state.role)}`;
+  const userName = displayUserName();
+  document.getElementById("currentUserLabel").textContent = userName === "夥伴" ? state.auth.email || "已登入" : userName;
+  document.getElementById("currentUserNote").textContent = `${roleLabel(state.role)}權限・${state.auth.email || "公司帳號"}`;
   render();
 }
 

@@ -41,22 +41,24 @@ async function safeGET(path, fallback = []) {
 
 async function loadUserAccess(email) {
   try {
-    const rows = await GET(`app_user_access?email=eq.${encodeURIComponent(email)}&select=email,role,is_active,must_change_password`);
+    const rows = await GET(`app_user_access?email=eq.${encodeURIComponent(email)}&select=email,display_name,role,is_active,must_change_password`);
     if (!rows?.length) return { allowed: false, role: "" };
     const row = rows[0];
     return {
       allowed: row.is_active !== false,
+      displayName: row.display_name || "",
       role: row.role || "",
       mustChange: row.must_change_password === true,
     };
   } catch (error) {
     console.warn("app_user_access role read unavailable, retrying limited columns", error);
     try {
-      const rows = await GET(`app_user_access?email=eq.${encodeURIComponent(email)}&select=email,is_active,must_change_password`);
+      const rows = await GET(`app_user_access?email=eq.${encodeURIComponent(email)}&select=email,display_name,is_active,must_change_password`);
       if (!rows?.length) return { allowed: false, role: "" };
       const row = rows[0];
       return {
         allowed: row.is_active !== false,
+        displayName: row.display_name || "",
         role: "",
         mustChange: row.must_change_password === true,
       };
