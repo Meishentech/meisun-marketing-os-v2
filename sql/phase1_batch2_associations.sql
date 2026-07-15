@@ -37,7 +37,7 @@ create index if not exists idx_association_relationship_tags_tag
 alter table association_stage_options enable row level security;
 alter table association_relationship_tags enable row level security;
 
-grant select, insert, update, delete on association_stage_options to authenticated;
+grant select, insert, update on association_stage_options to authenticated;
 grant select, insert, update, delete on association_relationship_tags to authenticated;
 
 drop policy if exists "authenticated manage association stage options" on association_stage_options;

@@ -14,6 +14,7 @@ const state = {
     associations: [],
     associationTags: [],
     associationCooperations: [],
+    associationStages: [],
   },
   dataStatus: "loading",
 };
@@ -581,7 +582,7 @@ function associationSection() {
       .map((item) => [
         item.item_name || "未命名合作項目",
         item.item_type || sourceTableLabel(item.source_table),
-        tag(item.stage || "未填", statusTone(item.stage)),
+        associationStageCell(item),
         formatDate(item.due_date) || "未排定",
         associationNextStep(item),
       ]);
@@ -702,6 +703,23 @@ function associationNextStep(item = {}) {
   if (item.notes) return item.notes;
   if (item.owner) return `負責：${item.owner}`;
   return "待補下一步";
+}
+
+function associationStageCell(item = {}) {
+  const stage = item.stage || "未填";
+  const stageOption = findAssociationStageOption(item);
+  if (!stageOption) return tag(stage, statusTone(stage));
+
+  const pct = Number(stageOption.pct_value || 0);
+  const tone = pct >= 100 ? "green" : pct >= 50 ? "amber" : statusTone(stage);
+  return `${tag(stage, tone)}${progress(`${pct}%`, tone)}`;
+}
+
+function findAssociationStageOption(item = {}) {
+  return state.data.associationStages.find((option) => (
+    option.entity_type === item.source_table
+    && option.stage_name === item.stage
+  ));
 }
 
 function knowledgeSection(isMarketing) {
@@ -1242,7 +1260,7 @@ async function loadExistingData() {
   render();
 
   try {
-    const [campaigns, resources, tenders, leads, associations, associationTags, associationCooperations] = await Promise.all([
+    const [campaigns, resources, tenders, leads, associations, associationTags, associationCooperations, associationStages] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=20"),
       safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
       loadTenderResults(),
@@ -1250,6 +1268,7 @@ async function loadExistingData() {
       safeGET("associations?limit=50"),
       safeGET("association_relationship_tags?select=id,association_id,tag,created_at&order=created_at.desc&limit=100"),
       safeGET("association_cooperation_overview?select=id,association_id,item_name,item_type,stage,owner,due_date,progress_pct,next_step,notes,created_at,source_table&order=due_date.asc.nullslast,created_at.desc&limit=80"),
+      safeGET("association_stage_options?select=entity_type,stage_name,sort_order,pct_value&order=entity_type.asc,sort_order.asc"),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? campaigns : [];
@@ -1259,6 +1278,7 @@ async function loadExistingData() {
     state.data.associations = Array.isArray(associations) ? associations : [];
     state.data.associationTags = Array.isArray(associationTags) ? associationTags : [];
     state.data.associationCooperations = Array.isArray(associationCooperations) ? associationCooperations : [];
+    state.data.associationStages = Array.isArray(associationStages) ? associationStages : [];
 
     const liveCount = state.data.campaigns.length
       + state.data.resources.length
@@ -1266,7 +1286,8 @@ async function loadExistingData() {
       + state.data.leads.length
       + state.data.associations.length
       + state.data.associationTags.length
-      + state.data.associationCooperations.length;
+      + state.data.associationCooperations.length
+      + state.data.associationStages.length;
     state.dataStatus = liveCount > 0 ? "live" : "fallback";
   } catch (error) {
     console.warn("Existing data load failed", error);
