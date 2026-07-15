@@ -73,6 +73,8 @@
    - SQL 檔：`sql/phase1_batch4_requests_approvals.sql`。
    - 決策：需求完成不強制要求成品先進 `marketing_resources`；可先完成需求，再回填正式資源。
    - 決策：審核金額門檻先不寫死在資料庫，`approval_requests.approver_role` 由建立審核單時決定。
+   - 決策：`approval_requests.title` / `summary` / `amount` / `due_date` 是送審當下的快照，不自動跟來源資料同步。
+   - 決策：業務端只顯示自己提出的 `sales_requests`，不 fallback 顯示其他業務的需求。
    - 串接提醒：廠商報價核准使用 `entity_type = 'vendor_quote'`、`entity_id = marketing_campaign_vendors.id`。
 
 6. 產品知識庫與費用彙總

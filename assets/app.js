@@ -381,6 +381,21 @@ function decisionListSection() {
     };
   }
 
+  if (state.dataStatus === "live") {
+    return {
+      type: "list",
+      title: "待決策 / 待討論",
+      items: [
+        [
+          "目前沒有待審核事項",
+          "approval_requests 目前沒有回傳待處理資料，代表暫時沒有需要總經理決策的項目。",
+          "無待辦",
+          "ok",
+        ],
+      ],
+    };
+  }
+
   return {
     type: "list",
     title: "待決策 / 待討論",
@@ -547,6 +562,19 @@ function approvalFlowSection() {
         ["需修正", `${revision} 筆退回補資料。`],
         ["已核准", `${approved} 筆本期已完成。`],
         ["廠商報價", `${vendorQuotes} 筆可對應合作廠商 / 交付物。`],
+      ],
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "cards",
+      title: "決策中心來源",
+      cards: [
+        ["待審核", "目前沒有待審核事項。"],
+        ["需修正", "目前沒有退回補資料項目。"],
+        ["廠商報價", "廠商報價待核准後，會進入這裡。"],
+        ["其他審核", "預算、知識與公會審核會共用 approval_requests。"],
       ],
     };
   }
@@ -902,6 +930,10 @@ function salesRequestSection(isMarketing) {
   }
 
   if (state.dataStatus === "live") {
+    const emptyMessage = !isMarketing && state.data.salesRequests.length
+      ? "你目前沒有自己提出的需求單。"
+      : "目前沒有從 sales_requests 讀到業務需求單。";
+
     return {
       type: "table",
       title: isMarketing ? "業務需求列表" : "我的需求單",
@@ -909,8 +941,8 @@ function salesRequestSection(isMarketing) {
       rows: [
         [
           tag("尚未回傳", "amber"),
-          "目前沒有從 sales_requests 讀到業務需求單。",
-          "請先執行 Batch 4 SQL，再新增或匯入需求單資料。",
+          emptyMessage,
+          isMarketing ? "請新增或匯入需求單資料。" : "新增需求後會只顯示你的需求單。",
         ],
       ],
     };
@@ -932,7 +964,7 @@ function visibleSalesRequests(isMarketing) {
   if (isMarketing) return state.data.salesRequests;
   const email = String(state.auth.email || "").toLowerCase();
   const ownRequests = state.data.salesRequests.filter((request) => String(request.requested_by || "").toLowerCase() === email);
-  return ownRequests.length ? ownRequests : state.data.salesRequests;
+  return ownRequests;
 }
 
 function formatRequester(email = "") {
@@ -1317,7 +1349,18 @@ function vendorKpis() {
 }
 
 function approvalKpis() {
-  if (!state.data.approvalRequests.length) return pages.executive.decisions.kpis;
+  if (!state.data.approvalRequests.length) {
+    if (state.dataStatus === "live") {
+      return [
+        ["待核准", "0", "目前沒有待審核事項"],
+        ["需修正", "0", "目前沒有退回補資料"],
+        ["逾期提醒", "0", "目前沒有逾期審核"],
+        ["已處理", "0", "目前沒有已核准紀錄"],
+      ];
+    }
+
+    return pages.executive.decisions.kpis;
+  }
 
   const pending = state.data.approvalRequests.filter((request) => request.status === "待審核").length;
   const revision = state.data.approvalRequests.filter((request) => request.status === "需修正").length;
