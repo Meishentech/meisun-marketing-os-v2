@@ -160,7 +160,7 @@ const pages = {
         ["預算核銷中", "5", "補助相關 2 件"],
         ["業務需求", "9", "3 件急件"],
       ],
-      sections: [marketingWorklistSection(), marketingTodoSection()],
+      sections: [campaignSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     },
     campaigns: {
       title: "行銷專案管理",
@@ -2386,6 +2386,7 @@ function buildCurrentSections(page) {
     "executive:budget": [budgetSection(), subsidySection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:decisions": [decisionListSection(), approvalFlowSection()],
+    "marketing:dashboard": [campaignSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
     "marketing:budget": [budgetSection(), subsidySection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
