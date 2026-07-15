@@ -63,6 +63,9 @@
 4. 多廠商與交付物
    - 建立 `vendors`、`marketing_campaign_vendors`、`marketing_campaign_vendor_deliverables`。
    - `marketing_campaign_documents` 新增 `vendor_id`、`deliverable_id`。
+   - 擴充 `marketing_campaign_documents.doc_type`：新增合約、設計稿、印刷檔、施工照片、完工照片。
+   - SQL 檔：`sql/phase1_batch3_vendors.sql`。
+   - 決策：同一廠商可在同一專案擔任多個角色，不加 `unique(campaign_id, vendor_id)`。
 
 5. 審核與業務需求
    - 建立 `sales_requests`。
@@ -71,6 +74,7 @@
 6. 產品知識庫與費用彙總
    - 建立產品知識庫四表。
    - 建立 `all_expenses_overview`。
+   - 費用彙總需納入 `marketing_campaign_vendors.budget_amount` / `actual_amount`。
 
 ## 暫緩到 Phase 2
 

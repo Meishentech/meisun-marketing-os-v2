@@ -15,6 +15,8 @@ const state = {
     associationTags: [],
     associationCooperations: [],
     associationStages: [],
+    campaignVendors: [],
+    vendorDocuments: [],
   },
   dataStatus: "loading",
 };
@@ -546,6 +548,32 @@ function campaignDetailCardsSection() {
 }
 
 function vendorSection() {
+  if (state.data.campaignVendors.length) {
+    return {
+      type: "table",
+      title: "合作廠商與交付物",
+      wide: true,
+      headers: ["廠商 / 單位", "角色", "交付物", "報價 / 付款", "費用", "文件"],
+      rows: state.data.campaignVendors.slice(0, 10).map(formatVendorRow),
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: "合作廠商與交付物",
+      wide: true,
+      headers: ["狀態", "說明", "下一步"],
+      rows: [
+        [
+          tag("尚未回傳", "amber"),
+          "目前沒有從 marketing_campaign_vendors 讀到專案廠商資料。",
+          "請先執行 Batch 3 SQL，再新增或匯入廠商合作資料。",
+        ],
+      ],
+    };
+  }
+
   return {
     type: "table",
     title: "合作廠商與交付物",
@@ -558,6 +586,44 @@ function vendorSection() {
       ["印刷廠 D", "DM 與展場輸出", "DM 1000 份、背板輸出", tag("待下單", "gray"), "12萬", "印刷報價"],
     ],
   };
+}
+
+function formatVendorRow(campaignVendor = {}) {
+  const vendor = campaignVendor.vendors || {};
+  const deliverables = Array.isArray(campaignVendor.marketing_campaign_vendor_deliverables)
+    ? campaignVendor.marketing_campaign_vendor_deliverables
+    : [];
+
+  return [
+    vendor.name || "未命名廠商",
+    campaignVendor.role_in_project || vendor.vendor_type || "未填",
+    formatDeliverableSummary(deliverables),
+    `${tag(campaignVendor.quote_status || "待報價", statusTone(campaignVendor.quote_status))} ${tag(campaignVendor.payment_status || "未請款", statusTone(campaignVendor.payment_status))}`,
+    formatVendorAmount(campaignVendor),
+    formatVendorDocuments(campaignVendor.id),
+  ];
+}
+
+function formatDeliverableSummary(deliverables = []) {
+  if (!deliverables.length) return "尚未建立交付物";
+  return deliverables.slice(0, 3).map((item) => {
+    const dueDate = item.due_date ? ` ${formatDate(item.due_date)}` : "";
+    return `${item.deliverable_name || "未命名"} / ${item.status || "未開始"}${dueDate}`;
+  }).join("<br>");
+}
+
+function formatVendorAmount(campaignVendor = {}) {
+  const budget = formatMoney(campaignVendor.budget_amount);
+  const actual = formatMoney(campaignVendor.actual_amount);
+  if (budget === "未填" && actual === "未填") return "未填";
+  if (actual !== "未填") return `${budget} / 實支 ${actual}`;
+  return budget;
+}
+
+function formatVendorDocuments(campaignVendorId) {
+  const documents = state.data.vendorDocuments.filter((document) => document.vendor_id === campaignVendorId);
+  if (!documents.length) return "尚未連結";
+  return [...new Set(documents.map((document) => document.doc_type || "其他"))].join("、");
 }
 
 function vendorFormPreviewSection() {
@@ -1000,9 +1066,10 @@ function tag(label, tone = "") {
 }
 
 function statusTone(status = "") {
-  if (["已追蹤", "已完成", "可對外"].includes(status)) return "green";
-  if (["評估中", "待確認", "待付款", "待核准"].includes(status)) return "amber";
-  if (["已排除", "逾期"].includes(status)) return "gray";
+  if (["已追蹤", "已完成", "可對外", "已付款", "已簽約", "已報價"].includes(status)) return "green";
+  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "待審核"].includes(status)) return "amber";
+  if (["已排除", "逾期", "未請款", "未開始"].includes(status)) return "gray";
+  if (["追加待核"].includes(status)) return "red";
   return "";
 }
 
@@ -1050,6 +1117,7 @@ function buildCurrentKpis(page) {
   const dynamicKpis = {
     "executive:leads": leadKpis(),
     "marketing:associations": associationKpis(),
+    "marketing:vendors": vendorKpis(),
   };
 
   return dynamicKpis[key] || page.kpis;
@@ -1098,6 +1166,39 @@ function associationKpis() {
   ];
 }
 
+function vendorKpis() {
+  if (!state.data.campaignVendors.length) {
+    if (state.dataStatus === "live") {
+      return [
+        ["合作單位", "0", "尚未從 marketing_campaign_vendors 回傳"],
+        ["交付物", "0", "尚未建立交付物"],
+        ["待核准報價", "0", "尚未建立報價狀態"],
+        ["附件完整度", "檢查", "需執行 Batch 3 SQL 並新增資料"],
+      ];
+    }
+
+    return pages.marketing.vendors.kpis;
+  }
+
+  const deliverables = state.data.campaignVendors.flatMap((vendor) => (
+    Array.isArray(vendor.marketing_campaign_vendor_deliverables)
+      ? vendor.marketing_campaign_vendor_deliverables
+      : []
+  ));
+  const pendingQuotes = state.data.campaignVendors.filter((vendor) => ["待報價", "待核准"].includes(vendor.quote_status)).length;
+  const linkedVendorCount = new Set(state.data.vendorDocuments.map((document) => document.vendor_id).filter(Boolean)).size;
+  const attachmentRate = state.data.campaignVendors.length
+    ? Math.round((linkedVendorCount / state.data.campaignVendors.length) * 100)
+    : 0;
+
+  return [
+    ["合作單位", String(state.data.campaignVendors.length), "已接專案廠商合作資料"],
+    ["交付物", String(deliverables.length), `${deliverables.filter((item) => item.status !== "已完成").length} 件未完成`],
+    ["待核准報價", String(pendingQuotes), "待報價或待核准"],
+    ["附件完整度", `${attachmentRate}%`, "以已連結廠商文件計算"],
+  ];
+}
+
 function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
@@ -1105,6 +1206,7 @@ function buildCurrentSections(page) {
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
+    "marketing:vendors": [vendorSection(), vendorFormPreviewSection()],
     "marketing:associations": [associationSection(), associationTagsSection()],
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
@@ -1116,6 +1218,11 @@ function buildCurrentSections(page) {
 }
 
 function dataStatusText() {
+  if (state.role === "marketing" && state.page === "vendors") {
+    if (state.data.campaignVendors.length) return "廠商與交付物資料已接 Supabase。";
+    if (state.dataStatus === "live") return "整體資料已接 Supabase，但廠商資料尚未回傳。";
+  }
+
   if (state.role === "marketing" && state.page === "associations") {
     if (state.data.associations.length || state.data.associationCooperations.length || state.data.associationTags.length) {
       return "公會資料已接 Supabase。";
@@ -1260,7 +1367,18 @@ async function loadExistingData() {
   render();
 
   try {
-    const [campaigns, resources, tenders, leads, associations, associationTags, associationCooperations, associationStages] = await Promise.all([
+    const [
+      campaigns,
+      resources,
+      tenders,
+      leads,
+      associations,
+      associationTags,
+      associationCooperations,
+      associationStages,
+      campaignVendors,
+      vendorDocuments,
+    ] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=20"),
       safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
       loadTenderResults(),
@@ -1269,6 +1387,8 @@ async function loadExistingData() {
       safeGET("association_relationship_tags?select=id,association_id,tag,created_at&order=created_at.desc&limit=100"),
       safeGET("association_cooperation_overview?select=id,association_id,item_name,item_type,stage,owner,due_date,progress_pct,next_step,notes,created_at,source_table&order=due_date.asc.nullslast,created_at.desc&limit=80"),
       safeGET("association_stage_options?select=entity_type,stage_name,sort_order,pct_value&order=entity_type.asc,sort_order.asc"),
+      safeGET("marketing_campaign_vendors?select=id,campaign_id,role_in_project,meisun_contact,quote_status,budget_amount,actual_amount,payment_status,created_at,vendors(name,vendor_type),marketing_campaign_vendor_deliverables(id,deliverable_name,owner,due_date,status,reviewer,attachment,notes)&order=created_at.desc&limit=100"),
+      safeGET("marketing_campaign_documents?select=id,doc_type,vendor_id,deliverable_id&vendor_id=not.is.null&limit=100"),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? campaigns : [];
@@ -1279,6 +1399,8 @@ async function loadExistingData() {
     state.data.associationTags = Array.isArray(associationTags) ? associationTags : [];
     state.data.associationCooperations = Array.isArray(associationCooperations) ? associationCooperations : [];
     state.data.associationStages = Array.isArray(associationStages) ? associationStages : [];
+    state.data.campaignVendors = Array.isArray(campaignVendors) ? campaignVendors : [];
+    state.data.vendorDocuments = Array.isArray(vendorDocuments) ? vendorDocuments : [];
 
     const liveCount = state.data.campaigns.length
       + state.data.resources.length
@@ -1287,7 +1409,9 @@ async function loadExistingData() {
       + state.data.associations.length
       + state.data.associationTags.length
       + state.data.associationCooperations.length
-      + state.data.associationStages.length;
+      + state.data.associationStages.length
+      + state.data.campaignVendors.length
+      + state.data.vendorDocuments.length;
     state.dataStatus = liveCount > 0 ? "live" : "fallback";
   } catch (error) {
     console.warn("Existing data load failed", error);
