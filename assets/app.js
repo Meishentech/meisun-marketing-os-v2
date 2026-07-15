@@ -694,9 +694,9 @@ function vendorSection() {
       headers: ["狀態", "說明", "下一步"],
       rows: [
         [
-          tag("尚未回傳", "amber"),
-          "目前沒有從 marketing_campaign_vendors 讀到專案廠商資料。",
-          "請先執行 Batch 3 SQL，再新增或匯入廠商合作資料。",
+          tag("尚未建立", "amber"),
+          "目前尚未建立專案廠商合作資料。",
+          "請點右上角「新增廠商合作」建立第一筆廠商合作。",
         ],
       ],
     };
@@ -2059,10 +2059,10 @@ function vendorKpis() {
   if (!state.data.campaignVendors.length) {
     if (state.dataStatus === "live") {
       return [
-        ["合作單位", "0", "尚未從 marketing_campaign_vendors 回傳"],
-        ["交付物", "0", "尚未建立交付物"],
+        ["合作單位", "0", "尚未建立廠商合作"],
+        ["交付物", "0", "尚未建立廠商合作與交付物"],
         ["待核准報價", "0", "尚未建立報價狀態"],
-        ["附件完整度", "檢查", "需執行 Batch 3 SQL 並新增資料"],
+        ["附件完整度", "0%", "新增廠商合作後可追蹤文件完整度"],
       ];
     }
 
