@@ -17,6 +17,8 @@ const state = {
     associationStages: [],
     campaignVendors: [],
     vendorDocuments: [],
+    salesRequests: [],
+    approvalRequests: [],
   },
   dataStatus: "loading",
 };
@@ -361,6 +363,24 @@ function campaignProgress(status = "") {
 }
 
 function decisionListSection() {
+  if (state.data.approvalRequests.length) {
+    const items = state.data.approvalRequests
+      .filter((request) => request.status !== "已核准")
+      .slice(0, 8)
+      .map((request) => [
+        request.title || approvalEntityLabel(request.entity_type),
+        request.summary || `${approvalEntityLabel(request.entity_type)} / ${formatMoney(request.amount)} / ${formatDate(request.due_date) || "未設定期限"}`,
+        request.status || "待審核",
+        approvalPriority(request),
+      ]);
+
+    return {
+      type: "list",
+      title: "待決策 / 待討論",
+      items,
+    };
+  }
+
   return {
     type: "list",
     title: "待決策 / 待討論",
@@ -370,6 +390,23 @@ function decisionListSection() {
       ["競品比較資料對外使用範圍", "證據等級 B，建議先限內部使用。", "確認", ""],
     ],
   };
+}
+
+function approvalEntityLabel(entityType = "") {
+  const labels = {
+    budget_item: "預算項目",
+    vendor_quote: "廠商報價",
+    knowledge_item: "知識 / 文宣審核",
+    association: "公會合作",
+  };
+  return labels[entityType] || entityType || "審核事項";
+}
+
+function approvalPriority(request = {}) {
+  if (request.status === "需修正") return "medium";
+  if (request.due_date && request.due_date < new Date().toISOString().slice(0, 10)) return "high";
+  if (request.approver_role === "executive") return "high";
+  return "medium";
 }
 
 function channelSummarySection(wide) {
@@ -496,6 +533,24 @@ function channelDecisionSection() {
 }
 
 function approvalFlowSection() {
+  if (state.data.approvalRequests.length) {
+    const pending = state.data.approvalRequests.filter((request) => request.status === "待審核").length;
+    const revision = state.data.approvalRequests.filter((request) => request.status === "需修正").length;
+    const approved = state.data.approvalRequests.filter((request) => request.status === "已核准").length;
+    const vendorQuotes = state.data.approvalRequests.filter((request) => request.entity_type === "vendor_quote").length;
+
+    return {
+      type: "cards",
+      title: "決策中心來源",
+      cards: [
+        ["待審核", `${pending} 筆仍需決策。`],
+        ["需修正", `${revision} 筆退回補資料。`],
+        ["已核准", `${approved} 筆本期已完成。`],
+        ["廠商報價", `${vendorQuotes} 筆可對應合作廠商 / 交付物。`],
+      ],
+    };
+  }
+
   return {
     type: "cards",
     title: "決策中心來源",
@@ -829,6 +884,37 @@ function knowledgeDetailSection() {
 }
 
 function salesRequestSection(isMarketing) {
+  const requests = visibleSalesRequests(isMarketing);
+  if (requests.length) {
+    return {
+      type: "table",
+      title: isMarketing ? "業務需求列表" : "我的需求單",
+      headers: ["需求", "提出人 / 案件", "類型", "優先級", "狀態"],
+      rows: requests.slice(0, 10).map((request) => [
+        request.request_name || "未命名需求",
+        request.requested_by || "未填",
+        request.request_type || "未分類",
+        tag(request.priority || "一般", priorityTone(request.priority)),
+        tag(request.status || "待處理", requestStatusTone(request.status)),
+      ]),
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: isMarketing ? "業務需求列表" : "我的需求單",
+      headers: ["狀態", "說明", "下一步"],
+      rows: [
+        [
+          tag("尚未回傳", "amber"),
+          "目前沒有從 sales_requests 讀到業務需求單。",
+          "請先執行 Batch 4 SQL，再新增或匯入需求單資料。",
+        ],
+      ],
+    };
+  }
+
   return {
     type: "table",
     title: isMarketing ? "業務需求列表" : "我的需求單",
@@ -839,6 +925,26 @@ function salesRequestSection(isMarketing) {
       ["公會講座邀請圖", "業務 C / 公會活動", "社群素材", tag("一般"), tag("已完成", "green")],
     ],
   };
+}
+
+function visibleSalesRequests(isMarketing) {
+  if (isMarketing) return state.data.salesRequests;
+  const email = String(state.auth.email || "").toLowerCase();
+  const ownRequests = state.data.salesRequests.filter((request) => String(request.requested_by || "").toLowerCase() === email);
+  return ownRequests.length ? ownRequests : state.data.salesRequests;
+}
+
+function priorityTone(priority = "") {
+  if (["急件", "急", "高"].includes(priority)) return "red";
+  if (["一般", "中"].includes(priority)) return "amber";
+  return "gray";
+}
+
+function requestStatusTone(status = "") {
+  if (status === "已完成") return "green";
+  if (["處理中", "待業務確認"].includes(status)) return "amber";
+  if (status === "待處理") return "gray";
+  return statusTone(status);
 }
 
 function requestKanbanSection() {
@@ -1116,8 +1222,11 @@ function buildCurrentKpis(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicKpis = {
     "executive:leads": leadKpis(),
+    "executive:decisions": approvalKpis(),
     "marketing:associations": associationKpis(),
     "marketing:vendors": vendorKpis(),
+    "marketing:requests": requestKpis(),
+    "sales:requests": requestKpis(),
   };
 
   return dynamicKpis[key] || page.kpis;
@@ -1199,25 +1308,77 @@ function vendorKpis() {
   ];
 }
 
+function approvalKpis() {
+  if (!state.data.approvalRequests.length) return pages.executive.decisions.kpis;
+
+  const pending = state.data.approvalRequests.filter((request) => request.status === "待審核").length;
+  const revision = state.data.approvalRequests.filter((request) => request.status === "需修正").length;
+  const overdue = state.data.approvalRequests.filter((request) => (
+    request.due_date
+    && request.due_date < new Date().toISOString().slice(0, 10)
+    && request.status !== "已核准"
+  )).length;
+  const approved = state.data.approvalRequests.filter((request) => request.status === "已核准").length;
+
+  return [
+    ["待核准", String(pending), "來自 approval_requests"],
+    ["需修正", String(revision), "已退回補資料"],
+    ["逾期提醒", String(overdue), "超過 due_date 尚未完成"],
+    ["已處理", String(approved), "已核准項目"],
+  ];
+}
+
+function requestKpis() {
+  if (!state.data.salesRequests.length) {
+    const page = pages[state.role]?.requests;
+    return page?.kpis || [];
+  }
+
+  const total = visibleSalesRequests(state.role === "marketing").length;
+  const open = visibleSalesRequests(state.role === "marketing").filter((request) => request.status !== "已完成").length;
+  const urgent = visibleSalesRequests(state.role === "marketing").filter((request) => ["急件", "急", "高"].includes(request.priority)).length;
+  const done = visibleSalesRequests(state.role === "marketing").filter((request) => request.status === "已完成").length;
+
+  return [
+    ["需求總數", String(total), "已接 sales_requests"],
+    ["未完成", String(open), "待處理、處理中或待確認"],
+    ["急件", String(urgent), "需優先排程"],
+    ["已完成", String(done), "可回填資源或通知業務"],
+  ];
+}
+
 function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
     "executive:dashboard": [projectOverviewSection(), decisionListSection(), channelSummarySection(true)],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
+    "executive:decisions": [decisionListSection(), approvalFlowSection()],
     "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), vendorFormPreviewSection()],
     "marketing:associations": [associationSection(), associationTagsSection()],
+    "marketing:requests": [salesRequestSection(true), requestKanbanSection()],
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
     "sales:tenders": [tenderSection(), tenderRuleSection()],
     "sales:leads": [salesLeadSection(), leadFollowUpSection()],
+    "sales:requests": [salesRequestSection(false), requestFormPreviewSection()],
   };
 
   return dynamicSections[key] || page.sections;
 }
 
 function dataStatusText() {
+  if (state.page === "requests") {
+    if (state.data.salesRequests.length) return "業務需求單已接 Supabase。";
+    if (state.dataStatus === "live") return "整體資料已接 Supabase，但業務需求單尚未回傳。";
+  }
+
+  if (state.role === "executive" && state.page === "decisions") {
+    if (state.data.approvalRequests.length) return "待決策資料已接 Supabase。";
+    if (state.dataStatus === "live") return "整體資料已接 Supabase，但待決策資料尚未回傳。";
+  }
+
   if (state.role === "marketing" && state.page === "vendors") {
     if (state.data.campaignVendors.length) return "廠商與交付物資料已接 Supabase。";
     if (state.dataStatus === "live") return "整體資料已接 Supabase，但廠商資料尚未回傳。";
@@ -1378,6 +1539,8 @@ async function loadExistingData() {
       associationStages,
       campaignVendors,
       vendorDocuments,
+      salesRequests,
+      approvalRequests,
     ] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=20"),
       safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
@@ -1389,6 +1552,8 @@ async function loadExistingData() {
       safeGET("association_stage_options?select=entity_type,stage_name,sort_order,pct_value&order=entity_type.asc,sort_order.asc"),
       safeGET("marketing_campaign_vendors?select=id,campaign_id,role_in_project,meisun_contact,quote_status,budget_amount,actual_amount,payment_status,created_at,vendors(name,vendor_type),marketing_campaign_vendor_deliverables(id,deliverable_name,owner,due_date,status,reviewer,attachment,notes)&order=created_at.desc&limit=100"),
       safeGET("marketing_campaign_documents?select=id,doc_type,vendor_id,deliverable_id&vendor_id=not.is.null&limit=100"),
+      safeGET("sales_requests?select=id,request_name,requested_by,lead_id,request_type,priority,status,assigned_to,due_date,description,deliverable_resource_id,completed_at,created_at&order=created_at.desc&limit=100"),
+      safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? campaigns : [];
@@ -1401,6 +1566,8 @@ async function loadExistingData() {
     state.data.associationStages = Array.isArray(associationStages) ? associationStages : [];
     state.data.campaignVendors = Array.isArray(campaignVendors) ? campaignVendors : [];
     state.data.vendorDocuments = Array.isArray(vendorDocuments) ? vendorDocuments : [];
+    state.data.salesRequests = Array.isArray(salesRequests) ? salesRequests : [];
+    state.data.approvalRequests = Array.isArray(approvalRequests) ? approvalRequests : [];
 
     const liveCount = state.data.campaigns.length
       + state.data.resources.length
@@ -1411,7 +1578,9 @@ async function loadExistingData() {
       + state.data.associationCooperations.length
       + state.data.associationStages.length
       + state.data.campaignVendors.length
-      + state.data.vendorDocuments.length;
+      + state.data.vendorDocuments.length
+      + state.data.salesRequests.length
+      + state.data.approvalRequests.length;
     state.dataStatus = liveCount > 0 ? "live" : "fallback";
   } catch (error) {
     console.warn("Existing data load failed", error);
