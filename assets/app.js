@@ -1733,6 +1733,8 @@ function openCreateCampaignVendorModal() {
     return;
   }
 
+  let createdVendorId = "";
+
   openModal("新增廠商合作", `
     <div class="form-grid">
       <label class="form-field is-wide">
@@ -1788,7 +1790,7 @@ function openCreateCampaignVendorModal() {
     submitLabel: "建立廠商合作",
     onSubmit: async (form) => {
       const values = formValues(form);
-      let vendorId = values.vendor_id || "";
+      let vendorId = values.vendor_id || createdVendorId;
 
       if (!vendorId) {
         if (!values.vendor_name?.trim()) {
@@ -1802,6 +1804,7 @@ function openCreateCampaignVendorModal() {
           contact_email: values.contact_email?.trim() || null,
         });
         vendorId = createdVendors?.[0]?.id;
+        createdVendorId = vendorId || "";
       }
 
       if (!vendorId) throw new Error("廠商建立失敗，請稍後再試。");
