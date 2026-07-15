@@ -886,12 +886,21 @@ function formatVendorRow(campaignVendor = {}) {
   return [
     vendor.name || "未命名廠商",
     campaignVendor.role_in_project || vendor.vendor_type || "未填",
-    formatDeliverableSummary(deliverables),
+    formatDeliverableSummary(campaignVendor.id, deliverables),
     `${tag(campaignVendor.quote_status || "待報價", statusTone(campaignVendor.quote_status))} ${tag(campaignVendor.payment_status || "未請款", statusTone(campaignVendor.payment_status))}`,
     formatVendorAmount(campaignVendor),
     formatVendorDocuments(campaignVendor.id),
-    vendorApprovalAction(campaignVendor),
+    vendorActionGroup(campaignVendor),
   ];
+}
+
+function vendorActionGroup(campaignVendor = {}) {
+  return actionGroup([
+    actionButton("編輯", "edit-campaign-vendor", campaignVendor.id, "is-primary"),
+    actionButton("交付物", "add-vendor-deliverable", campaignVendor.id),
+    vendorApprovalAction(campaignVendor),
+    actionButton("取消", "cancel-campaign-vendor", campaignVendor.id, "is-danger"),
+  ]);
 }
 
 function vendorApprovalAction(campaignVendor = {}) {
@@ -907,12 +916,18 @@ function hasPendingVendorApproval(campaignVendorId) {
   ));
 }
 
-function formatDeliverableSummary(deliverables = []) {
-  if (!deliverables.length) return "尚未建立交付物";
-  return deliverables.slice(0, 3).map((item) => {
+function formatDeliverableSummary(campaignVendorId, deliverables = []) {
+  const createAction = actionGroup([actionButton("新增交付物", "add-vendor-deliverable", campaignVendorId)]);
+  if (!deliverables.length) return `尚未建立交付物<br>${createAction}`;
+  const rows = deliverables.slice(0, 3).map((item) => {
     const dueDate = item.due_date ? ` ${formatDate(item.due_date)}` : "";
-    return `${item.deliverable_name || "未命名"} / ${item.status || "未開始"}${dueDate}`;
-  }).join("<br>");
+    const actions = actionGroup([
+      actionButton("編輯", "edit-vendor-deliverable", item.id),
+      actionButton("取消", "cancel-vendor-deliverable", item.id, "is-danger"),
+    ]);
+    return `${item.deliverable_name || "未命名"} / ${item.status || "未開始"}${dueDate}<br>${actions}`;
+  });
+  return `${rows.join("<br>")}${deliverables.length > 3 ? "<br>..." : ""}<br>${createAction}`;
 }
 
 function formatVendorAmount(campaignVendor = {}) {
@@ -1989,6 +2004,244 @@ function openCreateCampaignVendorModal() {
   });
 }
 
+function openEditCampaignVendorModal(id) {
+  const campaignVendor = state.data.campaignVendors.find((item) => item.id === id);
+  if (!campaignVendor) return;
+  const vendor = campaignVendor.vendors || {};
+
+  openModal("編輯廠商合作", `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>廠商 / 單位</span>
+        <input value="${escapeAttr(vendor.name || "未命名廠商")}" readonly>
+      </label>
+      <label class="form-field">
+        <span>廠商角色</span>
+        <input name="role_in_project" value="${escapeAttr(campaignVendor.role_in_project || "")}">
+      </label>
+      <label class="form-field">
+        <span>報價狀態</span>
+        <select name="quote_status">
+          ${selectOptions([["待報價", "待報價"], ["已報價", "已報價"], ["待核准", "待核准"], ["已簽約", "已簽約"]], campaignVendor.quote_status || "待報價")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>預估費用</span>
+        <input name="budget_amount" type="number" min="0" step="1" value="${escapeAttr(campaignVendor.budget_amount || "")}">
+      </label>
+      <label class="form-field">
+        <span>實際費用</span>
+        <input name="actual_amount" type="number" min="0" step="1" value="${escapeAttr(campaignVendor.actual_amount || "")}">
+      </label>
+      <label class="form-field">
+        <span>付款狀態</span>
+        <select name="payment_status">
+          ${selectOptions([["未請款", "未請款"], ["待付款", "待付款"], ["已付款", "已付款"], ["不需付款", "不需付款"]], campaignVendor.payment_status || "未請款")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>付款日</span>
+        <input name="payment_date" type="date" value="${escapeAttr(formatDate(campaignVendor.payment_date))}">
+      </label>
+    </div>
+  `, {
+    submitLabel: "儲存變更",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_vendors?id=eq.${encodeURIComponent(id)}`, {
+        role_in_project: values.role_in_project?.trim() || null,
+        quote_status: values.quote_status || "待報價",
+        budget_amount: values.budget_amount ? Number(values.budget_amount) : null,
+        actual_amount: values.actual_amount ? Number(values.actual_amount) : null,
+        payment_status: values.payment_status || "未請款",
+        payment_date: values.payment_date || null,
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelCampaignVendorModal(id) {
+  const campaignVendor = state.data.campaignVendors.find((item) => item.id === id);
+  if (!campaignVendor) return;
+  const vendor = campaignVendor.vendors || {};
+  const deliverableCount = Array.isArray(campaignVendor.marketing_campaign_vendor_deliverables)
+    ? campaignVendor.marketing_campaign_vendor_deliverables.length
+    : 0;
+
+  openModal("取消廠商合作", `
+    <p class="empty-note">確定要取消「${escapeHtml(vendor.name || "未命名廠商")}」這筆合作嗎？資料會保留，但不再出現在合作廠商與費用彙總中。</p>
+    <p class="empty-note">目前關聯交付物：${deliverableCount} 筆。交付物資料會一起保留。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason" placeholder="例如：改由其他廠商承接、活動取消、報價未通過。"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const decisionNote = `廠商合作已取消${values.cancel_reason?.trim() ? `：${values.cancel_reason.trim()}` : ""}`;
+      await api("PATCH", `marketing_campaign_vendors?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      await closePendingVendorApprovals(id, decisionNote);
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+async function closePendingVendorApprovals(campaignVendorId, decisionNote) {
+  const pendingRequests = state.data.approvalRequests.filter((request) => (
+    request.entity_type === "vendor_quote"
+    && String(request.entity_id || "") === String(campaignVendorId || "")
+    && request.status === "待審核"
+  ));
+
+  await Promise.all(pendingRequests.map((request) => api("PATCH", `approval_requests?id=eq.${encodeURIComponent(request.id)}`, {
+    status: "需修正",
+    decided_by: state.auth.email,
+    decided_at: nowIso(),
+    decision_note: decisionNote,
+  })));
+}
+
+function openCreateVendorDeliverableModal(campaignVendorId) {
+  const campaignVendor = state.data.campaignVendors.find((item) => item.id === campaignVendorId);
+  if (!campaignVendor) return;
+  const vendor = campaignVendor.vendors || {};
+
+  openModal("新增交付物", vendorDeliverableFormHtml({}, vendor.name || "未命名廠商"), {
+    submitLabel: "建立交付物",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "marketing_campaign_vendor_deliverables", {
+        campaign_vendor_id: campaignVendorId,
+        deliverable_name: values.deliverable_name.trim(),
+        owner: state.auth.email,
+        due_date: values.due_date || null,
+        status: values.status || "未開始",
+        reviewer: state.auth.email,
+        attachment: values.attachment?.trim() || null,
+        notes: values.notes?.trim() || null,
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openEditVendorDeliverableModal(id) {
+  const record = findVendorDeliverable(id);
+  if (!record) return;
+  const vendor = record.campaignVendor.vendors || {};
+
+  openModal("編輯交付物", vendorDeliverableFormHtml(record.deliverable, vendor.name || "未命名廠商"), {
+    submitLabel: "儲存變更",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_vendor_deliverables?id=eq.${encodeURIComponent(id)}`, {
+        deliverable_name: values.deliverable_name.trim(),
+        due_date: values.due_date || null,
+        status: values.status || "未開始",
+        attachment: values.attachment?.trim() || null,
+        notes: values.notes?.trim() || null,
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelVendorDeliverableModal(id) {
+  const record = findVendorDeliverable(id);
+  if (!record) return;
+  const deliverable = record.deliverable;
+
+  openModal("取消交付物", `
+    <p class="empty-note">確定要取消交付物「${escapeHtml(deliverable.deliverable_name || "未命名交付物")}」嗎？資料會保留，但不再出現在合作廠商清單中。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_vendor_deliverables?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function vendorDeliverableFormHtml(deliverable = {}, vendorName = "") {
+  return `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>廠商 / 單位</span>
+        <input value="${escapeAttr(vendorName)}" readonly>
+      </label>
+      <label class="form-field is-wide">
+        <span>交付物名稱</span>
+        <input name="deliverable_name" value="${escapeAttr(deliverable.deliverable_name || "")}" required>
+      </label>
+      <label class="form-field">
+        <span>到期日</span>
+        <input name="due_date" type="date" value="${escapeAttr(formatDate(deliverable.due_date))}">
+      </label>
+      <label class="form-field">
+        <span>狀態</span>
+        <select name="status">
+          ${selectOptions([["未開始", "未開始"], ["製作中", "製作中"], ["待審", "待審"], ["需修正", "需修正"], ["已完成", "已完成"]], deliverable.status || "未開始")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>負責人</span>
+        <input value="${escapeAttr(deliverable.owner || state.auth.email)}" readonly>
+      </label>
+      <label class="form-field">
+        <span>審核人</span>
+        <input value="${escapeAttr(deliverable.reviewer || state.auth.email)}" readonly>
+      </label>
+      <label class="form-field is-wide">
+        <span>附件連結</span>
+        <input name="attachment" value="${escapeAttr(deliverable.attachment || "")}" placeholder="Google Drive、檔案或參考連結">
+      </label>
+      <label class="form-field is-wide">
+        <span>備註</span>
+        <textarea name="notes">${escapeHtml(deliverable.notes || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
+function findVendorDeliverable(deliverableId) {
+  for (const campaignVendor of state.data.campaignVendors) {
+    const deliverables = Array.isArray(campaignVendor.marketing_campaign_vendor_deliverables)
+      ? campaignVendor.marketing_campaign_vendor_deliverables
+      : [];
+    const deliverable = deliverables.find((item) => item.id === deliverableId);
+    if (deliverable) return { campaignVendor, deliverable };
+  }
+  return null;
+}
+
 function openCreateKnowledgeItemModal() {
   openModal("新增產品知識條目", `
     <div class="form-grid">
@@ -2561,6 +2814,11 @@ document.addEventListener("click", (event) => {
   if (action === "edit-sales-request") openEditSalesRequestModal(id);
   if (action === "view-sales-request") openViewSalesRequestModal(id);
   if (action === "cancel-sales-request") openCancelSalesRequestModal(id);
+  if (action === "edit-campaign-vendor") openEditCampaignVendorModal(id);
+  if (action === "cancel-campaign-vendor") openCancelCampaignVendorModal(id);
+  if (action === "add-vendor-deliverable") openCreateVendorDeliverableModal(id);
+  if (action === "edit-vendor-deliverable") openEditVendorDeliverableModal(id);
+  if (action === "cancel-vendor-deliverable") openCancelVendorDeliverableModal(id);
   if (action === "send-vendor-approval") openVendorApprovalModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
@@ -2653,7 +2911,7 @@ async function loadExistingData() {
       safeGET("association_relationship_tags?select=id,association_id,tag,created_at&order=created_at.desc&limit=100"),
       safeGET("association_cooperation_overview?select=id,association_id,item_name,item_type,stage,owner,due_date,progress_pct,next_step,notes,created_at,source_table&order=due_date.asc.nullslast,created_at.desc&limit=80"),
       safeGET("association_stage_options?select=entity_type,stage_name,sort_order,pct_value&order=entity_type.asc,sort_order.asc"),
-      safeGET("marketing_campaign_vendors?select=id,campaign_id,role_in_project,meisun_contact,quote_status,budget_amount,actual_amount,payment_status,created_at,vendors(name,vendor_type),marketing_campaign_vendor_deliverables(id,deliverable_name,owner,due_date,status,reviewer,attachment,notes)&order=created_at.desc&limit=100"),
+      loadCampaignVendors(),
       safeGET("vendors?select=id,name,vendor_type,contact_name,contact_phone,contact_email&order=name.asc&limit=100"),
       safeGET("marketing_campaign_documents?select=id,doc_type,vendor_id,deliverable_id&vendor_id=not.is.null&limit=100"),
       loadSalesRequests(),
@@ -2670,7 +2928,7 @@ async function loadExistingData() {
     state.data.associationTags = Array.isArray(associationTags) ? associationTags : [];
     state.data.associationCooperations = Array.isArray(associationCooperations) ? associationCooperations : [];
     state.data.associationStages = Array.isArray(associationStages) ? associationStages : [];
-    state.data.campaignVendors = Array.isArray(campaignVendors) ? campaignVendors : [];
+    state.data.campaignVendors = Array.isArray(campaignVendors) ? activeCampaignVendors(campaignVendors) : [];
     state.data.vendors = Array.isArray(vendors) ? vendors : [];
     state.data.vendorDocuments = Array.isArray(vendorDocuments) ? vendorDocuments : [];
     state.data.salesRequests = Array.isArray(salesRequests) ? salesRequests : [];
@@ -2707,6 +2965,24 @@ async function loadTenderResults() {
   if (Array.isArray(withLead)) return withLead;
 
   return safeGET("tender_results?select=id,title,published_at,status,last_seen_at,matched_keywords,snippet,url&order=last_seen_at.desc&limit=20");
+}
+
+async function loadCampaignVendors() {
+  const withLifecycle = await safeGET("marketing_campaign_vendors?select=id,campaign_id,vendor_id,role_in_project,meisun_contact,quote_status,budget_amount,actual_amount,payment_status,payment_date,cancelled_at,cancelled_by,cancel_reason,created_at,vendors(name,vendor_type),marketing_campaign_vendor_deliverables(id,campaign_vendor_id,deliverable_name,owner,due_date,status,reviewer,attachment,notes,cancelled_at,cancelled_by,cancel_reason)&order=created_at.desc&limit=100", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("marketing_campaign_vendors?select=id,campaign_id,vendor_id,role_in_project,meisun_contact,quote_status,budget_amount,actual_amount,payment_status,payment_date,created_at,vendors(name,vendor_type),marketing_campaign_vendor_deliverables(id,campaign_vendor_id,deliverable_name,owner,due_date,status,reviewer,attachment,notes)&order=created_at.desc&limit=100");
+}
+
+function activeCampaignVendors(campaignVendors = []) {
+  return campaignVendors
+    .filter((campaignVendor) => !campaignVendor.cancelled_at)
+    .map((campaignVendor) => ({
+      ...campaignVendor,
+      marketing_campaign_vendor_deliverables: Array.isArray(campaignVendor.marketing_campaign_vendor_deliverables)
+        ? campaignVendor.marketing_campaign_vendor_deliverables.filter((deliverable) => !deliverable.cancelled_at)
+        : [],
+    }));
 }
 
 async function loadSalesRequests() {
