@@ -339,6 +339,41 @@ h1 {
   color: #174866;
 }
 
+.icon-button,
+.inline-action {
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: #174866;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.inline-action {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.inline-action.is-primary {
+  border-color: transparent;
+  background: var(--blue);
+  color: #fff;
+}
+
+.inline-action:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -621,6 +656,96 @@ h1 {
   line-height: 1.6;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(9, 33, 55, .42);
+}
+
+.modal {
+  width: min(640px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(12, 45, 72, .22);
+}
+
+.modal-header {
+  min-height: 58px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-soft);
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #133755;
+  font-size: 19px;
+}
+
+.modal-body {
+  max-height: calc(100vh - 132px);
+  overflow: auto;
+  padding: 18px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.form-field {
+  display: grid;
+  gap: 7px;
+}
+
+.form-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.form-field span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: #fbfdff;
+  color: #153852;
+  font: inherit;
+  font-weight: 700;
+}
+
+.form-field textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
 @media (max-width: 1120px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -664,9 +789,14 @@ h1 {
 
   .kpi-grid,
   .mini-grid,
+  .form-grid,
   .role-switch,
   .nav-list {
     grid-template-columns: 1fr;
+  }
+
+  .form-field.is-wide {
+    grid-column: auto;
   }
 
   .table {

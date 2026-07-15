@@ -66,7 +66,7 @@
           <p class="page-subtitle" id="pageSubtitle">看預算、行銷案、商機、Channel 成效與待決策事項。</p>
         </div>
         <div class="top-actions">
-          <button class="secondary-button" type="button">匯出摘要</button>
+          <button class="secondary-button" type="button" id="secondaryAction">匯出摘要</button>
           <button class="primary-button" type="button" id="primaryAction">查看待決策</button>
         </div>
       </header>
@@ -75,6 +75,23 @@
 
       <section class="content-grid" id="contentGrid" aria-label="主要內容"></section>
     </main>
+  </div>
+
+  <div class="modal-backdrop is-hidden" id="formModal" aria-hidden="true">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-header">
+        <h2 id="modalTitle">操作</h2>
+        <button class="icon-button" type="button" id="modalClose" aria-label="關閉">×</button>
+      </div>
+      <form class="modal-body" id="modalForm">
+        <div id="modalContent"></div>
+        <p class="form-message" id="modalMessage"></p>
+        <div class="modal-actions">
+          <button class="secondary-button" type="button" id="modalCancel">取消</button>
+          <button class="primary-button" type="submit" id="modalSubmit">送出</button>
+        </div>
+      </form>
+    </section>
   </div>
 
   <script src="core/config.js"></script>

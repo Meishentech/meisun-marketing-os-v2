@@ -90,6 +90,16 @@
    - 補強：`marketing_campaign_vendors` 新增 `payment_date`，讓廠商費用也可依付款日期排序。
    - 費用彙總需納入 `marketing_campaign_vendors.budget_amount` / `actual_amount`。
 
+7. 操作功能層 Batch 6A
+   - 新增共用 modal 表單，不另建詳情頁路由。
+   - 業務可建立 `sales_requests`，`requested_by` 由登入信箱自動帶入，並可選擇關聯 `lead_id`。
+   - 行銷總監可更新 `sales_requests.status`、`assigned_to`、`due_date`、`description`。
+   - 需求狀態改成「已完成」時自動寫入 `completed_at`；改回其他狀態時清空 `completed_at`。
+   - 行銷總監可從廠商合作資料建立 `approval_requests`，規則為 `entity_type = 'vendor_quote'`、`entity_id = marketing_campaign_vendors.id`。
+   - 總經理可將審核項目標記為「已核准」或「需修正」，前端自動寫入 `decided_by`、`decided_at`、`updated_at`。
+   - 廠商報價審核完成後，同步回寫 `marketing_campaign_vendors.quote_status` 為「已核准」或「需修正」。
+   - Phase 1 先用前端控制可見操作；`approval_requests` 與其他寫入動作的資料庫層 RLS 保留到 Phase 2 一次整理。
+
 ## 暫緩到 Phase 2
 
 - 完整資料庫 RLS 權限。

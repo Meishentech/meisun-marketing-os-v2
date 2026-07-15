@@ -25,6 +25,8 @@ const state = {
   dataStatus: "loading",
 };
 
+let modalSubmitHandler = null;
+
 const roleAliases = {
   executive: "executive",
   general_manager: "executive",
@@ -366,20 +368,30 @@ function campaignProgress(status = "") {
 
 function decisionListSection() {
   if (state.data.approvalRequests.length) {
-    const items = state.data.approvalRequests
+    const pendingRequests = state.data.approvalRequests
       .filter((request) => request.status !== "已核准")
-      .slice(0, 8)
-      .map((request) => [
-        request.title || approvalEntityLabel(request.entity_type),
-        request.summary || `${approvalEntityLabel(request.entity_type)} / ${formatMoney(request.amount)} / ${formatDate(request.due_date) || "未設定期限"}`,
-        request.status || "待審核",
-        approvalPriority(request),
-      ]);
+      .slice(0, 8);
+
+    if (!pendingRequests.length) {
+      return {
+        type: "list",
+        title: "待決策 / 待討論",
+        items: [
+          ["目前沒有待審核事項", "approval_requests 目前沒有待處理資料。", "無待辦", "ok"],
+        ],
+      };
+    }
 
     return {
-      type: "list",
+      type: "table",
       title: "待決策 / 待討論",
-      items,
+      headers: ["事項", "摘要", "狀態", "操作"],
+      rows: pendingRequests.map((request) => [
+        request.title || approvalEntityLabel(request.entity_type),
+        request.summary || `${approvalEntityLabel(request.entity_type)} / ${formatMoney(request.amount)} / ${formatDate(request.due_date) || "未設定期限"}`,
+        tag(request.status || "待審核", approvalPriority(request) === "high" ? "red" : "amber"),
+        actionButton("處理", "review-approval", request.id, "is-primary"),
+      ]),
     };
   }
 
@@ -668,7 +680,7 @@ function vendorSection() {
       type: "table",
       title: "合作廠商與交付物",
       wide: true,
-      headers: ["廠商 / 單位", "角色", "交付物", "報價 / 付款", "費用", "文件"],
+      headers: ["廠商 / 單位", "角色", "交付物", "報價 / 付款", "費用", "文件", "操作"],
       rows: state.data.campaignVendors.slice(0, 10).map(formatVendorRow),
     };
   }
@@ -716,7 +728,21 @@ function formatVendorRow(campaignVendor = {}) {
     `${tag(campaignVendor.quote_status || "待報價", statusTone(campaignVendor.quote_status))} ${tag(campaignVendor.payment_status || "未請款", statusTone(campaignVendor.payment_status))}`,
     formatVendorAmount(campaignVendor),
     formatVendorDocuments(campaignVendor.id),
+    vendorApprovalAction(campaignVendor),
   ];
+}
+
+function vendorApprovalAction(campaignVendor = {}) {
+  if (hasPendingVendorApproval(campaignVendor.id)) return actionButton("已送審", "send-vendor-approval", campaignVendor.id, "", true);
+  return actionButton("送審", "send-vendor-approval", campaignVendor.id, "is-primary");
+}
+
+function hasPendingVendorApproval(campaignVendorId) {
+  return state.data.approvalRequests.some((request) => (
+    request.entity_type === "vendor_quote"
+    && String(request.entity_id || "") === String(campaignVendorId || "")
+    && request.status !== "已核准"
+  ));
 }
 
 function formatDeliverableSummary(deliverables = []) {
@@ -999,13 +1025,18 @@ function salesRequestSection(isMarketing) {
       type: "table",
       compact: true,
       title: isMarketing ? "業務需求列表" : "我的需求單",
-      headers: ["需求", "提出人", "類型", "優先級", "狀態"],
+      headers: isMarketing
+        ? ["需求", "提出人", "類型", "優先級", "狀態", "操作"]
+        : ["需求", "提出人", "類型", "優先級", "狀態", "操作"],
       rows: requests.slice(0, 10).map((request) => [
         request.request_name || "未命名需求",
         formatRequester(request.requested_by),
         request.request_type || "未分類",
         tag(request.priority || "一般", priorityTone(request.priority)),
         tag(request.status || "待處理", requestStatusTone(request.status)),
+        isMarketing
+          ? actionButton("更新", "edit-sales-request", request.id, "is-primary")
+          : actionButton("檢視", "view-sales-request", request.id),
       ]),
     };
   }
@@ -1292,9 +1323,27 @@ function tag(label, tone = "") {
   return `<span class="tag ${tone}">${label}</span>`;
 }
 
+function actionButton(label, action, id = "", tone = "", disabled = false) {
+  const disabledAttr = disabled ? " disabled" : "";
+  return `<button class="inline-action ${tone}" type="button" data-action="${action}" data-id="${escapeAttr(id)}"${disabledAttr}>${label}</button>`;
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function escapeAttr(value = "") {
+  return escapeHtml(value);
+}
+
 function statusTone(status = "") {
-  if (["已追蹤", "已完成", "可對外", "已付款", "已簽約", "已報價"].includes(status)) return "green";
-  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "待審核"].includes(status)) return "amber";
+  if (["已追蹤", "已完成", "可對外", "已付款", "已簽約", "已報價", "已核准"].includes(status)) return "green";
+  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "待審核", "需修正"].includes(status)) return "amber";
   if (["已排除", "逾期", "未請款", "未開始"].includes(status)) return "gray";
   if (["追加待核"].includes(status)) return "red";
   return "";
@@ -1317,6 +1366,362 @@ function progress(label, tone = "") {
   return `${label}<div class="progress-track"><div class="progress-fill ${tone}" style="width:${value}%"></div></div>`;
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function selectOptions(options = [], selected = "") {
+  return options.map(([value, label]) => {
+    const isSelected = String(value) === String(selected) ? " selected" : "";
+    return `<option value="${escapeAttr(value)}"${isSelected}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+function leadOptions(selected = "") {
+  const options = [["", "不關聯名單"]];
+  state.data.leads.slice(0, 50).forEach((lead) => {
+    const contact = lead.contact_name ? ` / ${lead.contact_name}` : "";
+    options.push([lead.id, `${lead.company_name || "未命名名單"}${contact}`]);
+  });
+  return selectOptions(options, selected);
+}
+
+function openModal(title, content, options = {}) {
+  const modal = document.getElementById("formModal");
+  const submit = document.getElementById("modalSubmit");
+  const cancel = document.getElementById("modalCancel");
+
+  document.getElementById("modalTitle").textContent = title;
+  document.getElementById("modalContent").innerHTML = content;
+  document.getElementById("modalMessage").textContent = "";
+  submit.textContent = options.submitLabel || "送出";
+  submit.disabled = false;
+  submit.classList.toggle("is-hidden", options.hideSubmit === true);
+  cancel.classList.toggle("is-hidden", options.hideCancel === true);
+  modalSubmitHandler = options.onSubmit || null;
+  modal.classList.remove("is-hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeModal() {
+  const modal = document.getElementById("formModal");
+  modal.classList.add("is-hidden");
+  modal.setAttribute("aria-hidden", "true");
+  modalSubmitHandler = null;
+}
+
+function formValues(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+function setModalMessage(message, tone = "") {
+  const element = document.getElementById("modalMessage");
+  element.textContent = message;
+  element.className = `form-message ${tone}`.trim();
+}
+
+function requestFormHtml(request = {}, readOnly = false) {
+  const disabled = readOnly ? " disabled" : "";
+  const readonly = readOnly ? " readonly" : "";
+  return `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>需求名稱</span>
+        <input name="request_name" value="${escapeAttr(request.request_name || "")}" required${readonly}>
+      </label>
+      <label class="form-field">
+        <span>需求類型</span>
+        <select name="request_type"${disabled}>
+          ${selectOptions([
+            ["簡報", "簡報"],
+            ["DM", "DM / 文宣"],
+            ["市場分析", "市場分析"],
+            ["競爭力分析", "競爭力分析"],
+            ["影片", "影片 / 多媒體"],
+            ["活動邀請", "活動邀請"],
+            ["其他", "其他"],
+          ], request.request_type || "簡報")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>優先級</span>
+        <select name="priority"${disabled}>
+          ${selectOptions([["急件", "急件"], ["一般", "一般"], ["低", "低"]], request.priority || "一般")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>預計使用日</span>
+        <input name="due_date" type="date" value="${escapeAttr(formatDate(request.due_date))}"${readonly}>
+      </label>
+      <label class="form-field">
+        <span>關聯名單</span>
+        <select name="lead_id"${disabled}>${leadOptions(request.lead_id || "")}</select>
+      </label>
+      <label class="form-field is-wide">
+        <span>需求說明</span>
+        <textarea name="description"${readonly}>${escapeHtml(request.description || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
+function openCreateSalesRequestModal() {
+  openModal("提出素材 / 資料需求", requestFormHtml(), {
+    submitLabel: "建立需求",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "sales_requests", {
+        request_name: values.request_name.trim(),
+        requested_by: state.auth.email,
+        lead_id: values.lead_id || null,
+        request_type: values.request_type,
+        priority: values.priority || "一般",
+        status: "待處理",
+        due_date: values.due_date || null,
+        description: values.description?.trim() || null,
+      });
+      closeModal();
+      state.page = "requests";
+      await loadExistingData();
+    },
+  });
+}
+
+function openViewSalesRequestModal(id) {
+  const request = state.data.salesRequests.find((item) => item.id === id);
+  if (!request) return;
+  const detail = `${requestFormHtml(request, true)}
+    <div class="form-grid">
+      <label class="form-field">
+        <span>目前狀態</span>
+        <input value="${escapeAttr(request.status || "待處理")}" readonly>
+      </label>
+      <label class="form-field">
+        <span>行銷負責</span>
+        <input value="${escapeAttr(request.assigned_to || "尚未指派")}" readonly>
+      </label>
+    </div>`;
+  openModal("需求內容", detail, {
+    submitLabel: "關閉",
+    hideCancel: true,
+    onSubmit: async () => closeModal(),
+  });
+}
+
+function openEditSalesRequestModal(id) {
+  const request = state.data.salesRequests.find((item) => item.id === id);
+  if (!request) return;
+  const content = `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>需求名稱</span>
+        <input value="${escapeAttr(request.request_name || "")}" readonly>
+      </label>
+      <label class="form-field">
+        <span>狀態</span>
+        <select name="status">
+          ${selectOptions([["待處理", "待處理"], ["處理中", "處理中"], ["待業務確認", "待業務確認"], ["已完成", "已完成"]], request.status || "待處理")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>行銷負責</span>
+        <input name="assigned_to" type="email" value="${escapeAttr(request.assigned_to || state.auth.email || "")}">
+      </label>
+      <label class="form-field">
+        <span>預計完成日</span>
+        <input name="due_date" type="date" value="${escapeAttr(formatDate(request.due_date))}">
+      </label>
+      <label class="form-field is-wide">
+        <span>處理說明</span>
+        <textarea name="description">${escapeHtml(request.description || "")}</textarea>
+      </label>
+    </div>
+  `;
+
+  openModal("更新業務需求", content, {
+    submitLabel: "儲存更新",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const status = values.status || "待處理";
+      await api("PATCH", `sales_requests?id=eq.${encodeURIComponent(id)}`, {
+        status,
+        assigned_to: values.assigned_to || null,
+        due_date: values.due_date || null,
+        description: values.description?.trim() || null,
+        completed_at: status === "已完成" ? (request.completed_at || nowIso()) : null,
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openVendorApprovalModal(id) {
+  const campaignVendor = state.data.campaignVendors.find((item) => item.id === id);
+  if (!campaignVendor) return;
+  const vendor = campaignVendor.vendors || {};
+  const amount = campaignVendor.actual_amount || campaignVendor.budget_amount || "";
+  const summary = [
+    `廠商：${vendor.name || "未命名廠商"}`,
+    `角色：${campaignVendor.role_in_project || vendor.vendor_type || "未填"}`,
+    `報價狀態：${campaignVendor.quote_status || "待報價"}`,
+    `付款狀態：${campaignVendor.payment_status || "未請款"}`,
+  ].join(" / ");
+
+  openModal("廠商報價送審", `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>審核標題</span>
+        <input name="title" value="${escapeAttr(`廠商報價核准：${vendor.name || "未命名廠商"}`)}" required>
+      </label>
+      <label class="form-field">
+        <span>金額</span>
+        <input name="amount" type="number" min="0" step="1" value="${escapeAttr(amount)}">
+      </label>
+      <label class="form-field">
+        <span>希望回覆日</span>
+        <input name="due_date" type="date">
+      </label>
+      <label class="form-field is-wide">
+        <span>摘要</span>
+        <textarea name="summary">${escapeHtml(summary)}</textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "送總經理審核",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "approval_requests", {
+        entity_type: "vendor_quote",
+        entity_id: id,
+        title: values.title.trim(),
+        summary: values.summary?.trim() || null,
+        amount: values.amount ? Number(values.amount) : null,
+        due_date: values.due_date || null,
+        requested_by: state.auth.email,
+        approver_role: "executive",
+        status: "待審核",
+      });
+      await api("PATCH", `marketing_campaign_vendors?id=eq.${encodeURIComponent(id)}`, {
+        quote_status: "待核准",
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openVendorApprovalPicker() {
+  if (!state.data.campaignVendors.length) {
+    openModal("廠商報價送審", `<p class="empty-note">目前沒有廠商合作資料可送審。</p>`, {
+      submitLabel: "關閉",
+      hideCancel: true,
+      onSubmit: async () => closeModal(),
+    });
+    return;
+  }
+
+  const availableVendors = state.data.campaignVendors.filter((campaignVendor) => !hasPendingVendorApproval(campaignVendor.id));
+  if (!availableVendors.length) {
+    openModal("廠商報價送審", `<p class="empty-note">目前廠商報價都已送審或沒有可送審項目。</p>`, {
+      submitLabel: "關閉",
+      hideCancel: true,
+      onSubmit: async () => closeModal(),
+    });
+    return;
+  }
+
+  const options = availableVendors.map((campaignVendor) => {
+    const vendor = campaignVendor.vendors || {};
+    const label = `${vendor.name || "未命名廠商"} / ${campaignVendor.role_in_project || vendor.vendor_type || "未填"}`;
+    return [campaignVendor.id, label];
+  });
+
+  openModal("選擇送審廠商", `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>廠商合作項目</span>
+        <select name="vendor_id">${selectOptions(options)}</select>
+      </label>
+    </div>
+  `, {
+    submitLabel: "下一步",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      closeModal();
+      openVendorApprovalModal(values.vendor_id);
+    },
+  });
+}
+
+function openApprovalReviewModal(id) {
+  const request = state.data.approvalRequests.find((item) => item.id === id);
+  if (!request) return;
+  openModal("處理審核事項", `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>事項</span>
+        <input value="${escapeAttr(request.title || approvalEntityLabel(request.entity_type))}" readonly>
+      </label>
+      <label class="form-field">
+        <span>決策</span>
+        <select name="status">
+          ${selectOptions([["已核准", "已核准"], ["需修正", "需修正"]], request.status === "需修正" ? "需修正" : "已核准")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>金額</span>
+        <input value="${escapeAttr(formatMoney(request.amount))}" readonly>
+      </label>
+      <label class="form-field is-wide">
+        <span>決策說明</span>
+        <textarea name="decision_note">${escapeHtml(request.decision_note || "")}</textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "送出決策",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `approval_requests?id=eq.${encodeURIComponent(id)}`, {
+        status: values.status,
+        decision_note: values.decision_note?.trim() || null,
+        decided_by: state.auth.email,
+        decided_at: nowIso(),
+        updated_at: nowIso(),
+      });
+      if (request.entity_type === "vendor_quote") {
+        await api("PATCH", `marketing_campaign_vendors?id=eq.${encodeURIComponent(request.entity_id)}`, {
+          quote_status: values.status === "已核准" ? "已核准" : "需修正",
+          updated_at: nowIso(),
+        });
+      }
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function exportCurrentSummary() {
+  const title = document.getElementById("pageTitle").textContent;
+  const kpis = [...document.querySelectorAll(".kpi-card")]
+    .map((card) => {
+      const label = card.querySelector(".kpi-label")?.textContent || "";
+      const value = card.querySelector(".kpi-value")?.textContent || "";
+      const note = card.querySelector(".kpi-note")?.textContent || "";
+      return `${label}: ${value} (${note})`;
+    })
+    .join("\n");
+  const content = [`${title} 摘要`, `匯出時間：${new Date().toLocaleString("zh-Hant-TW")}`, "", kpis].join("\n");
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `meisun-marketing-os-${state.role}-${state.page}.txt`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 function render() {
   const meta = roleMeta[state.role];
   const page = pages[state.role][state.page];
@@ -1324,7 +1729,7 @@ function render() {
   document.getElementById("roleEyebrow").textContent = meta.eyebrow;
   document.getElementById("pageTitle").textContent = page.title;
   document.getElementById("pageSubtitle").innerHTML = `${page.subtitle} <span class="data-status">${dataStatusText()}</span>`;
-  document.getElementById("primaryAction").textContent = meta.primaryAction;
+  document.getElementById("primaryAction").textContent = primaryActionLabel(meta);
 
   renderNav(meta.nav);
   renderKpis(buildCurrentKpis(page));
@@ -1337,6 +1742,14 @@ function render() {
 
   const roleSwitch = document.querySelector(".role-switch");
   roleSwitch.classList.toggle("is-locked", !state.auth.canSwitchRoles);
+}
+
+function primaryActionLabel(meta) {
+  if (state.role === "sales") return "提出素材需求";
+  if (state.role === "executive") return "查看待決策";
+  if (state.role === "marketing" && state.page === "requests") return "新增需求單";
+  if (state.role === "marketing" && state.page === "vendors") return "廠商報價送審";
+  return meta.primaryAction;
 }
 
 function buildCurrentKpis(page) {
@@ -1679,6 +2092,73 @@ document.querySelectorAll(".role-button").forEach((button) => {
     state.page = "dashboard";
     render();
   });
+});
+
+document.getElementById("primaryAction").addEventListener("click", () => {
+  if (state.role === "sales") {
+    openCreateSalesRequestModal();
+    return;
+  }
+
+  if (state.role === "executive") {
+    state.page = "decisions";
+    render();
+    const firstPending = state.data.approvalRequests.find((request) => request.status !== "已核准");
+    if (firstPending) openApprovalReviewModal(firstPending.id);
+    return;
+  }
+
+  if (state.role === "marketing" && state.page === "requests") {
+    openCreateSalesRequestModal();
+    return;
+  }
+
+  if (state.role === "marketing" && state.page === "vendors") {
+    openVendorApprovalPicker();
+    return;
+  }
+
+  state.page = "requests";
+  render();
+});
+
+document.getElementById("secondaryAction").addEventListener("click", exportCurrentSummary);
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-action]");
+  if (!button || button.disabled) return;
+
+  const { action, id } = button.dataset;
+  if (action === "edit-sales-request") openEditSalesRequestModal(id);
+  if (action === "view-sales-request") openViewSalesRequestModal(id);
+  if (action === "send-vendor-approval") openVendorApprovalModal(id);
+  if (action === "review-approval") openApprovalReviewModal(id);
+});
+
+document.getElementById("modalClose").addEventListener("click", closeModal);
+document.getElementById("modalCancel").addEventListener("click", closeModal);
+document.getElementById("formModal").addEventListener("click", (event) => {
+  if (event.target.id === "formModal") closeModal();
+});
+
+document.getElementById("modalForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!modalSubmitHandler) {
+    closeModal();
+    return;
+  }
+
+  const submit = document.getElementById("modalSubmit");
+  submit.disabled = true;
+  setModalMessage("");
+  try {
+    await modalSubmitHandler(event.currentTarget);
+  } catch (error) {
+    console.warn("operation failed", error);
+    setModalMessage(error.message || "操作失敗，請稍後再試。");
+  } finally {
+    submit.disabled = false;
+  }
 });
 
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
