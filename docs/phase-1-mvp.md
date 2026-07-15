@@ -102,6 +102,13 @@
    - 廠商報價審核完成後，同步回寫 `marketing_campaign_vendors.quote_status` 為「已核准」或「需修正」。
    - Phase 1 先用前端控制可見操作；`approval_requests` 與其他寫入動作的資料庫層 RLS 保留到 Phase 2 一次整理。
 
+8. 新增資料操作 Batch 6B
+   - 決策：v2 完成前不新增 `marketing_campaigns`，避免測試資料直接進入 v1 正式平台共用行銷案列表。
+   - 行銷總監可新增廠商合作；表單需選擇既有行銷案，可選既有廠商或在同一表單建立新 `vendors` 主檔，再寫入 `marketing_campaign_vendors`。
+   - 廠商合作新增時 `meisun_contact` 固定使用登入者信箱，避免手動輸入造成 FK 錯誤。
+   - 行銷總監可新增 `product_knowledge_items`；新條目預設 `visibility_status = '待確認'`，不在新增當下送審。
+   - 知識庫 `owner` 固定使用登入者信箱；對外使用審核之後另走 `approval_requests`。
+
 ## 暫緩到 Phase 2
 
 - 完整資料庫 RLS 權限。

@@ -16,6 +16,7 @@ const state = {
     associationCooperations: [],
     associationStages: [],
     campaignVendors: [],
+    vendors: [],
     vendorDocuments: [],
     salesRequests: [],
     approvalRequests: [],
@@ -58,7 +59,7 @@ const roleMeta = {
   },
   marketing: {
     eyebrow: "MARKETING DIRECTOR",
-    primaryAction: "新增行銷案",
+    primaryAction: "v2 暫不新增行銷案",
     nav: [
       ["dashboard", "行銷總監工作台"],
       ["campaigns", "行銷專案管理"],
@@ -1401,6 +1402,20 @@ function leadOptions(selected = "") {
   return selectOptions(options, selected);
 }
 
+function campaignOptions(selected = "") {
+  const options = state.data.campaigns.map((campaign) => [campaign.id, campaign.name || "未命名行銷案"]);
+  return selectOptions(options, selected);
+}
+
+function vendorOptions(selected = "") {
+  const options = [["", "新增廠商主檔"]];
+  state.data.vendors.forEach((vendor) => {
+    const type = vendor.vendor_type ? ` / ${vendor.vendor_type}` : "";
+    options.push([vendor.id, `${vendor.name || "未命名廠商"}${type}`]);
+  });
+  return selectOptions(options, selected);
+}
+
 function openModal(title, content, options = {}) {
   const modal = document.getElementById("formModal");
   const submit = document.getElementById("modalSubmit");
@@ -1708,6 +1723,176 @@ function openVendorApprovalPicker() {
   });
 }
 
+function openCreateCampaignVendorModal() {
+  if (!state.data.campaigns.length) {
+    openModal("新增廠商合作", `<p class="empty-note">目前沒有可選擇的行銷案。v2 暫不新增行銷案，請先使用既有行銷案資料。</p>`, {
+      submitLabel: "關閉",
+      hideCancel: true,
+      onSubmit: async () => closeModal(),
+    });
+    return;
+  }
+
+  openModal("新增廠商合作", `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>行銷案</span>
+        <select name="campaign_id" required>${campaignOptions()}</select>
+      </label>
+      <label class="form-field is-wide">
+        <span>既有廠商</span>
+        <select name="vendor_id">${vendorOptions()}</select>
+      </label>
+      <label class="form-field">
+        <span>新廠商名稱</span>
+        <input name="vendor_name" placeholder="選新增廠商時必填">
+      </label>
+      <label class="form-field">
+        <span>廠商類型</span>
+        <select name="vendor_type">
+          ${selectOptions([["", "未分類"], ["裝潢", "裝潢"], ["美編", "美編"], ["印刷", "印刷"], ["場地", "場地"], ["攝影影音", "攝影影音"], ["公會", "公會"], ["其他", "其他"]])}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>聯絡人</span>
+        <input name="contact_name">
+      </label>
+      <label class="form-field">
+        <span>聯絡電話</span>
+        <input name="contact_phone">
+      </label>
+      <label class="form-field">
+        <span>聯絡 Email</span>
+        <input name="contact_email" type="email">
+      </label>
+      <label class="form-field">
+        <span>廠商角色</span>
+        <input name="role_in_project" placeholder="例如：攤位設計施工">
+      </label>
+      <label class="form-field">
+        <span>美昇對接人</span>
+        <input name="meisun_contact" type="email" value="${escapeAttr(state.auth.email)}" readonly>
+      </label>
+      <label class="form-field">
+        <span>報價狀態</span>
+        <select name="quote_status">
+          ${selectOptions([["待報價", "待報價"], ["已報價", "已報價"], ["待核准", "待核准"], ["已簽約", "已簽約"]], "待報價")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>預估費用</span>
+        <input name="budget_amount" type="number" min="0" step="1">
+      </label>
+    </div>
+  `, {
+    submitLabel: "建立廠商合作",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      let vendorId = values.vendor_id || "";
+
+      if (!vendorId) {
+        if (!values.vendor_name?.trim()) {
+          throw new Error("請選擇既有廠商，或填寫新廠商名稱。");
+        }
+        const createdVendors = await api("POST", "vendors", {
+          name: values.vendor_name.trim(),
+          vendor_type: values.vendor_type || null,
+          contact_name: values.contact_name?.trim() || null,
+          contact_phone: values.contact_phone?.trim() || null,
+          contact_email: values.contact_email?.trim() || null,
+        });
+        vendorId = createdVendors?.[0]?.id;
+      }
+
+      if (!vendorId) throw new Error("廠商建立失敗，請稍後再試。");
+
+      await api("POST", "marketing_campaign_vendors", {
+        campaign_id: values.campaign_id,
+        vendor_id: vendorId,
+        role_in_project: values.role_in_project?.trim() || null,
+        meisun_contact: state.auth.email,
+        quote_status: values.quote_status || "待報價",
+        budget_amount: values.budget_amount ? Number(values.budget_amount) : null,
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCreateKnowledgeItemModal() {
+  openModal("新增產品知識條目", `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>主題</span>
+        <input name="title" required>
+      </label>
+      <label class="form-field">
+        <span>知識類型</span>
+        <select name="knowledge_type" required>
+          ${selectOptions([
+            ["市場差異化", "市場差異化"],
+            ["技術比較", "技術比較"],
+            ["競品分析", "競品分析"],
+            ["客戶異議處理", "客戶異議處理"],
+            ["應用場景", "應用場景"],
+            ["FAQ", "FAQ"],
+            ["簡報說法", "簡報說法"],
+            ["資料待確認", "資料待確認"],
+          ])}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>產品線</span>
+        <input name="product_line" placeholder="例如：磁浮冰水主機">
+      </label>
+      <label class="form-field">
+        <span>證據等級</span>
+        <select name="evidence_level">
+          ${selectOptions([["A", "A 正式來源"], ["B", "B 技術確認"], ["C", "C 待確認"], ["D", "D 不可使用"]], "C")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>適用對象</span>
+        <input name="target_segment" placeholder="例如：業主 / 技師 / 工程公司">
+      </label>
+      <label class="form-field is-wide">
+        <span>摘要</span>
+        <textarea name="summary" placeholder="先建立內部條目，預設為待確認，不會直接對外使用。"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "建立知識條目",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "product_knowledge_items", {
+        title: values.title.trim(),
+        knowledge_type: values.knowledge_type,
+        product_line: values.product_line?.trim() || null,
+        target_segment: values.target_segment?.trim() || null,
+        summary: values.summary?.trim() || null,
+        evidence_level: values.evidence_level || "C",
+        visibility_status: "待確認",
+        owner: state.auth.email,
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCampaignCreationDeferredModal() {
+  openModal("v2 暫不新增行銷案", `
+    <p class="empty-note">
+      目前 v2 不直接新增行銷案，避免測試資料寫入 v1 正式平台共用的 marketing_campaigns。等 v2 全部完成並確認整合 v1 後，再開啟這個新增流程。
+    </p>
+  `, {
+    submitLabel: "知道了",
+    hideCancel: true,
+    onSubmit: async () => closeModal(),
+  });
+}
+
 function openApprovalReviewModal(id) {
   const request = state.data.approvalRequests.find((item) => item.id === id);
   if (!request) return;
@@ -1799,8 +1984,10 @@ function render() {
 function primaryActionLabel(meta) {
   if (state.role === "sales") return "提出素材需求";
   if (state.role === "executive") return "查看待決策";
+  if (state.role === "marketing" && state.page === "campaigns") return "v2 暫不新增行銷案";
   if (state.role === "marketing" && state.page === "requests") return "新增需求單";
-  if (state.role === "marketing" && state.page === "vendors") return "廠商報價送審";
+  if (state.role === "marketing" && state.page === "vendors") return "新增廠商合作";
+  if (state.role === "marketing" && state.page === "knowledge") return "新增知識條目";
   return meta.primaryAction;
 }
 
@@ -2126,8 +2313,23 @@ document.getElementById("primaryAction").addEventListener("click", () => {
     return;
   }
 
+  if (state.role === "marketing" && state.page === "campaigns") {
+    openCampaignCreationDeferredModal();
+    return;
+  }
+
   if (state.role === "marketing" && state.page === "vendors") {
-    openVendorApprovalPicker();
+    openCreateCampaignVendorModal();
+    return;
+  }
+
+  if (state.role === "marketing" && state.page === "knowledge") {
+    openCreateKnowledgeItemModal();
+    return;
+  }
+
+  if (state.role === "marketing") {
+    openCampaignCreationDeferredModal();
     return;
   }
 
@@ -2222,13 +2424,14 @@ async function loadExistingData() {
       associationCooperations,
       associationStages,
       campaignVendors,
+      vendors,
       vendorDocuments,
       salesRequests,
       approvalRequests,
       knowledgeItems,
       expenses,
     ] = await Promise.all([
-      safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=20"),
+      safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100"),
       safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
       loadTenderResults(),
       safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
@@ -2237,6 +2440,7 @@ async function loadExistingData() {
       safeGET("association_cooperation_overview?select=id,association_id,item_name,item_type,stage,owner,due_date,progress_pct,next_step,notes,created_at,source_table&order=due_date.asc.nullslast,created_at.desc&limit=80"),
       safeGET("association_stage_options?select=entity_type,stage_name,sort_order,pct_value&order=entity_type.asc,sort_order.asc"),
       safeGET("marketing_campaign_vendors?select=id,campaign_id,role_in_project,meisun_contact,quote_status,budget_amount,actual_amount,payment_status,created_at,vendors(name,vendor_type),marketing_campaign_vendor_deliverables(id,deliverable_name,owner,due_date,status,reviewer,attachment,notes)&order=created_at.desc&limit=100"),
+      safeGET("vendors?select=id,name,vendor_type,contact_name,contact_phone,contact_email&order=name.asc&limit=100"),
       safeGET("marketing_campaign_documents?select=id,doc_type,vendor_id,deliverable_id&vendor_id=not.is.null&limit=100"),
       loadSalesRequests(),
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
@@ -2253,6 +2457,7 @@ async function loadExistingData() {
     state.data.associationCooperations = Array.isArray(associationCooperations) ? associationCooperations : [];
     state.data.associationStages = Array.isArray(associationStages) ? associationStages : [];
     state.data.campaignVendors = Array.isArray(campaignVendors) ? campaignVendors : [];
+    state.data.vendors = Array.isArray(vendors) ? vendors : [];
     state.data.vendorDocuments = Array.isArray(vendorDocuments) ? vendorDocuments : [];
     state.data.salesRequests = Array.isArray(salesRequests) ? salesRequests : [];
     state.data.approvalRequests = Array.isArray(approvalRequests) ? approvalRequests : [];
@@ -2268,6 +2473,7 @@ async function loadExistingData() {
       + state.data.associationCooperations.length
       + state.data.associationStages.length
       + state.data.campaignVendors.length
+      + state.data.vendors.length
       + state.data.vendorDocuments.length
       + state.data.salesRequests.length
       + state.data.approvalRequests.length
