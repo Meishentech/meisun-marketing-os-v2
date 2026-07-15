@@ -78,6 +78,8 @@
    - 串接提醒：廠商報價核准使用 `entity_type = 'vendor_quote'`、`entity_id = marketing_campaign_vendors.id`。
 
 6. 產品知識庫與費用彙總
+   - 前置補強：`marketing_campaign_budget_items` 新增 `payment_status`、`payment_date`。
+   - 前置 SQL：`sql/phase1_batch5_expense_prereq.sql`。
    - 建立產品知識庫四表。
    - 建立 `all_expenses_overview`。
    - 費用彙總需納入 `marketing_campaign_vendors.budget_amount` / `actual_amount`。
