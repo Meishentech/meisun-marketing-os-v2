@@ -19,6 +19,8 @@ const state = {
     vendorDocuments: [],
     salesRequests: [],
     approvalRequests: [],
+    knowledgeItems: [],
+    expenses: [],
   },
   dataStatus: "loading",
 };
@@ -440,6 +442,36 @@ function channelSummarySection(wide) {
 }
 
 function budgetSection() {
+  if (state.data.expenses.length) {
+    return {
+      type: "table",
+      title: "費用狀態",
+      headers: ["項目", "類型", "金額", "狀態", "日期"],
+      rows: state.data.expenses.slice(0, 10).map((expense) => [
+        expense.title || "未命名費用",
+        expense.category || "未分類",
+        formatMoney(expense.amount),
+        tag(expense.payment_status || "未填", statusTone(expense.payment_status)),
+        formatDate(expense.payment_date) || "未設定",
+      ]),
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: "費用狀態",
+      headers: ["狀態", "說明", "下一步"],
+      rows: [
+        [
+          tag("尚未回傳", "amber"),
+          "目前沒有從 all_expenses_overview 讀到費用彙總資料。",
+          "請先執行 Batch 5 SQL，或確認來源費用表有資料。",
+        ],
+      ],
+    };
+  }
+
   return {
     type: "table",
     title: "費用狀態",
@@ -872,6 +904,36 @@ function findAssociationStageOption(item = {}) {
 }
 
 function knowledgeSection(isMarketing) {
+  const items = visibleKnowledgeItems(isMarketing);
+  if (items.length) {
+    return {
+      type: "table",
+      title: isMarketing ? "產品知識審核" : "常用知識條目",
+      headers: ["主題", "類型", "證據", "可用狀態"],
+      rows: items.slice(0, 10).map((item) => [
+        item.title || "未命名知識",
+        item.knowledge_type || "未分類",
+        tag(item.evidence_level || "C", evidenceTone(item.evidence_level)),
+        tag(item.visibility_status || "待確認", visibilityTone(item.visibility_status)),
+      ]),
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: isMarketing ? "產品知識審核" : "常用知識條目",
+      headers: ["狀態", "說明", "下一步"],
+      rows: [
+        [
+          tag("尚未回傳", "amber"),
+          isMarketing ? "目前沒有從 product_knowledge_items 讀到知識條目。" : "目前沒有可供業務使用的知識條目。",
+          isMarketing ? "請新增產品差異化、技術比較或 FAQ 條目。" : "待行銷總監建立並標記可對外或僅內部後會顯示。",
+        ],
+      ],
+    };
+  }
+
   return {
     type: "table",
     title: isMarketing ? "產品知識審核" : "常用知識條目",
@@ -883,6 +945,25 @@ function knowledgeSection(isMarketing) {
       ["醫療場域可靠度 FAQ", "FAQ", tag("C", "gray"), isMarketing ? "待技術確認" : "不顯示或標記"],
     ],
   };
+}
+
+function visibleKnowledgeItems(isMarketing) {
+  if (isMarketing) return state.data.knowledgeItems;
+  return state.data.knowledgeItems.filter((item) => ["可對外", "僅內部"].includes(item.visibility_status));
+}
+
+function evidenceTone(level = "") {
+  if (level === "A") return "green";
+  if (level === "B") return "amber";
+  if (level === "D") return "red";
+  return "gray";
+}
+
+function visibilityTone(status = "") {
+  if (status === "可對外") return "green";
+  if (status === "僅內部") return "amber";
+  if (status === "禁止使用") return "red";
+  return "gray";
 }
 
 function knowledgeGovernanceSection() {
@@ -1261,11 +1342,15 @@ function render() {
 function buildCurrentKpis(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicKpis = {
+    "executive:budget": expenseKpis(),
     "executive:leads": leadKpis(),
     "executive:decisions": approvalKpis(),
+    "marketing:budget": expenseKpis(),
     "marketing:associations": associationKpis(),
     "marketing:vendors": vendorKpis(),
+    "marketing:knowledge": knowledgeKpis(),
     "marketing:requests": requestKpis(),
+    "sales:knowledge": knowledgeKpis(),
     "sales:requests": requestKpis(),
   };
 
@@ -1398,19 +1483,62 @@ function requestKpis() {
   ];
 }
 
+function expenseKpis() {
+  if (!state.data.expenses.length) {
+    const page = pages[state.role]?.budget;
+    return page?.kpis || [];
+  }
+
+  const total = state.data.expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  const unpaid = state.data.expenses.filter((expense) => expense.payment_status !== "已付款").length;
+  const paid = state.data.expenses.filter((expense) => expense.payment_status === "已付款").length;
+  const vendorExpenses = state.data.expenses.filter((expense) => expense.source_table === "marketing_campaign_vendors").length;
+
+  return [
+    ["總支出", formatMoney(total), "all_expenses_overview 彙總"],
+    ["未付款", String(unpaid), "付款狀態非已付款"],
+    ["已付款", String(paid), "已完成付款"],
+    ["廠商費用", String(vendorExpenses), "已納入合作廠商費用"],
+  ];
+}
+
+function knowledgeKpis() {
+  const items = visibleKnowledgeItems(state.role === "marketing");
+  if (!items.length) {
+    const page = pages[state.role]?.knowledge;
+    return page?.kpis || [];
+  }
+
+  const usable = items.filter((item) => item.visibility_status === "可對外").length;
+  const internal = items.filter((item) => item.visibility_status === "僅內部").length;
+  const pending = items.filter((item) => item.visibility_status === "待確認").length;
+  const blocked = items.filter((item) => item.visibility_status === "禁止使用").length;
+
+  return [
+    ["知識條目", String(items.length), "已接 product_knowledge_items"],
+    ["可對外", String(usable), "業務可對外使用"],
+    ["僅內部 / 待確認", String(internal + pending), "需注意使用範圍"],
+    ["禁止使用", String(blocked), "不應出現在業務話術"],
+  ];
+}
+
 function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
     "executive:dashboard": [projectOverviewSection(), decisionListSection(), channelSummarySection(true)],
+    "executive:budget": [budgetSection(), subsidySection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:decisions": [decisionListSection(), approvalFlowSection()],
     "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
+    "marketing:budget": [budgetSection(), subsidySection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), vendorFormPreviewSection()],
     "marketing:associations": [associationSection(), associationTagsSection()],
+    "marketing:knowledge": [knowledgeSection(true), knowledgeGovernanceSection()],
     "marketing:requests": [salesRequestSection(true), requestKanbanSection()],
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
+    "sales:knowledge": [knowledgeSection(false), knowledgeDetailSection()],
     "sales:tenders": [tenderSection(), tenderRuleSection()],
     "sales:leads": [salesLeadSection(), leadFollowUpSection()],
     "sales:requests": [salesRequestSection(false), requestFormPreviewSection()],
@@ -1420,6 +1548,16 @@ function buildCurrentSections(page) {
 }
 
 function dataStatusText() {
+  if (state.page === "knowledge") {
+    if (visibleKnowledgeItems(state.role === "marketing").length) return "產品知識庫已接 Supabase。";
+    if (state.dataStatus === "live") return "整體資料已接 Supabase，但產品知識庫尚未回傳可顯示資料。";
+  }
+
+  if (state.page === "budget") {
+    if (state.data.expenses.length) return "費用彙總已接 Supabase。";
+    if (state.dataStatus === "live") return "整體資料已接 Supabase，但費用彙總尚未回傳。";
+  }
+
   if (state.page === "requests") {
     if (state.data.salesRequests.length) return "業務需求單已接 Supabase。";
     if (state.dataStatus === "live") return "整體資料已接 Supabase，但業務需求單尚未回傳。";
@@ -1593,6 +1731,8 @@ async function loadExistingData() {
       vendorDocuments,
       salesRequests,
       approvalRequests,
+      knowledgeItems,
+      expenses,
     ] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=20"),
       safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
@@ -1606,6 +1746,8 @@ async function loadExistingData() {
       safeGET("marketing_campaign_documents?select=id,doc_type,vendor_id,deliverable_id&vendor_id=not.is.null&limit=100"),
       safeGET("sales_requests?select=id,request_name,requested_by,lead_id,request_type,priority,status,assigned_to,due_date,description,deliverable_resource_id,completed_at,created_at&order=created_at.desc&limit=100"),
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
+      safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,evidence_level,visibility_status,owner,version,updated_at&order=updated_at.desc,created_at.desc&limit=100"),
+      safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? campaigns : [];
@@ -1620,6 +1762,8 @@ async function loadExistingData() {
     state.data.vendorDocuments = Array.isArray(vendorDocuments) ? vendorDocuments : [];
     state.data.salesRequests = Array.isArray(salesRequests) ? salesRequests : [];
     state.data.approvalRequests = Array.isArray(approvalRequests) ? approvalRequests : [];
+    state.data.knowledgeItems = Array.isArray(knowledgeItems) ? knowledgeItems : [];
+    state.data.expenses = Array.isArray(expenses) ? expenses : [];
 
     const liveCount = state.data.campaigns.length
       + state.data.resources.length
@@ -1632,7 +1776,9 @@ async function loadExistingData() {
       + state.data.campaignVendors.length
       + state.data.vendorDocuments.length
       + state.data.salesRequests.length
-      + state.data.approvalRequests.length;
+      + state.data.approvalRequests.length
+      + state.data.knowledgeItems.length
+      + state.data.expenses.length;
     state.dataStatus = liveCount > 0 ? "live" : "fallback";
   } catch (error) {
     console.warn("Existing data load failed", error);

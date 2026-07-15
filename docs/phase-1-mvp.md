@@ -82,6 +82,12 @@
    - 前置 SQL：`sql/phase1_batch5_expense_prereq.sql`。
    - 建立產品知識庫四表。
    - 建立 `all_expenses_overview`。
+   - SQL 檔：`sql/phase1_batch5_knowledge_expenses.sql`。
+   - 決策：`product_knowledge_items.visibility_status` 使用四態：可對外、僅內部、待確認、禁止使用。
+   - 決策：知識來源 Phase 1 先用 `url_or_file` 文字欄位，不新增 storage bucket。
+   - 決策：知識條目對外使用審核走 `approval_requests`，不在知識表內另建審核流程欄位。
+   - 決策：`all_expenses_overview` 保留 `amount`、`amount_budget`、`amount_actual`，方便總經理看預估與實支差異。
+   - 補強：`marketing_campaign_vendors` 新增 `payment_date`，讓廠商費用也可依付款日期排序。
    - 費用彙總需納入 `marketing_campaign_vendors.budget_amount` / `actual_amount`。
 
 ## 暫緩到 Phase 2
