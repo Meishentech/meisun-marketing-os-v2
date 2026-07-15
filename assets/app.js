@@ -11,6 +11,9 @@ const state = {
     resources: [],
     tenders: [],
     leads: [],
+    associations: [],
+    associationTags: [],
+    associationCooperations: [],
   },
   dataStatus: "loading",
 };
@@ -570,6 +573,28 @@ function vendorFormPreviewSection() {
 }
 
 function associationSection() {
+  if (state.data.associationCooperations.length) {
+    const rows = state.data.associationCooperations
+      .slice()
+      .sort(sortCooperations)
+      .slice(0, 8)
+      .map((item) => [
+        item.item_name || "未命名合作項目",
+        item.item_type || sourceTableLabel(item.source_table),
+        tag(item.stage || "未填", statusTone(item.stage)),
+        formatDate(item.due_date) || "未排定",
+        item.next_step || item.notes || item.owner || "待補下一步",
+      ]);
+
+    return {
+      type: "table",
+      title: "公會合作紀錄",
+      wide: true,
+      headers: ["項目", "類型", "階段", "日期", "下一步"],
+      rows,
+    };
+  }
+
   return {
     type: "table",
     title: "公會合作紀錄",
@@ -583,6 +608,36 @@ function associationSection() {
 }
 
 function associationTagsSection() {
+  if (state.data.associations.length || state.data.associationTags.length) {
+    const tagsByAssociation = state.data.associationTags.reduce((acc, tagRow) => {
+      const key = tagRow.association_id || "unknown";
+      if (!acc[key]) acc[key] = [];
+      if (tagRow.tag) acc[key].push(tagRow.tag);
+      return acc;
+    }, {});
+
+    const cards = state.data.associations.slice(0, 8).map((association) => {
+      const tags = tagsByAssociation[association.id] || [];
+      const fallbackTag = association.join_status ? [association.join_status] : [];
+      return [
+        associationDisplayName(association),
+        [...tags, ...fallbackTag].length ? [...tags, ...fallbackTag].join("、") : "尚未建立關係標籤",
+      ];
+    });
+
+    if (!cards.length) {
+      Object.entries(tagsByAssociation).slice(0, 8).forEach(([associationId, tags]) => {
+        cards.push([associationId.slice(0, 8), tags.join("、")]);
+      });
+    }
+
+    return {
+      type: "cards",
+      title: "公會關係標籤",
+      cards,
+    };
+  }
+
   return {
     type: "cards",
     title: "公會狀態原則",
@@ -593,6 +648,24 @@ function associationTagsSection() {
       ["可關聯費用", "會費、年費、贊助、期刊、活動費分開記錄。"],
     ],
   };
+}
+
+function sortCooperations(a, b) {
+  const dateA = a.due_date || "9999-12-31";
+  const dateB = b.due_date || "9999-12-31";
+  if (dateA !== dateB) return dateA.localeCompare(dateB);
+  return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+}
+
+function sourceTableLabel(source = "") {
+  if (source === "task") return "任務";
+  if (source === "event") return "活動 / 講座 / 贊助";
+  if (source === "publication") return "期刊刊登";
+  return "合作紀錄";
+}
+
+function associationDisplayName(association = {}) {
+  return association.name || association.association_name || association.title || association.short_name || "未命名公會";
 }
 
 function knowledgeSection(isMarketing) {
@@ -922,6 +995,7 @@ function buildCurrentKpis(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicKpis = {
     "executive:leads": leadKpis(),
+    "marketing:associations": associationKpis(),
   };
 
   return dynamicKpis[key] || page.kpis;
@@ -944,6 +1018,23 @@ function leadKpis() {
   ];
 }
 
+function associationKpis() {
+  if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length) {
+    return pages.marketing.associations.kpis;
+  }
+
+  const totalAssociations = state.data.associations.length;
+  const openCooperations = state.data.associationCooperations.filter((item) => !["已結束", "已完成", "已取消"].includes(item.stage)).length;
+  const pending = state.data.associationCooperations.filter((item) => String(item.stage || "").includes("待") || !item.due_date).length;
+
+  return [
+    ["公會 / 單位", String(totalAssociations), "已接既有 associations 主檔"],
+    ["合作紀錄", String(state.data.associationCooperations.length), `${openCooperations} 個仍在進行或待確認`],
+    ["關係標籤", String(state.data.associationTags.length), "支援未入會但講座、期刊或贊助合作"],
+    ["待確認", String(pending), "階段或日期仍需補齊"],
+  ];
+}
+
 function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
@@ -951,6 +1042,7 @@ function buildCurrentSections(page) {
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
+    "marketing:associations": [associationSection(), associationTagsSection()],
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
     "sales:tenders": [tenderSection(), tenderRuleSection()],
@@ -1098,19 +1190,31 @@ async function loadExistingData() {
   render();
 
   try {
-    const [campaigns, resources, tenders, leads] = await Promise.all([
+    const [campaigns, resources, tenders, leads, associations, associationTags, associationCooperations] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=20"),
       safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
       loadTenderResults(),
       safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
+      safeGET("associations?limit=50"),
+      safeGET("association_relationship_tags?select=id,association_id,tag,created_at&order=created_at.desc&limit=100"),
+      safeGET("association_cooperation_overview?select=id,association_id,item_name,item_type,stage,owner,due_date,progress_pct,next_step,notes,created_at,source_table&order=due_date.asc.nullslast,created_at.desc&limit=80"),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? campaigns : [];
     state.data.resources = Array.isArray(resources) ? resources : [];
     state.data.tenders = Array.isArray(tenders) ? tenders : [];
     state.data.leads = Array.isArray(leads) ? leads : [];
+    state.data.associations = Array.isArray(associations) ? associations : [];
+    state.data.associationTags = Array.isArray(associationTags) ? associationTags : [];
+    state.data.associationCooperations = Array.isArray(associationCooperations) ? associationCooperations : [];
 
-    const liveCount = state.data.campaigns.length + state.data.resources.length + state.data.tenders.length + state.data.leads.length;
+    const liveCount = state.data.campaigns.length
+      + state.data.resources.length
+      + state.data.tenders.length
+      + state.data.leads.length
+      + state.data.associations.length
+      + state.data.associationTags.length
+      + state.data.associationCooperations.length;
     state.dataStatus = liveCount > 0 ? "live" : "fallback";
   } catch (error) {
     console.warn("Existing data load failed", error);

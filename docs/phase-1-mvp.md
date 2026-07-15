@@ -56,6 +56,8 @@
    - 建立 `association_stage_options`。
    - 建立 `association_relationship_tags`。
    - 建立 `association_cooperation_overview`。
+   - SQL 檔：`sql/phase1_batch2_associations.sql`。
+   - 驗收：確認 9 筆階段選項建立完成、同一公會可掛多個關係標籤、`association_cooperation_overview` 可透過前端讀取且不回權限錯誤。
 
 4. 多廠商與交付物
    - 建立 `vendors`、`marketing_campaign_vendors`、`marketing_campaign_vendor_deliverables`。
