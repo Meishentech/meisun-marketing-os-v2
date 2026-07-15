@@ -595,6 +595,22 @@ function associationSection() {
     };
   }
 
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: "公會合作紀錄",
+      wide: true,
+      headers: ["狀態", "說明", "下一步"],
+      rows: [
+        [
+          tag("尚未回傳", "amber"),
+          "目前沒有從公會任務、活動或期刊 view 讀到合作紀錄。",
+          "請確認 association_cooperation_overview 有資料，且已授權 authenticated 讀取。",
+        ],
+      ],
+    };
+  }
+
   return {
     type: "table",
     title: "公會合作紀錄",
@@ -635,6 +651,19 @@ function associationTagsSection() {
       type: "cards",
       title: "公會關係標籤",
       cards,
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "cards",
+      title: "公會資料狀態",
+      cards: [
+        ["公會主檔", "尚未從 associations 回傳資料，需確認資料列或讀取權限。"],
+        ["關係標籤", "尚未從 association_relationship_tags 回傳資料，初期可先新增測試標籤驗收。"],
+        ["合作紀錄", "尚未從 association_cooperation_overview 回傳資料，可能是來源表尚無任務、活動或期刊資料。"],
+        ["畫面狀態", "目前不是功能錯誤，而是公會頁尚未取得可顯示的公會資料。"],
+      ],
     };
   }
 
@@ -1020,6 +1049,15 @@ function leadKpis() {
 
 function associationKpis() {
   if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length) {
+    if (state.dataStatus === "live") {
+      return [
+        ["公會 / 單位", "0", "尚未從 associations 回傳"],
+        ["合作紀錄", "0", "尚未從 overview view 回傳"],
+        ["關係標籤", "0", "尚未建立或尚未授權讀取"],
+        ["待確認", "檢查", "需確認公會資料與權限"],
+      ];
+    }
+
     return pages.marketing.associations.kpis;
   }
 
@@ -1053,6 +1091,13 @@ function buildCurrentSections(page) {
 }
 
 function dataStatusText() {
+  if (state.role === "marketing" && state.page === "associations") {
+    if (state.data.associations.length || state.data.associationCooperations.length || state.data.associationTags.length) {
+      return "公會資料已接 Supabase。";
+    }
+    if (state.dataStatus === "live") return "整體資料已接 Supabase，但公會資料尚未回傳。";
+  }
+
   if (state.dataStatus === "live") return "目前已接 Supabase 既有資料。";
   if (state.dataStatus === "fallback") return "目前使用示範資料；未登入或權限未開時會維持此狀態。";
   if (state.dataStatus === "error") return "Supabase 讀取失敗，暫時使用示範資料。";
