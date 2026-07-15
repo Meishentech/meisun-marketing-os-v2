@@ -2400,7 +2400,8 @@ function render() {
   });
 
   const roleSwitch = document.querySelector(".role-switch");
-  roleSwitch.classList.add("is-hidden");
+  roleSwitch.classList.toggle("is-hidden", !state.auth.canSwitchRoles);
+  roleSwitch.classList.toggle("is-locked", !state.auth.canSwitchRoles);
 }
 
 function welcomeLine() {
@@ -3055,7 +3056,9 @@ function showApp() {
   document.getElementById("appShell").classList.remove("is-hidden");
   const userName = displayUserName();
   document.getElementById("currentUserLabel").textContent = userName === "夥伴" ? state.auth.email || "已登入" : userName;
-  document.getElementById("currentUserNote").textContent = `${roleLabel(state.role)}權限・${state.auth.email || "公司帳號"}`;
+  document.getElementById("currentUserNote").textContent = state.auth.canSwitchRoles
+    ? `管理者權限・可切換視角・${state.auth.email || "公司帳號"}`
+    : `${roleLabel(state.role)}權限・${state.auth.email || "公司帳號"}`;
   render();
 }
 
