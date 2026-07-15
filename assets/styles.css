@@ -793,40 +793,256 @@ h1 {
 }
 
 @media (max-width: 760px) {
+  .login-screen {
+    padding: 18px 12px;
+  }
+
+  .login-card {
+    padding: 24px 18px;
+    border-radius: 16px;
+  }
+
+  .login-card h1 {
+    font-size: 28px;
+  }
+
+  .sidebar {
+    padding: 16px 14px;
+    gap: 14px;
+  }
+
+  .brand {
+    padding-bottom: 14px;
+  }
+
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  .brand strong {
+    font-size: 15px;
+  }
+
+  .brand span {
+    font-size: 11px;
+  }
+
+  .role-switch {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .role-button {
+    min-height: 38px;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  .nav-list {
+    display: flex;
+    gap: 8px;
+    margin: 0 -4px;
+    padding: 0 4px 4px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-button {
+    width: auto;
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .nav-button::before {
+    width: 6px;
+    height: 6px;
+  }
+
+  .sidebar-note {
+    padding: 12px;
+  }
+
   .main {
-    padding: 22px 14px;
+    padding: 20px 12px 28px;
   }
 
   .topbar {
     display: grid;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  .eyebrow {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  h1 {
+    font-size: 30px;
+  }
+
+  .page-subtitle {
+    font-size: 15px;
   }
 
   .top-actions {
-    justify-content: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .primary-button,
   .secondary-button {
-    flex: 1;
+    width: 100%;
+    min-height: 44px;
   }
 
   .kpi-grid,
   .mini-grid,
   .form-grid,
-  .role-switch,
-  .nav-list {
+  .content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .kpi-card {
+    min-height: auto;
+    padding: 16px;
+  }
+
+  .kpi-value {
+    font-size: 30px;
+  }
+
+  .panel,
+  .kpi-card,
+  .mini-card {
+    border-radius: 12px;
+  }
+
+  .panel-header {
+    min-height: 50px;
+    padding: 0 14px;
+  }
+
+  .panel-header h2 {
+    font-size: 17px;
+  }
+
+  .panel-body {
+    padding: 12px;
   }
 
   .form-field.is-wide {
     grid-column: auto;
   }
 
-  .table {
-    table-layout: auto;
+  .form-field input,
+  .form-field select,
+  .form-field textarea {
+    min-height: 46px;
   }
 
-  .panel {
-    overflow-x: auto;
+  .table,
+  .table thead,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+
+  .table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table tr {
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid #deebf4;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .table tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .table td,
+  .table.is-compact td {
+    display: grid;
+    grid-template-columns: minmax(92px, 34%) minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 10px 0;
+    border-bottom: 1px solid #e6eff6;
+    font-size: 14px;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.45;
+  }
+
+  .table td:last-child {
+    border-bottom: 0;
+  }
+
+  .campaign-summary-table td {
+    white-space: normal;
+  }
+
+  .campaign-summary-table td:first-child {
+    font-size: 14px;
+  }
+
+  .campaign-summary-total td {
+    border-top: 0;
+    background: transparent;
+  }
+
+  .action-group {
+    gap: 7px;
+  }
+
+  .inline-action {
+    min-height: 36px;
+    flex: 1 1 42%;
+    padding: 0 9px;
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .modal {
+    max-height: calc(100vh - 20px);
+    border-radius: 16px;
+  }
+
+  .modal-body {
+    max-height: calc(100vh - 94px);
+    padding: 14px;
+  }
+
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .modal-actions .secondary-button {
+    order: 2;
   }
 }

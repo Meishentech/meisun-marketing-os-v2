@@ -2706,7 +2706,7 @@ function renderSection(section) {
               ${section.rows.map((row) => {
                 const cells = Array.isArray(row) ? row : row.cells;
                 const rowClass = Array.isArray(row) ? "" : ` class="${row.className || ""}"`;
-                return `<tr${rowClass}>${cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`;
+                return `<tr${rowClass}>${cells.map((cell, index) => `<td data-label="${escapeAttr(section.headers[index] || "")}">${cell}</td>`).join("")}</tr>`;
               }).join("")}
             </tbody>
           </table>
