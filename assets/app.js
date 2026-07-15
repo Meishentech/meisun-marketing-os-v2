@@ -98,6 +98,7 @@ const pages = {
         ["名單轉商機率", "24%", "較上期增加 5%"],
       ],
       sections: [
+        campaignSummarySection(),
         projectOverviewSection(),
         decisionListSection(),
         channelSummarySection(true),
@@ -323,10 +324,10 @@ function projectOverviewSection() {
   if (state.data.campaigns.length) {
     return {
       type: "table",
-      title: "上下半年行銷專案總覽",
+      title: "專案管理排序",
       wide: true,
-      headers: ["專案", "重要性", "進度", "預算", "待處理"],
-      rows: state.data.campaigns.slice(0, 6).map(formatCampaignRow),
+      headers: ["專案", "重要性", "執行狀態", "進度", "預算", "待處理"],
+      rows: sortedCampaignsForExecutive(state.data.campaigns).slice(0, 10).map(formatCampaignRow),
     };
   }
 
@@ -344,16 +345,70 @@ function projectOverviewSection() {
   };
 }
 
+function campaignSummarySection() {
+  if (!state.data.campaigns.length) {
+    return {
+      type: "table",
+      title: "年度行銷案彙總",
+      wide: true,
+      tableClass: "campaign-summary-table",
+      headers: ["期間", "預算", "專案數量", "預估支出", "總實際支出", "預估補助款", "實撥補助款"],
+      rows: [
+        ["本年度上半年", "未填", "0", "未填", "未填", "未填", "未填"],
+        ["本年度下半年", "未填", "0", "未填", "未填", "未填", "未填"],
+        { className: "campaign-summary-total", cells: ["本年度總年度", "未填", "0", "未填", "未填", "未填", "未填"] },
+      ],
+    };
+  }
+
+  const year = campaignOverviewYear(state.data.campaigns);
+  const firstHalf = campaignPeriodSummary(state.data.campaigns, "h1", year);
+  const secondHalf = campaignPeriodSummary(state.data.campaigns, "h2", year);
+  const total = {
+    rows: [...firstHalf.rows, ...secondHalf.rows],
+    budget: firstHalf.budget + secondHalf.budget,
+    estimatedSpend: firstHalf.estimatedSpend + secondHalf.estimatedSpend,
+    actualSpend: firstHalf.actualSpend + secondHalf.actualSpend,
+    subsidyPlanned: firstHalf.subsidyPlanned + secondHalf.subsidyPlanned,
+    subsidyReceived: firstHalf.subsidyReceived + secondHalf.subsidyReceived,
+  };
+
+  return {
+    type: "table",
+    title: "年度行銷案彙總",
+    wide: true,
+    tableClass: "campaign-summary-table",
+    headers: ["期間", "預算", "專案數量", "預估支出", "總實際支出", "預估補助款", "實撥補助款"],
+    rows: [
+      campaignSummaryRow(`${year} 上半年`, firstHalf),
+      campaignSummaryRow(`${year} 下半年`, secondHalf),
+      { className: "campaign-summary-total", cells: campaignSummaryRow(`${year} 總年度`, total) },
+    ],
+  };
+}
+
+function campaignSummaryRow(label, summary) {
+  return [
+    label,
+    formatCurrencyFull(summary.budget),
+    String(summary.rows.length),
+    formatCurrencyFull(summary.estimatedSpend),
+    formatCurrencyFull(summary.actualSpend),
+    formatCurrencyFull(summary.subsidyPlanned),
+    formatCurrencyFull(summary.subsidyReceived),
+  ];
+}
+
 function formatCampaignRow(campaign) {
   const priority = campaign.priority || "中";
-  const priorityTone = priority === "高" ? "red" : priority === "低" ? "green" : "amber";
   const budget = formatMoney(campaign.budget);
   const progressLabel = campaignProgress(campaign.status);
   const nextStep = campaign.notes || campaign.purpose || campaign.partner || "待補下一步";
 
   return [
     campaign.name || "未命名專案",
-    tag(priority, priorityTone),
+    tag(priority, campaignPriorityTone(priority)),
+    tag(campaign.status || "未填", campaignStatusTone(campaign.status)),
     progress(progressLabel.label, progressLabel.tone),
     budget,
     nextStep,
@@ -365,6 +420,111 @@ function campaignProgress(status = "") {
   if (["進行中", "執行中"].includes(status)) return { label: "65%", tone: "" };
   if (["預計規劃", "規劃中", "估價中"].includes(status)) return { label: "25%", tone: "amber" };
   return { label: "40%", tone: "amber" };
+}
+
+function campaignPriorityTone(priority = "") {
+  if (priority === "高") return "red";
+  if (priority === "低") return "green";
+  return "amber";
+}
+
+function campaignStatusTone(status = "") {
+  if (["逾期", "需修正", "追加待核"].includes(status)) return "red";
+  if (["估價中", "補助申請", "待確認", "預計規劃"].includes(status)) return "amber";
+  if (["進行中", "執行中"].includes(status)) return "";
+  if (["結案", "已完成", "完成"].includes(status)) return "green";
+  return "gray";
+}
+
+function sortedCampaignsForExecutive(campaigns = []) {
+  return [...campaigns].sort((a, b) => (
+    campaignUrgencyScore(b) - campaignUrgencyScore(a)
+    || String(campaignStartDate(a) || "9999").localeCompare(String(campaignStartDate(b) || "9999"))
+    || String(a.name || "").localeCompare(String(b.name || ""))
+  ));
+}
+
+function campaignUrgencyScore(campaign = {}) {
+  const priorityScores = { 高: 300, 中: 180, 低: 80 };
+  const statusScores = {
+    估價中: 90,
+    補助申請: 85,
+    預計規劃: 70,
+    進行中: 60,
+    執行中: 60,
+    結案: 0,
+    已完成: 0,
+    完成: 0,
+  };
+  const overdue = isPastDate(campaign.planned_end || campaign.actual_end) && !["結案", "已完成", "完成"].includes(campaign.status);
+  const budget = Number(campaign.budget || 0);
+  const actualSpend = Number(campaign.actual_spend || 0);
+  const overBudget = budget > 0 && actualSpend > budget;
+
+  return (priorityScores[campaign.priority] || priorityScores.中)
+    + (statusScores[campaign.status] ?? 40)
+    + (overdue ? 120 : 0)
+    + (overBudget ? 110 : 0);
+}
+
+function campaignFiscalYear(campaign = {}) {
+  const raw = campaign.actual_start || campaign.planned_start || campaign.created_at || "";
+  const year = Number(String(raw).slice(0, 4));
+  return Number.isFinite(year) && year > 0 ? year : new Date().getFullYear();
+}
+
+function campaignOverviewYear(campaigns = []) {
+  const current = new Date().getFullYear();
+  const years = campaigns.map(campaignFiscalYear).filter((year) => Number.isFinite(year));
+  if (!years.length || years.includes(current)) return current;
+  return Math.max(...years);
+}
+
+function campaignHalf(campaign = {}) {
+  const raw = campaign.actual_start || campaign.planned_start || campaign.created_at || nowIso();
+  const month = Number(String(raw).slice(5, 7)) || 1;
+  return month <= 6 ? "h1" : "h2";
+}
+
+function campaignStartDate(campaign = {}) {
+  return campaign.actual_start || campaign.planned_start || campaign.created_at || "";
+}
+
+function campaignExpenses(campaignId) {
+  return state.data.expenses.filter((expense) => expense.campaign_id === campaignId);
+}
+
+function campaignEstimatedSpend(campaign = {}) {
+  const expenses = campaignExpenses(campaign.id);
+  const expenseTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+  return expenseTotal || Number(campaign.budget || 0);
+}
+
+function campaignActualSpend(campaign = {}) {
+  const expenses = campaignExpenses(campaign.id);
+  const expenseActualTotal = expenses.reduce((sum, expense) => sum + Number(expense.amount_actual || 0), 0);
+  return Number(campaign.actual_spend || 0) || expenseActualTotal;
+}
+
+function campaignPeriodSummary(campaigns = [], half, year) {
+  const rows = campaigns.filter((campaign) => (
+    campaignFiscalYear(campaign) === year
+    && campaignHalf(campaign) === half
+  ));
+
+  return {
+    rows,
+    budget: rows.reduce((sum, campaign) => sum + Number(campaign.budget || 0), 0),
+    estimatedSpend: rows.reduce((sum, campaign) => sum + campaignEstimatedSpend(campaign), 0),
+    actualSpend: rows.reduce((sum, campaign) => sum + campaignActualSpend(campaign), 0),
+    subsidyPlanned: rows.reduce((sum, campaign) => sum + Number(campaign.subsidy_planned || 0), 0),
+    subsidyReceived: rows.reduce((sum, campaign) => sum + Number(campaign.subsidy_received || 0), 0),
+  };
+}
+
+function isPastDate(value) {
+  if (!value) return false;
+  return String(value).slice(0, 10) < new Date().toISOString().slice(0, 10);
 }
 
 function decisionListSection() {
@@ -1372,6 +1532,11 @@ function formatMoney(value) {
   return `${number.toLocaleString("zh-Hant-TW")}元`;
 }
 
+function formatCurrencyFull(value) {
+  const number = Number(value || 0);
+  return `NT$ ${number.toLocaleString("zh-Hant-TW")}`;
+}
+
 function formatDate(value) {
   if (!value) return "";
   return String(value).slice(0, 10);
@@ -2180,7 +2345,7 @@ function knowledgeKpis() {
 function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
-    "executive:dashboard": [projectOverviewSection(), decisionListSection(), channelSummarySection(true)],
+    "executive:dashboard": [campaignSummarySection(), projectOverviewSection(), decisionListSection(), channelSummarySection(true)],
     "executive:budget": [budgetSection(), subsidySection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:decisions": [decisionListSection(), approvalFlowSection()],
@@ -2232,7 +2397,11 @@ function renderSections(sections) {
 
 function renderSection(section) {
   const wideClass = section.wide ? " is-wide" : "";
-  const tableClass = section.compact ? "table is-compact" : "table";
+  const tableClass = [
+    "table",
+    section.compact ? "is-compact" : "",
+    section.tableClass || "",
+  ].filter(Boolean).join(" ");
 
   if (section.type === "table") {
     return `
@@ -2242,7 +2411,11 @@ function renderSection(section) {
           <table class="${tableClass}">
             <thead><tr>${section.headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
             <tbody>
-              ${section.rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}
+              ${section.rows.map((row) => {
+                const cells = Array.isArray(row) ? row : row.cells;
+                const rowClass = Array.isArray(row) ? "" : ` class="${row.className || ""}"`;
+                return `<tr${rowClass}>${cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`;
+              }).join("")}
             </tbody>
           </table>
         </div>
@@ -2434,7 +2607,7 @@ async function loadExistingData() {
       knowledgeItems,
       expenses,
     ] = await Promise.all([
-      safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,partner,purpose,notes,planned_start,planned_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100"),
+      safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100"),
       safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
       loadTenderResults(),
       safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),

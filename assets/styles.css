@@ -492,6 +492,29 @@ h1 {
   padding: 12px 10px;
 }
 
+.campaign-summary-table {
+  table-layout: auto;
+}
+
+.campaign-summary-table td {
+  font-size: 15px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.campaign-summary-table td:first-child {
+  color: #132f46;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.campaign-summary-total td {
+  border-top: 2px solid #173a59;
+  background: #f4f9fb;
+  color: #102c43;
+  font-weight: 900;
+}
+
 .cell-main,
 .cell-sub {
   display: block;
