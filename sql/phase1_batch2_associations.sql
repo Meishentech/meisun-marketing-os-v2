@@ -99,7 +99,7 @@ select
   event_date as due_date,
   null::integer as progress_pct,
   result_notes as next_step,
-  notes,
+  null::text as notes,
   attachment,
   created_at,
   updated_at,
