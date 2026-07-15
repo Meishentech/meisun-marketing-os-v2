@@ -445,10 +445,28 @@ h1 {
   font-size: 14px;
   line-height: 1.45;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .table tr:last-child td {
   border-bottom: 0;
+}
+
+.table.is-compact th,
+.table.is-compact td {
+  padding: 12px 10px;
+}
+
+.cell-main,
+.cell-sub {
+  display: block;
+}
+
+.cell-sub {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 800;
 }
 
 .tag {

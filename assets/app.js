@@ -888,11 +888,12 @@ function salesRequestSection(isMarketing) {
   if (requests.length) {
     return {
       type: "table",
+      compact: true,
       title: isMarketing ? "業務需求列表" : "我的需求單",
-      headers: ["需求", "提出人 / 案件", "類型", "優先級", "狀態"],
+      headers: ["需求", "提出人", "類型", "優先級", "狀態"],
       rows: requests.slice(0, 10).map((request) => [
         request.request_name || "未命名需求",
-        request.requested_by || "未填",
+        formatRequester(request.requested_by),
         request.request_type || "未分類",
         tag(request.priority || "一般", priorityTone(request.priority)),
         tag(request.status || "待處理", requestStatusTone(request.status)),
@@ -932,6 +933,13 @@ function visibleSalesRequests(isMarketing) {
   const email = String(state.auth.email || "").toLowerCase();
   const ownRequests = state.data.salesRequests.filter((request) => String(request.requested_by || "").toLowerCase() === email);
   return ownRequests.length ? ownRequests : state.data.salesRequests;
+}
+
+function formatRequester(email = "") {
+  if (!email) return "未填";
+  const [name, domain] = String(email).split("@");
+  if (!domain) return email;
+  return `<span class="cell-main">${name}</span><span class="cell-sub">@${domain}</span>`;
 }
 
 function priorityTone(priority = "") {
@@ -1427,13 +1435,14 @@ function renderSections(sections) {
 
 function renderSection(section) {
   const wideClass = section.wide ? " is-wide" : "";
+  const tableClass = section.compact ? "table is-compact" : "table";
 
   if (section.type === "table") {
     return `
       <article class="panel${wideClass}">
         <div class="panel-header"><h2>${section.title}</h2></div>
         <div class="panel-body">
-          <table class="table">
+          <table class="${tableClass}">
             <thead><tr>${section.headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
             <tbody>
               ${section.rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}
