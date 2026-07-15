@@ -1037,11 +1037,11 @@ function salesRequestSection(isMarketing) {
         isMarketing
           ? actionGroup([
             actionButton("更新", "edit-sales-request", request.id, "is-primary"),
-            actionButton("刪除", "delete-sales-request", request.id, "is-danger"),
+            actionButton("取消", "cancel-sales-request", request.id, "is-danger"),
           ])
           : actionGroup([
             actionButton("檢視", "view-sales-request", request.id),
-            actionButton("刪除", "delete-sales-request", request.id, "is-danger"),
+            actionButton("取消", "cancel-sales-request", request.id, "is-danger"),
           ]),
       ]),
     };
@@ -1079,10 +1079,15 @@ function salesRequestSection(isMarketing) {
 }
 
 function visibleSalesRequests(isMarketing) {
-  if (isMarketing) return state.data.salesRequests;
+  const activeRequests = state.data.salesRequests.filter((request) => !isCancelledSalesRequest(request));
+  if (isMarketing) return activeRequests;
   const email = String(state.auth.email || "").toLowerCase();
-  const ownRequests = state.data.salesRequests.filter((request) => String(request.requested_by || "").toLowerCase() === email);
+  const ownRequests = activeRequests.filter((request) => String(request.requested_by || "").toLowerCase() === email);
   return ownRequests;
+}
+
+function isCancelledSalesRequest(request = {}) {
+  return Boolean(request.cancelled_at) || request.status === "已取消";
 }
 
 function formatRequester(email = "") {
@@ -1567,22 +1572,41 @@ function openEditSalesRequestModal(id) {
   });
 }
 
-function openDeleteSalesRequestModal(id) {
+function openCancelSalesRequestModal(id) {
   const request = state.data.salesRequests.find((item) => item.id === id);
   if (!request) return;
 
-  openModal("刪除業務需求單", `
+  openModal("取消業務需求單", `
     <p class="empty-note">
-      確定要刪除「${escapeHtml(request.request_name || "未命名需求")}」嗎？刪除後這筆需求單會從列表移除。
+      確定要取消 ${formatRequester(request.requested_by)} 提出的「${escapeHtml(request.request_name || "未命名需求")}」嗎？取消後會保留紀錄，但不再出現在待處理清單。
     </p>
   `, {
-    submitLabel: "確認刪除",
+    submitLabel: "確認取消",
     onSubmit: async () => {
-      await api("DELETE", `sales_requests?id=eq.${encodeURIComponent(id)}`);
+      await cancelSalesRequest(id);
       closeModal();
       await loadExistingData();
     },
   });
+}
+
+async function cancelSalesRequest(id) {
+  const payload = {
+    status: "已取消",
+    cancelled_at: nowIso(),
+    cancelled_by: state.auth.email,
+    updated_at: nowIso(),
+  };
+
+  try {
+    await api("PATCH", `sales_requests?id=eq.${encodeURIComponent(id)}`, payload);
+  } catch (error) {
+    console.warn("sales_requests cancel audit fields unavailable, falling back to status-only cancel", error);
+    await api("PATCH", `sales_requests?id=eq.${encodeURIComponent(id)}`, {
+      status: "已取消",
+      updated_at: nowIso(),
+    });
+  }
 }
 
 function openVendorApprovalModal(id) {
@@ -2120,7 +2144,7 @@ document.addEventListener("click", (event) => {
   const { action, id } = button.dataset;
   if (action === "edit-sales-request") openEditSalesRequestModal(id);
   if (action === "view-sales-request") openViewSalesRequestModal(id);
-  if (action === "delete-sales-request") openDeleteSalesRequestModal(id);
+  if (action === "cancel-sales-request") openCancelSalesRequestModal(id);
   if (action === "send-vendor-approval") openVendorApprovalModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
@@ -2214,7 +2238,7 @@ async function loadExistingData() {
       safeGET("association_stage_options?select=entity_type,stage_name,sort_order,pct_value&order=entity_type.asc,sort_order.asc"),
       safeGET("marketing_campaign_vendors?select=id,campaign_id,role_in_project,meisun_contact,quote_status,budget_amount,actual_amount,payment_status,created_at,vendors(name,vendor_type),marketing_campaign_vendor_deliverables(id,deliverable_name,owner,due_date,status,reviewer,attachment,notes)&order=created_at.desc&limit=100"),
       safeGET("marketing_campaign_documents?select=id,doc_type,vendor_id,deliverable_id&vendor_id=not.is.null&limit=100"),
-      safeGET("sales_requests?select=id,request_name,requested_by,lead_id,request_type,priority,status,assigned_to,due_date,description,deliverable_resource_id,completed_at,created_at&order=created_at.desc&limit=100"),
+      loadSalesRequests(),
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
       safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,evidence_level,visibility_status,owner,version,updated_at&order=updated_at.desc,created_at.desc&limit=100"),
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
@@ -2263,6 +2287,13 @@ async function loadTenderResults() {
   if (Array.isArray(withLead)) return withLead;
 
   return safeGET("tender_results?select=id,title,published_at,status,last_seen_at,matched_keywords,snippet,url&order=last_seen_at.desc&limit=20");
+}
+
+async function loadSalesRequests() {
+  const withCancelAudit = await safeGET("sales_requests?select=id,request_name,requested_by,lead_id,request_type,priority,status,assigned_to,due_date,description,deliverable_resource_id,completed_at,cancelled_at,cancelled_by,created_at&cancelled_at=is.null&order=created_at.desc&limit=100", null);
+  if (Array.isArray(withCancelAudit)) return withCancelAudit;
+
+  return safeGET("sales_requests?select=id,request_name,requested_by,lead_id,request_type,priority,status,assigned_to,due_date,description,deliverable_resource_id,completed_at,created_at&status=neq.已取消&order=created_at.desc&limit=100");
 }
 
 render();
