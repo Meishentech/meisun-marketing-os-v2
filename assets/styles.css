@@ -304,18 +304,6 @@ h1 {
   font-weight: 700;
 }
 
-.page-subtitle .data-status {
-  display: inline-flex;
-  margin-top: 8px;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: #fff;
-  border: 1px solid var(--line-strong);
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 900;
-}
-
 .top-actions {
   display: flex;
   flex-wrap: wrap;
@@ -369,9 +357,21 @@ h1 {
   color: #fff;
 }
 
+.inline-action.is-danger {
+  border-color: #f2c4c4;
+  background: #fff7f7;
+  color: var(--red);
+}
+
 .inline-action:disabled {
   cursor: not-allowed;
   opacity: .5;
+}
+
+.action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .kpi-grid {

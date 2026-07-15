@@ -1035,8 +1035,14 @@ function salesRequestSection(isMarketing) {
         tag(request.priority || "一般", priorityTone(request.priority)),
         tag(request.status || "待處理", requestStatusTone(request.status)),
         isMarketing
-          ? actionButton("更新", "edit-sales-request", request.id, "is-primary")
-          : actionButton("檢視", "view-sales-request", request.id),
+          ? actionGroup([
+            actionButton("更新", "edit-sales-request", request.id, "is-primary"),
+            actionButton("刪除", "delete-sales-request", request.id, "is-danger"),
+          ])
+          : actionGroup([
+            actionButton("檢視", "view-sales-request", request.id),
+            actionButton("刪除", "delete-sales-request", request.id, "is-danger"),
+          ]),
       ]),
     };
   }
@@ -1328,6 +1334,10 @@ function actionButton(label, action, id = "", tone = "", disabled = false) {
   return `<button class="inline-action ${tone}" type="button" data-action="${action}" data-id="${escapeAttr(id)}"${disabledAttr}>${label}</button>`;
 }
 
+function actionGroup(actions = []) {
+  return `<div class="action-group">${actions.join("")}</div>`;
+}
+
 function escapeHtml(value = "") {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -1557,6 +1567,24 @@ function openEditSalesRequestModal(id) {
   });
 }
 
+function openDeleteSalesRequestModal(id) {
+  const request = state.data.salesRequests.find((item) => item.id === id);
+  if (!request) return;
+
+  openModal("刪除業務需求單", `
+    <p class="empty-note">
+      確定要刪除「${escapeHtml(request.request_name || "未命名需求")}」嗎？刪除後這筆需求單會從列表移除。
+    </p>
+  `, {
+    submitLabel: "確認刪除",
+    onSubmit: async () => {
+      await api("DELETE", `sales_requests?id=eq.${encodeURIComponent(id)}`);
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
 function openVendorApprovalModal(id) {
   const campaignVendor = state.data.campaignVendors.find((item) => item.id === id);
   if (!campaignVendor) return;
@@ -1728,7 +1756,7 @@ function render() {
 
   document.getElementById("roleEyebrow").textContent = meta.eyebrow;
   document.getElementById("pageTitle").textContent = page.title;
-  document.getElementById("pageSubtitle").innerHTML = `${page.subtitle} <span class="data-status">${dataStatusText()}</span>`;
+  document.getElementById("pageSubtitle").textContent = page.subtitle;
   document.getElementById("primaryAction").textContent = primaryActionLabel(meta);
 
   renderNav(meta.nav);
@@ -1960,45 +1988,6 @@ function buildCurrentSections(page) {
   return dynamicSections[key] || page.sections;
 }
 
-function dataStatusText() {
-  if (state.page === "knowledge") {
-    if (visibleKnowledgeItems(state.role === "marketing").length) return "產品知識庫已接 Supabase。";
-    if (state.dataStatus === "live") return "整體資料已接 Supabase，但產品知識庫尚未回傳可顯示資料。";
-  }
-
-  if (state.page === "budget") {
-    if (state.data.expenses.length) return "費用彙總已接 Supabase。";
-    if (state.dataStatus === "live") return "整體資料已接 Supabase，但費用彙總尚未回傳。";
-  }
-
-  if (state.page === "requests") {
-    if (state.data.salesRequests.length) return "業務需求單已接 Supabase。";
-    if (state.dataStatus === "live") return "整體資料已接 Supabase，但業務需求單尚未回傳。";
-  }
-
-  if (state.role === "executive" && state.page === "decisions") {
-    if (state.data.approvalRequests.length) return "待決策資料已接 Supabase。";
-    if (state.dataStatus === "live") return "整體資料已接 Supabase，但待決策資料尚未回傳。";
-  }
-
-  if (state.role === "marketing" && state.page === "vendors") {
-    if (state.data.campaignVendors.length) return "廠商與交付物資料已接 Supabase。";
-    if (state.dataStatus === "live") return "整體資料已接 Supabase，但廠商資料尚未回傳。";
-  }
-
-  if (state.role === "marketing" && state.page === "associations") {
-    if (state.data.associations.length || state.data.associationCooperations.length || state.data.associationTags.length) {
-      return "公會資料已接 Supabase。";
-    }
-    if (state.dataStatus === "live") return "整體資料已接 Supabase，但公會資料尚未回傳。";
-  }
-
-  if (state.dataStatus === "live") return "目前已接 Supabase 既有資料。";
-  if (state.dataStatus === "fallback") return "目前使用示範資料；未登入或權限未開時會維持此狀態。";
-  if (state.dataStatus === "error") return "Supabase 讀取失敗，暫時使用示範資料。";
-  return "資料讀取中。";
-}
-
 function renderNav(navItems) {
   const nav = document.getElementById("navList");
   nav.innerHTML = navItems.map(([id, label]) => `
@@ -2131,6 +2120,7 @@ document.addEventListener("click", (event) => {
   const { action, id } = button.dataset;
   if (action === "edit-sales-request") openEditSalesRequestModal(id);
   if (action === "view-sales-request") openViewSalesRequestModal(id);
+  if (action === "delete-sales-request") openDeleteSalesRequestModal(id);
   if (action === "send-vendor-approval") openVendorApprovalModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });

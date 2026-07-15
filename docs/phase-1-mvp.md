@@ -94,6 +94,7 @@
    - 新增共用 modal 表單，不另建詳情頁路由。
    - 業務可建立 `sales_requests`，`requested_by` 由登入信箱自動帶入，並可選擇關聯 `lead_id`。
    - 行銷總監可更新 `sales_requests.status`、`assigned_to`、`due_date`、`description`。
+   - 業務需求單支援刪除，操作前需先確認，刪除後重新讀取列表。
    - 需求狀態改成「已完成」時自動寫入 `completed_at`；改回其他狀態時清空 `completed_at`。
    - 行銷總監可從廠商合作資料建立 `approval_requests`，規則為 `entity_type = 'vendor_quote'`、`entity_id = marketing_campaign_vendors.id`。
    - 總經理可將審核項目標記為「已核准」或「需修正」，前端自動寫入 `decided_by`、`decided_at`、`updated_at`。
