@@ -74,3 +74,19 @@
 `approval_requests` 是否要接上知識條目可對外審核這題，目前维持「暫緩」狀態，不算這批的阻塞問題。
 
 Batch 8B（`product_knowledge_resource_links` 多對多資源連結管理介面）尚未開始，草案審查已完整涵蓋，之後可直接動工。
+
+---
+
+## 2026-07-16（同日稍晚）：修正複查通過，收尾
+
+commit `2a6b52e`「Preserve knowledge type values」已推送並確認 Cloudflare 線上版生效。修法採用了本文件建議的**兩種做法都做**，不是二選一：
+
+1. `knowledgeTypeOptions()` 補回原本 8 個正式分類（市場差異化/技術比較/競品分析/客戶異議處理/**應用場景**/FAQ/**簡報說法**/**資料待確認**），跟 Batch 5/6B 文件記錄的分類完全一致。
+2. 共用函式 `selectOptions(options, selected)` 加了通用防呆：`selected` 有值但不在 `options` 清單裡時，動態把它加成清單裡的一個選項（標籤加註「（既有值）」）而不是被吃掉。這個防呆點在共用函式上，之後任何其他 `<select>` 遇到「資料庫值不在下拉選單清單裡」的情況都會自動安全，不用每個呼叫點各自處理——比原本建議的範圍更完整。
+
+**實測驗證**（本機 preview 375px 寬度，DOM 直接檢查，非只讀程式碼）：
+- 塞入 `knowledge_type: "應用場景"`（原本 8 分類之一）：編輯 modal 正確選中，不再 fallback 成市場差異化。
+- 塞入完全虛構的 `knowledge_type: "客製化情境XYZ"`（模擬清單外的舊資料）：編輯 modal 正確保留原值，選項清單自動多出一項「客製化情境XYZ（既有值）」並選中它。
+- 模擬「不動任何欄位直接送出」：`knowledgeItemPayload(formValues(form)).knowledge_type` 兩種情況都跟塞入值完全一致，確認不會再靜默覆蓋。
+
+**結論：bug 完全修復，Batch 8A 正式收尾，沒有殘留問題。**

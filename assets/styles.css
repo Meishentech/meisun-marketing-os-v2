@@ -321,6 +321,11 @@ h1 {
   color: #fff;
 }
 
+.primary-button.is-danger {
+  background: var(--red);
+  color: #fff;
+}
+
 .secondary-button {
   background: #fff;
   border-color: var(--line-strong);
@@ -413,6 +418,58 @@ h1 {
   color: var(--muted);
   font-size: 12px;
   font-weight: 900;
+}
+
+.linked-resource-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.linked-resource-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.linked-resource-header h3 {
+  margin: 0;
+  color: #173a59;
+  font-size: 16px;
+}
+
+.linked-resource-list {
+  display: grid;
+  gap: 10px;
+}
+
+.linked-resource-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #deebf4;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.linked-resource-card strong {
+  display: block;
+  color: #173a59;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.linked-resource-card p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .kpi-grid {
@@ -1111,6 +1168,16 @@ h1 {
     min-height: 36px;
     flex: 1 1 42%;
     padding: 0 9px;
+  }
+
+  .linked-resource-header,
+  .linked-resource-card {
+    grid-template-columns: 1fr;
+  }
+
+  .linked-resource-header {
+    display: grid;
+    align-items: stretch;
   }
 
   .modal-backdrop {

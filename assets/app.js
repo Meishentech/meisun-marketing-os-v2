@@ -25,6 +25,7 @@ const state = {
     cancelledSalesRequests: [],
     approvalRequests: [],
     knowledgeItems: [],
+    knowledgeResourceLinks: [],
     expenses: [],
   },
   dataStatus: "loading",
@@ -1703,6 +1704,7 @@ function openModal(title, content, options = {}) {
   submit.textContent = options.submitLabel || "送出";
   submit.disabled = false;
   submit.classList.toggle("is-hidden", options.hideSubmit === true);
+  submit.classList.toggle("is-danger", options.submitTone === "danger");
   cancel.classList.toggle("is-hidden", options.hideCancel === true);
   modalSubmitHandler = options.onSubmit || null;
   modal.classList.remove("is-hidden");
@@ -2350,6 +2352,7 @@ function openViewKnowledgeItemModal(id) {
 
   openModal("知識條目詳情", `
     ${knowledgeItemFormHtml(item, true)}
+    ${knowledgeResourceLinksHtml(item, state.role === "marketing")}
     ${actions}
   `, {
     submitLabel: "關閉",
@@ -2390,6 +2393,134 @@ function openKnowledgeSupplementRequestModal(id) {
       "需要補充：詳細說明、建議話術、競品對照或對外可用證據。",
     ].filter(Boolean).join("\n"),
   });
+}
+
+function knowledgeResourceLinksFor(knowledgeItemId) {
+  return state.data.knowledgeResourceLinks.filter((link) => link.knowledge_item_id === knowledgeItemId);
+}
+
+function resourcesForKnowledgeItem(knowledgeItemId) {
+  return knowledgeResourceLinksFor(knowledgeItemId).map((link) => ({
+    link,
+    resource: state.data.resources.find((resource) => resource.id === link.resource_id),
+  }));
+}
+
+function availableResourcesForKnowledgeItem(knowledgeItemId) {
+  const linkedResourceIds = new Set(knowledgeResourceLinksFor(knowledgeItemId).map((link) => link.resource_id));
+  return state.data.resources.filter((resource) => !linkedResourceIds.has(resource.id));
+}
+
+function knowledgeResourceLinksHtml(item = {}, canManage = false) {
+  const linkedResources = resourcesForKnowledgeItem(item.id);
+  const manageAction = canManage
+    ? `<div class="action-group">${actionButton("新增資源連結", "add-knowledge-resource", item.id, "is-primary", !state.data.resources.length)}</div>`
+    : "";
+  const body = linkedResources.length
+    ? `<div class="linked-resource-list">${linkedResources.map(({ link, resource }) => resourceLinkCard(link, resource, canManage)).join("")}</div>`
+    : `<p class="empty-note">尚未連結正式文宣、DM 或資源。</p>`;
+
+  return `
+    <section class="linked-resource-section">
+      <div class="linked-resource-header">
+        <h3>關聯文宣 / DM / 資源</h3>
+        ${manageAction}
+      </div>
+      ${body}
+    </section>
+  `;
+}
+
+function resourceLinkCard(link = {}, resource = {}, canManage = false) {
+  const resourceTitle = resource?.title || "已連結資源";
+  const resourceHref = resource?.resource_url || resource?.file_path || "";
+  const openAction = resourceHref
+    ? `<a class="inline-action is-primary" href="${escapeAttr(resourceHref)}" target="_blank" rel="noopener">開啟</a>`
+    : "";
+  const removeAction = canManage ? actionButton("移除連結", "remove-knowledge-resource", link.id, "is-danger") : "";
+  const actions = [openAction, removeAction].filter(Boolean);
+
+  return `
+    <article class="linked-resource-card">
+      <div>
+        <strong>${escapeHtml(resourceTitle)}</strong>
+        <p>${escapeHtml(resource?.resource_type || "資源")}・${escapeHtml(resource?.product_line || "未分類")}・${escapeHtml(resource?.audience || "未設定")}</p>
+      </div>
+      ${actions.length ? actionGroup(actions) : ""}
+    </article>
+  `;
+}
+
+function openAddKnowledgeResourceModal(id) {
+  const item = state.data.knowledgeItems.find((entry) => entry.id === id);
+  if (!item) return;
+
+  const availableResources = availableResourcesForKnowledgeItem(id);
+  if (!availableResources.length) {
+    openModal("新增資源連結", `
+      <p class="empty-note">目前沒有可新增的正式資源，或此知識條目已連結所有資源。</p>
+    `, {
+      submitLabel: "知道了",
+      hideCancel: true,
+      onSubmit: async () => openViewKnowledgeItemModal(id),
+    });
+    return;
+  }
+
+  openModal("新增資源連結", `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>知識條目</span>
+        <input value="${escapeAttr(item.title || "未命名知識")}" readonly>
+      </label>
+      <label class="form-field is-wide">
+        <span>選擇文宣 / DM / 資源</span>
+        <select name="resource_id" required>
+          ${selectOptions(availableResources.map((resource) => [resource.id, resourceOptionLabel(resource)]))}
+        </select>
+      </label>
+    </div>
+  `, {
+    submitLabel: "建立連結",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "product_knowledge_resource_links", {
+        knowledge_item_id: id,
+        resource_id: values.resource_id,
+      });
+      await loadExistingData();
+      openViewKnowledgeItemModal(id);
+    },
+  });
+}
+
+function openRemoveKnowledgeResourceModal(linkId) {
+  const link = state.data.knowledgeResourceLinks.find((entry) => entry.id === linkId);
+  if (!link) return;
+  const resource = state.data.resources.find((item) => item.id === link.resource_id);
+
+  openModal("移除資源連結", `
+    <p class="empty-note">
+      確定要從這個知識條目移除「${escapeHtml(resource?.title || "已連結資源")}」嗎？這只會移除關聯，不會刪除原始文宣或 DM。
+    </p>
+  `, {
+    submitLabel: "移除連結",
+    submitTone: "danger",
+    onSubmit: async () => {
+      await api("DELETE", `product_knowledge_resource_links?id=eq.${encodeURIComponent(linkId)}`);
+      await loadExistingData();
+      openViewKnowledgeItemModal(link.knowledge_item_id);
+    },
+  });
+}
+
+function resourceOptionLabel(resource = {}) {
+  return [
+    resource.title || "未命名資源",
+    resource.resource_type || "其他",
+    resource.product_line || "未分類",
+    resource.audience || "未設定",
+  ].join(" / ");
 }
 
 function knowledgeItemFormHtml(item = {}, readOnly = false) {
@@ -3054,6 +3185,8 @@ document.addEventListener("click", (event) => {
   if (action === "view-knowledge-item") openViewKnowledgeItemModal(id);
   if (action === "edit-knowledge-item") openEditKnowledgeItemModal(id);
   if (action === "request-knowledge-update") openKnowledgeSupplementRequestModal(id);
+  if (action === "add-knowledge-resource") openAddKnowledgeResourceModal(id);
+  if (action === "remove-knowledge-resource") openRemoveKnowledgeResourceModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 
@@ -3136,10 +3269,11 @@ async function loadExistingData() {
       cancelledSalesRequests,
       approvalRequests,
       knowledgeItems,
+      knowledgeResourceLinks,
       expenses,
     ] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100"),
-      safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=20"),
+      safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=100"),
       loadTenderResults(),
       safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
       safeGET("associations?limit=50"),
@@ -3153,6 +3287,7 @@ async function loadExistingData() {
       loadCancelledSalesRequests(),
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
       safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,detail,recommended_pitch,prohibited_pitch,related_competitor,evidence_level,visibility_status,owner,version,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=100"),
+      safeGET("product_knowledge_resource_links?select=id,knowledge_item_id,resource_id,created_at&order=created_at.desc&limit=500"),
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
     ]);
 
@@ -3173,6 +3308,7 @@ async function loadExistingData() {
     state.data.cancelledSalesRequests = Array.isArray(cancelledSalesRequests) ? cancelledSalesRequests : [];
     state.data.approvalRequests = Array.isArray(approvalRequests) ? approvalRequests : [];
     state.data.knowledgeItems = Array.isArray(knowledgeItems) ? knowledgeItems : [];
+    state.data.knowledgeResourceLinks = Array.isArray(knowledgeResourceLinks) ? knowledgeResourceLinks : [];
     state.data.expenses = Array.isArray(expenses) ? expenses : [];
 
     const liveCount = state.data.campaigns.length
@@ -3192,6 +3328,7 @@ async function loadExistingData() {
       + state.data.cancelledSalesRequests.length
       + state.data.approvalRequests.length
       + state.data.knowledgeItems.length
+      + state.data.knowledgeResourceLinks.length
       + state.data.expenses.length;
     state.dataStatus = liveCount > 0 ? "live" : "fallback";
   } catch (error) {
