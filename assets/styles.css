@@ -474,6 +474,42 @@ h1 {
   grid-column: 1 / -1;
 }
 
+.details-panel {
+  display: block;
+}
+
+.details-summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.details-summary::-webkit-details-marker {
+  display: none;
+}
+
+.details-summary::after {
+  content: "展開";
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.details-panel[open] .details-summary::after {
+  content: "收合";
+}
+
+.details-summary span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
@@ -967,6 +1003,20 @@ h1 {
   .panel-header {
     min-height: 50px;
     padding: 0 14px;
+  }
+
+  .details-summary {
+    align-items: flex-start;
+    padding: 12px 14px;
+  }
+
+  .details-summary span {
+    display: block;
+    margin-top: 4px;
+  }
+
+  .details-summary::after {
+    align-self: center;
   }
 
   .panel-header h2 {

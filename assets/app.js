@@ -17,9 +17,12 @@ const state = {
     associationCooperations: [],
     associationStages: [],
     campaignVendors: [],
+    cancelledCampaignVendors: [],
+    cancelledDeliverables: [],
     vendors: [],
     vendorDocuments: [],
     salesRequests: [],
+    cancelledSalesRequests: [],
     approvalRequests: [],
     knowledgeItems: [],
     expenses: [],
@@ -877,6 +880,39 @@ function vendorSection() {
   };
 }
 
+function cancelledVendorRecordsSection() {
+  const vendorRows = state.data.cancelledCampaignVendors.map((campaignVendor) => {
+    const vendor = campaignVendor.vendors || {};
+    return [
+      vendor.name || "未命名廠商",
+      campaignVendor.role_in_project || vendor.vendor_type || "未填",
+      campaignName(campaignVendor.campaign_id),
+      cancellationMeta(campaignVendor),
+      campaignVendor.cancel_reason || "未填寫原因",
+    ];
+  });
+  const deliverableRows = state.data.cancelledDeliverables.map((record) => [
+    record.deliverable.deliverable_name || "未命名交付物",
+    record.vendorName,
+    campaignName(record.campaignVendor.campaign_id),
+    cancellationMeta(record.deliverable),
+    record.deliverable.cancel_reason || "未填寫原因",
+  ]);
+  const rows = [
+    ...vendorRows.map((row) => [tag("廠商合作", "gray"), ...row]),
+    ...deliverableRows.map((row) => [tag("交付物", "gray"), ...row]),
+  ];
+
+  return {
+    type: "details-table",
+    title: `已取消紀錄（${rows.length}）`,
+    summary: "只讀顯示已取消廠商合作與交付物，不提供恢復功能。",
+    wide: true,
+    headers: ["類型", "名稱", "角色 / 所屬", "專案", "取消資訊", "原因"],
+    rows: rows.length ? rows : [[tag("無紀錄", "green"), "目前沒有已取消廠商合作或交付物。", "無", "無", "無", "無"]],
+  };
+}
+
 function formatVendorRow(campaignVendor = {}) {
   const vendor = campaignVendor.vendors || {};
   const deliverables = Array.isArray(campaignVendor.marketing_campaign_vendor_deliverables)
@@ -1270,6 +1306,38 @@ function visibleSalesRequests(isMarketing) {
   return ownRequests;
 }
 
+function cancelledSalesRequestSection(isMarketing) {
+  const requests = visibleCancelledSalesRequests(isMarketing);
+  return {
+    type: "details-table",
+    compact: true,
+    title: `已取消需求（${requests.length}）`,
+    summary: isMarketing ? "只讀顯示已取消業務需求。" : "只讀顯示你自己取消的需求。",
+    headers: ["需求", "提出人", "類型", "優先級", "取消資訊"],
+    rows: requests.length
+      ? requests.slice(0, 10).map((request) => [
+        request.request_name || "未命名需求",
+        formatRequester(request.requested_by),
+        request.request_type || "未分類",
+        tag(request.priority || "一般", priorityTone(request.priority)),
+        cancellationMeta(request),
+      ])
+      : [[
+        "目前沒有已取消需求",
+        isMarketing ? "全部業務" : formatRequester(state.auth.email),
+        "無",
+        tag("無紀錄", "green"),
+        "無",
+      ]],
+  };
+}
+
+function visibleCancelledSalesRequests(isMarketing) {
+  if (isMarketing) return state.data.cancelledSalesRequests;
+  const email = String(state.auth.email || "").toLowerCase();
+  return state.data.cancelledSalesRequests.filter((request) => String(request.requested_by || "").toLowerCase() === email);
+}
+
 function isCancelledSalesRequest(request = {}) {
   return Boolean(request.cancelled_at) || request.status === "已取消";
 }
@@ -1279,6 +1347,17 @@ function formatRequester(email = "") {
   const [name, domain] = String(email).split("@");
   if (!domain) return email;
   return `<span class="cell-main">${name}</span><span class="cell-sub">@${domain}</span>`;
+}
+
+function cancellationMeta(record = {}) {
+  const cancelledBy = record.cancelled_by ? formatRequester(record.cancelled_by) : "未記錄取消人";
+  const cancelledAt = record.cancelled_at ? formatDate(record.cancelled_at) : "未記錄時間";
+  return `${cancelledAt}<br>${cancelledBy}`;
+}
+
+function campaignName(campaignId) {
+  const campaign = state.data.campaigns.find((item) => String(item.id || "") === String(campaignId || ""));
+  return campaign?.name || "未關聯專案";
 }
 
 function priorityTone(priority = "") {
@@ -2651,16 +2730,16 @@ function buildCurrentSections(page) {
     "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
     "marketing:budget": [budgetSection(), subsidySection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
-    "marketing:vendors": [vendorSection(), vendorFormPreviewSection()],
+    "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
     "marketing:associations": [associationSection(), associationTagsSection()],
     "marketing:knowledge": [knowledgeSection(true), knowledgeGovernanceSection()],
-    "marketing:requests": [salesRequestSection(true), requestKanbanSection()],
+    "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
     "sales:knowledge": [knowledgeSection(false), knowledgeDetailSection()],
     "sales:tenders": [tenderSection(), tenderRuleSection()],
     "sales:leads": [salesLeadSection(), leadFollowUpSection()],
-    "sales:requests": [salesRequestSection(false), requestFormPreviewSection()],
+    "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false), requestFormPreviewSection()],
   };
 
   return dynamicSections[key] || page.sections;
@@ -2707,18 +2786,23 @@ function renderSection(section) {
       <article class="panel${wideClass}">
         <div class="panel-header"><h2>${section.title}</h2></div>
         <div class="panel-body">
-          <table class="${tableClass}">
-            <thead><tr>${section.headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
-            <tbody>
-              ${section.rows.map((row) => {
-                const cells = Array.isArray(row) ? row : row.cells;
-                const rowClass = Array.isArray(row) ? "" : ` class="${row.className || ""}"`;
-                return `<tr${rowClass}>${cells.map((cell, index) => `<td data-label="${escapeAttr(section.headers[index] || "")}">${cell}</td>`).join("")}</tr>`;
-              }).join("")}
-            </tbody>
-          </table>
+          ${renderTable(section, tableClass)}
         </div>
       </article>
+    `;
+  }
+
+  if (section.type === "details-table") {
+    return `
+      <details class="panel details-panel${wideClass}">
+        <summary class="panel-header details-summary">
+          <h2>${section.title}</h2>
+          <span>${section.summary || "查看紀錄"}</span>
+        </summary>
+        <div class="panel-body">
+          ${renderTable(section, tableClass)}
+        </div>
+      </details>
     `;
   }
 
@@ -2758,6 +2842,21 @@ function renderSection(section) {
   }
 
   return `<article class="panel${wideClass}"><div class="panel-body empty-note">尚未定義內容。</div></article>`;
+}
+
+function renderTable(section, tableClass) {
+  return `
+    <table class="${tableClass}">
+      <thead><tr>${section.headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
+      <tbody>
+        ${section.rows.map((row) => {
+          const cells = Array.isArray(row) ? row : row.cells;
+          const rowClass = Array.isArray(row) ? "" : ` class="${row.className || ""}"`;
+          return `<tr${rowClass}>${cells.map((cell, index) => `<td data-label="${escapeAttr(section.headers[index] || "")}">${cell}</td>`).join("")}</tr>`;
+        }).join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 document.querySelectorAll(".role-button").forEach((button) => {
@@ -2907,6 +3006,7 @@ async function loadExistingData() {
       vendors,
       vendorDocuments,
       salesRequests,
+      cancelledSalesRequests,
       approvalRequests,
       knowledgeItems,
       expenses,
@@ -2923,6 +3023,7 @@ async function loadExistingData() {
       safeGET("vendors?select=id,name,vendor_type,contact_name,contact_phone,contact_email&order=name.asc&limit=100"),
       safeGET("marketing_campaign_documents?select=id,doc_type,vendor_id,deliverable_id&vendor_id=not.is.null&limit=100"),
       loadSalesRequests(),
+      loadCancelledSalesRequests(),
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
       safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,evidence_level,visibility_status,owner,version,updated_at&order=updated_at.desc,created_at.desc&limit=100"),
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
@@ -2937,9 +3038,12 @@ async function loadExistingData() {
     state.data.associationCooperations = Array.isArray(associationCooperations) ? associationCooperations : [];
     state.data.associationStages = Array.isArray(associationStages) ? associationStages : [];
     state.data.campaignVendors = Array.isArray(campaignVendors) ? activeCampaignVendors(campaignVendors) : [];
+    state.data.cancelledCampaignVendors = Array.isArray(campaignVendors) ? cancelledCampaignVendors(campaignVendors) : [];
+    state.data.cancelledDeliverables = Array.isArray(campaignVendors) ? cancelledDeliverablesFromAll(campaignVendors) : [];
     state.data.vendors = Array.isArray(vendors) ? vendors : [];
     state.data.vendorDocuments = Array.isArray(vendorDocuments) ? vendorDocuments : [];
     state.data.salesRequests = Array.isArray(salesRequests) ? salesRequests : [];
+    state.data.cancelledSalesRequests = Array.isArray(cancelledSalesRequests) ? cancelledSalesRequests : [];
     state.data.approvalRequests = Array.isArray(approvalRequests) ? approvalRequests : [];
     state.data.knowledgeItems = Array.isArray(knowledgeItems) ? knowledgeItems : [];
     state.data.expenses = Array.isArray(expenses) ? expenses : [];
@@ -2953,9 +3057,12 @@ async function loadExistingData() {
       + state.data.associationCooperations.length
       + state.data.associationStages.length
       + state.data.campaignVendors.length
+      + state.data.cancelledCampaignVendors.length
+      + state.data.cancelledDeliverables.length
       + state.data.vendors.length
       + state.data.vendorDocuments.length
       + state.data.salesRequests.length
+      + state.data.cancelledSalesRequests.length
       + state.data.approvalRequests.length
       + state.data.knowledgeItems.length
       + state.data.expenses.length;
@@ -2993,11 +3100,42 @@ function activeCampaignVendors(campaignVendors = []) {
     }));
 }
 
+function cancelledCampaignVendors(campaignVendors = []) {
+  return campaignVendors.filter((campaignVendor) => Boolean(campaignVendor.cancelled_at));
+}
+
+function cancelledDeliverablesFromAll(campaignVendors = []) {
+  return campaignVendors.flatMap((campaignVendor) => {
+    const vendor = campaignVendor.vendors || {};
+    const deliverables = Array.isArray(campaignVendor.marketing_campaign_vendor_deliverables)
+      ? campaignVendor.marketing_campaign_vendor_deliverables
+      : [];
+    return deliverables
+      .filter((deliverable) => Boolean(deliverable.cancelled_at))
+      .map((deliverable) => ({
+        campaignVendor,
+        deliverable,
+        vendorName: vendor.name || "未命名廠商",
+      }));
+  });
+}
+
 async function loadSalesRequests() {
   const withCancelAudit = await safeGET("sales_requests?select=id,request_name,requested_by,lead_id,request_type,priority,status,assigned_to,due_date,description,deliverable_resource_id,completed_at,cancelled_at,cancelled_by,created_at&cancelled_at=is.null&order=created_at.desc&limit=100", null);
   if (Array.isArray(withCancelAudit)) return withCancelAudit;
 
   return safeGET("sales_requests?select=id,request_name,requested_by,lead_id,request_type,priority,status,assigned_to,due_date,description,deliverable_resource_id,completed_at,created_at&status=neq.已取消&order=created_at.desc&limit=100");
+}
+
+async function loadCancelledSalesRequests() {
+  const select = "id,request_name,requested_by,lead_id,request_type,priority,status,assigned_to,due_date,description,deliverable_resource_id,completed_at,cancelled_at,cancelled_by,created_at";
+  const ownFilter = state.role === "sales" && state.auth.email
+    ? `&requested_by=eq.${encodeURIComponent(state.auth.email)}`
+    : "";
+  const withCancelAudit = await safeGET(`sales_requests?select=${select}&cancelled_at=not.is.null${ownFilter}&order=cancelled_at.desc.nullslast,created_at.desc&limit=100`, null);
+  if (Array.isArray(withCancelAudit)) return withCancelAudit;
+
+  return safeGET(`sales_requests?select=${select}${ownFilter}&status=eq.已取消&order=created_at.desc&limit=100`);
 }
 
 render();
