@@ -1155,12 +1155,13 @@ function knowledgeSection(isMarketing) {
     return {
       type: "table",
       title: isMarketing ? "產品知識審核" : "常用知識條目",
-      headers: ["主題", "類型", "證據", "可用狀態"],
+      headers: ["主題", "類型", "證據", "可用狀態", "操作"],
       rows: items.slice(0, 10).map((item) => [
         item.title || "未命名知識",
         item.knowledge_type || "未分類",
         tag(item.evidence_level || "C", evidenceTone(item.evidence_level)),
         tag(item.visibility_status || "待確認", visibilityTone(item.visibility_status)),
+        knowledgeActionGroup(item, isMarketing),
       ]),
     };
   }
@@ -1183,14 +1184,20 @@ function knowledgeSection(isMarketing) {
   return {
     type: "table",
     title: isMarketing ? "產品知識審核" : "常用知識條目",
-    headers: ["主題", "類型", "證據", "可用狀態"],
+    headers: ["主題", "類型", "證據", "可用狀態", "操作"],
     rows: [
-      ["磁浮主機相對傳統離心機差異", "技術比較", tag("A", "green"), "可對外"],
-      ["大型商辦節能改善說法", "應用情境", tag("B", "green"), isMarketing ? "內部 / 待審" : "內部"],
-      ["常見競品價格異議回覆", "異議處理", tag("B", "amber"), "內部"],
-      ["醫療場域可靠度 FAQ", "FAQ", tag("C", "gray"), isMarketing ? "待技術確認" : "不顯示或標記"],
+      ["磁浮主機相對傳統離心機差異", "技術比較", tag("A", "green"), "可對外", "示範資料"],
+      ["大型商辦節能改善說法", "應用情境", tag("B", "green"), isMarketing ? "內部 / 待審" : "內部", "示範資料"],
+      ["常見競品價格異議回覆", "異議處理", tag("B", "amber"), "內部", "示範資料"],
+      ["醫療場域可靠度 FAQ", "FAQ", tag("C", "gray"), isMarketing ? "待技術確認" : "不顯示或標記", "示範資料"],
     ],
   };
+}
+
+function knowledgeActionGroup(item = {}, isMarketing = false) {
+  const actions = [actionButton("查看", "view-knowledge-item", item.id, "is-primary")];
+  if (isMarketing) actions.push(actionButton("編輯", "edit-knowledge-item", item.id));
+  return actionGroup(actions);
 }
 
 function visibleKnowledgeItems(isMarketing) {
@@ -1762,8 +1769,8 @@ function requestFormHtml(request = {}, readOnly = false) {
   `;
 }
 
-function openCreateSalesRequestModal() {
-  openModal("提出素材 / 資料需求", requestFormHtml(), {
+function openCreateSalesRequestModal(prefill = {}) {
+  openModal("提出素材 / 資料需求", requestFormHtml(prefill), {
     submitLabel: "建立需求",
     onSubmit: async (form) => {
       const values = formValues(form);
@@ -2328,59 +2335,173 @@ function findVendorDeliverable(deliverableId) {
   return null;
 }
 
-function openCreateKnowledgeItemModal() {
-  openModal("新增產品知識條目", `
+function findVisibleKnowledgeItem(id) {
+  return visibleKnowledgeItems(state.role === "marketing").find((item) => item.id === id);
+}
+
+function openViewKnowledgeItemModal(id) {
+  const item = findVisibleKnowledgeItem(id);
+  if (!item) return;
+  const actions = state.role === "marketing"
+    ? `<div class="action-group">${actionButton("編輯條目", "edit-knowledge-item", item.id, "is-primary")}</div>`
+    : `<div class="action-group">${actionButton("提出補充需求", "request-knowledge-update", item.id, "is-primary")}</div>`;
+
+  openModal("知識條目詳情", `
+    ${knowledgeItemFormHtml(item, true)}
+    ${actions}
+  `, {
+    submitLabel: "關閉",
+    hideCancel: true,
+    onSubmit: async () => closeModal(),
+  });
+}
+
+function openEditKnowledgeItemModal(id) {
+  const item = state.data.knowledgeItems.find((entry) => entry.id === id);
+  if (!item) return;
+
+  openModal("編輯知識條目", knowledgeItemFormHtml(item, false), {
+    submitLabel: "儲存變更",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `product_knowledge_items?id=eq.${encodeURIComponent(id)}`, {
+        ...knowledgeItemPayload(values),
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openKnowledgeSupplementRequestModal(id) {
+  const item = findVisibleKnowledgeItem(id);
+  if (!item) return;
+  closeModal();
+  openCreateSalesRequestModal({
+    request_name: `補充資料：${item.title || "知識條目"}`,
+    request_type: "市場分析",
+    priority: "一般",
+    description: [
+      `請協助補充產品知識庫條目：「${item.title || "未命名知識"}」。`,
+      item.summary ? `目前摘要：${item.summary}` : "",
+      "需要補充：詳細說明、建議話術、競品對照或對外可用證據。",
+    ].filter(Boolean).join("\n"),
+  });
+}
+
+function knowledgeItemFormHtml(item = {}, readOnly = false) {
+  const disabled = readOnly ? " disabled" : "";
+  const readonly = readOnly ? " readonly" : "";
+  return `
     <div class="form-grid">
       <label class="form-field is-wide">
         <span>主題</span>
-        <input name="title" required>
+        <input name="title" value="${escapeAttr(item.title || "")}" required${readonly}>
       </label>
       <label class="form-field">
         <span>知識類型</span>
-        <select name="knowledge_type" required>
-          ${selectOptions([
-            ["市場差異化", "市場差異化"],
-            ["技術比較", "技術比較"],
-            ["競品分析", "競品分析"],
-            ["客戶異議處理", "客戶異議處理"],
-            ["應用場景", "應用場景"],
-            ["FAQ", "FAQ"],
-            ["簡報說法", "簡報說法"],
-            ["資料待確認", "資料待確認"],
-          ])}
+        <select name="knowledge_type"${disabled}>
+          ${selectOptions(knowledgeTypeOptions(), item.knowledge_type || "市場差異化")}
         </select>
       </label>
       <label class="form-field">
         <span>產品線</span>
-        <input name="product_line" placeholder="例如：磁浮冰水主機">
-      </label>
-      <label class="form-field">
-        <span>證據等級</span>
-        <select name="evidence_level">
-          ${selectOptions([["A", "A 正式來源"], ["B", "B 技術確認"], ["C", "C 待確認"], ["D", "D 不可使用"]], "C")}
-        </select>
+        <input name="product_line" value="${escapeAttr(item.product_line || "")}"${readonly}>
       </label>
       <label class="form-field">
         <span>適用對象</span>
-        <input name="target_segment" placeholder="例如：業主 / 技師 / 工程公司">
+        <input name="target_segment" value="${escapeAttr(item.target_segment || "")}"${readonly}>
+      </label>
+      <label class="form-field">
+        <span>證據等級</span>
+        <select name="evidence_level"${disabled}>
+          ${selectOptions([["A", "A 正式來源"], ["B", "B 技術確認"], ["C", "C 待確認"], ["D", "D 不可使用"]], item.evidence_level || "C")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>可用狀態</span>
+        <select name="visibility_status"${disabled}>
+          ${selectOptions([["可對外", "可對外"], ["僅內部", "僅內部"], ["待確認", "待確認"], ["禁止使用", "禁止使用"]], item.visibility_status || "待確認")}
+        </select>
+      </label>
+      <label class="form-field is-wide">
+        <span>使用場合</span>
+        <input name="use_context" value="${escapeAttr(item.use_context || "")}"${readonly}>
       </label>
       <label class="form-field is-wide">
         <span>摘要</span>
-        <textarea name="summary" placeholder="先建立內部條目，預設為待確認，不會直接對外使用。"></textarea>
+        <textarea name="summary"${readonly}>${escapeHtml(item.summary || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>詳細說明</span>
+        <textarea name="detail"${readonly}>${escapeHtml(item.detail || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>建議業務說法</span>
+        <textarea name="recommended_pitch"${readonly}>${escapeHtml(item.recommended_pitch || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>不建議說法</span>
+        <textarea name="prohibited_pitch"${readonly}>${escapeHtml(item.prohibited_pitch || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>競品對照</span>
+        <textarea name="related_competitor"${readonly}>${escapeHtml(item.related_competitor || "")}</textarea>
+      </label>
+      <label class="form-field">
+        <span>負責人</span>
+        <input value="${escapeAttr(item.owner || state.auth.email || "未填")}" readonly>
+      </label>
+      <label class="form-field">
+        <span>最後更新</span>
+        <input value="${escapeAttr(formatDate(item.updated_at) || "未記錄")}" readonly>
       </label>
     </div>
-  `, {
+  `;
+}
+
+function knowledgeTypeOptions() {
+  return [
+    ["市場差異化", "市場差異化"],
+    ["技術比較", "技術比較"],
+    ["競品分析", "競品分析"],
+    ["客戶異議處理", "客戶異議處理"],
+    ["FAQ", "FAQ"],
+    ["應用情境", "應用情境"],
+    ["其他", "其他"],
+  ];
+}
+
+function knowledgeItemPayload(values = {}) {
+  return {
+    title: values.title.trim(),
+    product_line: values.product_line?.trim() || null,
+    knowledge_type: values.knowledge_type,
+    target_segment: values.target_segment?.trim() || null,
+    use_context: values.use_context?.trim() || null,
+    summary: values.summary?.trim() || null,
+    detail: values.detail?.trim() || null,
+    recommended_pitch: values.recommended_pitch?.trim() || null,
+    prohibited_pitch: values.prohibited_pitch?.trim() || null,
+    related_competitor: values.related_competitor?.trim() || null,
+    evidence_level: values.evidence_level || "C",
+    visibility_status: values.visibility_status || "待確認",
+  };
+}
+
+function openCreateKnowledgeItemModal() {
+  openModal("新增產品知識條目", knowledgeItemFormHtml({
+    knowledge_type: "市場差異化",
+    evidence_level: "C",
+    visibility_status: "待確認",
+    owner: state.auth.email,
+  }), {
     submitLabel: "建立知識條目",
     onSubmit: async (form) => {
       const values = formValues(form);
       await api("POST", "product_knowledge_items", {
-        title: values.title.trim(),
-        knowledge_type: values.knowledge_type,
-        product_line: values.product_line?.trim() || null,
-        target_segment: values.target_segment?.trim() || null,
-        summary: values.summary?.trim() || null,
-        evidence_level: values.evidence_level || "C",
-        visibility_status: "待確認",
+        ...knowledgeItemPayload(values),
         owner: state.auth.email,
       });
       closeModal();
@@ -2927,6 +3048,9 @@ document.addEventListener("click", (event) => {
   if (action === "edit-vendor-deliverable") openEditVendorDeliverableModal(id);
   if (action === "cancel-vendor-deliverable") openCancelVendorDeliverableModal(id);
   if (action === "send-vendor-approval") openVendorApprovalModal(id);
+  if (action === "view-knowledge-item") openViewKnowledgeItemModal(id);
+  if (action === "edit-knowledge-item") openEditKnowledgeItemModal(id);
+  if (action === "request-knowledge-update") openKnowledgeSupplementRequestModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 
@@ -3025,7 +3149,7 @@ async function loadExistingData() {
       loadSalesRequests(),
       loadCancelledSalesRequests(),
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
-      safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,evidence_level,visibility_status,owner,version,updated_at&order=updated_at.desc,created_at.desc&limit=100"),
+      safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,detail,recommended_pitch,prohibited_pitch,related_competitor,evidence_level,visibility_status,owner,version,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=100"),
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
     ]);
 
