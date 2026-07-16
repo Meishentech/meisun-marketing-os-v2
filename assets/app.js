@@ -2080,7 +2080,7 @@ function openCancelCampaignVendorModal(id) {
 
   openModal("取消廠商合作", `
     <p class="empty-note">確定要取消「${escapeHtml(vendor.name || "未命名廠商")}」這筆合作嗎？資料會保留，但不再出現在合作廠商與費用彙總中。</p>
-    <p class="empty-note">目前關聯交付物：${deliverableCount} 筆。交付物資料會一起保留。</p>
+    <p class="empty-note">目前關聯交付物：${deliverableCount} 筆。資料會保留在資料庫，但取消後不會顯示在目前清單中。</p>
     <div class="form-grid">
       <label class="form-field is-wide">
         <span>取消原因（選填）</span>
