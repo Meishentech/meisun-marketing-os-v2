@@ -1187,7 +1187,7 @@ function knowledgeSection(isMarketing) {
     headers: ["主題", "類型", "證據", "可用狀態", "操作"],
     rows: [
       ["磁浮主機相對傳統離心機差異", "技術比較", tag("A", "green"), "可對外", "示範資料"],
-      ["大型商辦節能改善說法", "應用情境", tag("B", "green"), isMarketing ? "內部 / 待審" : "內部", "示範資料"],
+      ["大型商辦節能改善說法", "應用場景", tag("B", "green"), isMarketing ? "內部 / 待審" : "內部", "示範資料"],
       ["常見競品價格異議回覆", "異議處理", tag("B", "amber"), "內部", "示範資料"],
       ["醫療場域可靠度 FAQ", "FAQ", tag("C", "gray"), isMarketing ? "待技術確認" : "不顯示或標記", "示範資料"],
     ],
@@ -1661,7 +1661,9 @@ function nowIso() {
 }
 
 function selectOptions(options = [], selected = "") {
-  return options.map(([value, label]) => {
+  const hasSelected = !selected || options.some(([value]) => String(value) === String(selected));
+  const normalizedOptions = hasSelected ? options : [...options, [selected, `${selected}（既有值）`]];
+  return normalizedOptions.map(([value, label]) => {
     const isSelected = String(value) === String(selected) ? " selected" : "";
     return `<option value="${escapeAttr(value)}"${isSelected}>${escapeHtml(label)}</option>`;
   }).join("");
@@ -2467,9 +2469,10 @@ function knowledgeTypeOptions() {
     ["技術比較", "技術比較"],
     ["競品分析", "競品分析"],
     ["客戶異議處理", "客戶異議處理"],
+    ["應用場景", "應用場景"],
     ["FAQ", "FAQ"],
-    ["應用情境", "應用情境"],
-    ["其他", "其他"],
+    ["簡報說法", "簡報說法"],
+    ["資料待確認", "資料待確認"],
   ];
 }
 
