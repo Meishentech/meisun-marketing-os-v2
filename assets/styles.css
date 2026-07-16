@@ -58,14 +58,6 @@ button {
   border-bottom-color: var(--line);
 }
 
-.login-brand strong {
-  color: var(--text);
-}
-
-.login-brand span {
-  color: var(--blue);
-}
-
 .login-card h1 {
   margin: 0;
   color: #0b2c4c;
@@ -165,6 +157,14 @@ button {
   font-weight: 800;
   letter-spacing: .08em;
   text-transform: uppercase;
+}
+
+.login-brand strong {
+  color: var(--text);
+}
+
+.login-brand span {
+  color: var(--blue);
 }
 
 .role-switch {
@@ -372,6 +372,47 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.deliverable-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.deliverable-item {
+  padding: 10px;
+  border: 1px solid #deebf4;
+  border-radius: 10px;
+  background: #fbfdff;
+}
+
+.deliverable-item strong,
+.deliverable-item span {
+  display: block;
+}
+
+.deliverable-item strong {
+  color: #173a59;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.deliverable-item span {
+  margin: 3px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.deliverable-item.is-empty {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.deliverable-more {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .kpi-grid {

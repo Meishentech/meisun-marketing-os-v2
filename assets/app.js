@@ -918,16 +918,23 @@ function hasPendingVendorApproval(campaignVendorId) {
 
 function formatDeliverableSummary(campaignVendorId, deliverables = []) {
   const createAction = actionGroup([actionButton("新增交付物", "add-vendor-deliverable", campaignVendorId)]);
-  if (!deliverables.length) return `尚未建立交付物<br>${createAction}`;
+  if (!deliverables.length) return `<div class="deliverable-stack"><div class="deliverable-item is-empty">尚未建立交付物</div>${createAction}</div>`;
   const rows = deliverables.slice(0, 3).map((item) => {
     const dueDate = item.due_date ? ` ${formatDate(item.due_date)}` : "";
     const actions = actionGroup([
       actionButton("編輯", "edit-vendor-deliverable", item.id),
       actionButton("取消", "cancel-vendor-deliverable", item.id, "is-danger"),
     ]);
-    return `${item.deliverable_name || "未命名"} / ${item.status || "未開始"}${dueDate}<br>${actions}`;
+    return `
+      <div class="deliverable-item">
+        <strong>${item.deliverable_name || "未命名"}</strong>
+        <span>${item.status || "未開始"}${dueDate}</span>
+        ${actions}
+      </div>
+    `;
   });
-  return `${rows.join("<br>")}${deliverables.length > 3 ? "<br>..." : ""}<br>${createAction}`;
+  const overflow = deliverables.length > 3 ? `<div class="deliverable-more">另有 ${deliverables.length - 3} 筆交付物</div>` : "";
+  return `<div class="deliverable-stack">${rows.join("")}${overflow}${createAction}</div>`;
 }
 
 function formatVendorAmount(campaignVendor = {}) {
