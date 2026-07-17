@@ -9,6 +9,7 @@ const state = {
   },
   data: {
     campaigns: [],
+    archivedCampaigns: [],
     resources: [],
     tenders: [],
     leads: [],
@@ -106,6 +107,7 @@ const pages = {
       sections: [
         campaignSummarySection(),
         projectOverviewSection(),
+        archivedCampaignsSection(),
         decisionListSection(),
         channelSummarySection(true),
       ],
@@ -176,7 +178,7 @@ const pages = {
         ["高重要性", "4", "空調展、公會講座、白皮書、招標工具"],
         ["待補資料", "6", "素材、預算或成效未完整"],
       ],
-      sections: [projectOverviewSection(), campaignDetailCardsSection()],
+      sections: [projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()],
     },
     budget: {
       title: "預算 / 補助 / 付款",
@@ -337,6 +339,16 @@ function projectOverviewSection() {
     };
   }
 
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: "專案管理排序",
+      wide: true,
+      headers: ["狀態", "說明", "下一步"],
+      rows: [[tag("尚無進行中", "green"), "目前沒有未封存的行銷案。", "已封存行銷案可在下方歷史清單查看。"]],
+    };
+  }
+
   return {
     type: "table",
     title: "上下半年行銷專案總覽",
@@ -348,6 +360,26 @@ function projectOverviewSection() {
       ["產品比較白皮書", tag("中", "amber"), progress("35%", "amber"), "18萬", "技術資料與證據來源"],
       ["LINE 客戶培育", tag("中", "green"), progress("74%", "green"), "12萬", "持續追蹤轉換"],
     ],
+  };
+}
+
+function archivedCampaignsSection() {
+  const rows = state.data.archivedCampaigns.slice(0, 20).map((campaign) => [
+    campaign.name || "未命名專案",
+    tag(campaign.status || "未填", campaignStatusTone(campaign.status)),
+    campaign.priority ? tag(campaign.priority, campaignPriorityTone(campaign.priority)) : "未填",
+    formatMoney(campaign.budget),
+    campaignDateRange(campaign),
+    archiveCampaignMeta(campaign),
+  ]);
+
+  return {
+    type: "details-table",
+    title: `已封存行銷案（${rows.length}）`,
+    summary: "只讀顯示；v1 暫時仍會看見封存行銷案，待 v2 正式接手行銷案後再處理。",
+    wide: true,
+    headers: ["專案", "狀態", "重要性", "預算", "期間", "封存資訊"],
+    rows: rows.length ? rows : [[tag("無封存", "green"), "目前沒有已封存行銷案。", "無", "無", "無", "無"]],
   };
 }
 
@@ -494,6 +526,13 @@ function campaignHalf(campaign = {}) {
 
 function campaignStartDate(campaign = {}) {
   return campaign.actual_start || campaign.planned_start || campaign.created_at || "";
+}
+
+function campaignDateRange(campaign = {}) {
+  const start = formatDate(campaign.actual_start || campaign.planned_start);
+  const end = formatDate(campaign.actual_end || campaign.planned_end);
+  if (start && end) return `${start} - ${end}`;
+  return start || end || "未設定";
 }
 
 function campaignExpenses(campaignId) {
@@ -1366,8 +1405,29 @@ function cancellationMeta(record = {}) {
 }
 
 function campaignName(campaignId) {
-  const campaign = state.data.campaigns.find((item) => String(item.id || "") === String(campaignId || ""));
+  const campaign = findCampaign(campaignId);
   return campaign?.name || "未關聯專案";
+}
+
+function findCampaign(campaignId) {
+  const id = String(campaignId || "");
+  return [...state.data.campaigns, ...state.data.archivedCampaigns]
+    .find((item) => String(item.id || "") === id);
+}
+
+function activeCampaigns(campaigns = []) {
+  return campaigns.filter((campaign) => !campaign.archived_at);
+}
+
+function archivedCampaigns(campaigns = []) {
+  return campaigns.filter((campaign) => Boolean(campaign.archived_at));
+}
+
+function archiveCampaignMeta(campaign = {}) {
+  const date = formatDate(campaign.archived_at);
+  const by = campaign.archived_by || "未記錄";
+  const reason = campaign.archive_reason ? ` / ${campaign.archive_reason}` : "";
+  return date ? `${date} / ${by}${reason}` : `${by}${reason}`;
 }
 
 function priorityTone(priority = "") {
@@ -3360,12 +3420,12 @@ function knowledgeKpis() {
 function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
-    "executive:dashboard": [campaignSummarySection(), projectOverviewSection(), decisionListSection(), channelSummarySection(true)],
+    "executive:dashboard": [campaignSummarySection(), projectOverviewSection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
     "executive:budget": [budgetSection(), subsidySection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:decisions": [decisionListSection(), approvalFlowSection()],
     "marketing:dashboard": [campaignSummarySection(), marketingWorklistSection(), marketingTodoSection()],
-    "marketing:campaigns": [projectOverviewSection(), campaignDetailCardsSection()],
+    "marketing:campaigns": [projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()],
     "marketing:budget": [budgetSection(), subsidySection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
@@ -3661,7 +3721,7 @@ async function loadExistingData() {
       knowledgeResourceLinks,
       expenses,
     ] = await Promise.all([
-      safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100"),
+      loadMarketingCampaigns(),
       loadMarketingResources(),
       loadTenderResults(),
       safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
@@ -3680,7 +3740,8 @@ async function loadExistingData() {
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
     ]);
 
-    state.data.campaigns = Array.isArray(campaigns) ? campaigns : [];
+    state.data.campaigns = Array.isArray(campaigns) ? activeCampaigns(campaigns) : [];
+    state.data.archivedCampaigns = Array.isArray(campaigns) ? archivedCampaigns(campaigns) : [];
     state.data.resources = Array.isArray(resources) ? resources : [];
     state.data.tenders = Array.isArray(tenders) ? tenders : [];
     state.data.leads = Array.isArray(leads) ? leads : [];
@@ -3701,6 +3762,7 @@ async function loadExistingData() {
     state.data.expenses = Array.isArray(expenses) ? expenses : [];
 
     const liveCount = state.data.campaigns.length
+      + state.data.archivedCampaigns.length
       + state.data.resources.length
       + state.data.tenders.length
       + state.data.leads.length
@@ -3726,6 +3788,13 @@ async function loadExistingData() {
   }
 
   render();
+}
+
+async function loadMarketingCampaigns() {
+  const withArchive = await safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,archived_at,archived_by,archive_reason,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100", null);
+  if (Array.isArray(withArchive)) return withArchive;
+
+  return safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100");
 }
 
 async function loadMarketingResources() {
