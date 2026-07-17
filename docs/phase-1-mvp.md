@@ -159,7 +159,7 @@
    - Batch 12 動工前草案：`BATCH12_CAMPAIGN_CRUD_DRAFT.md`。此批會開始寫入 v1/v2 共用的 `marketing_campaigns`，需先讓 Claude 審查 v1 刪除風險、欄位對齊與手機操作。
    - Batch 12A：v1 已停用 `marketing_campaigns` 真刪除，避免刪除行銷案時二層 cascade 清掉 v2 廠商合作與交付物。v1 新增 / 編輯暫時保留，供尚未搬遷的任務、預算、文件、風險、成效子模組使用。
    - Batch 12B：v2 已開放行銷案主檔新增 / 編輯 / 封存；不做真刪除。欄位對齊 v1 `saveCampaign()`，新增時沿用 v1 `sort_order` 最小值減 10 的排序規則，公會活動類型保留自由文字輸入。Claude 複查通過，記錄於 `CLAUDE_CODE_REVIEW_BATCH12B_RESULT.md`。
-   - Batch 13A 動工前草案：`BATCH13_IMPORT_PRECHECK_DRAFT.md`。在 v2 搬任務 / 預算 / 文件前，需先處理 v1 兩支會整批 DELETE 重建資料的匯入腳本，以及 v1 任務 / 預算 / 文件子模組真刪除風險。
+   - Batch 13A 動工前草案：`BATCH13_IMPORT_PRECHECK_DRAFT.md`。Claude 草案審查：`CLAUDE_CODE_REVIEW_BATCH13A_DRAFT.md`。採納結論：先替 v1 兩支會整批 DELETE 重建資料的匯入腳本加第二層破壞性旗標，並只停用 v1 文件真刪除；任務 / 預算刪除暫時保留到 Batch 13B。
 
 ## 暫緩到 Phase 2
 
