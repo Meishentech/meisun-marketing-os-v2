@@ -157,6 +157,7 @@
    - Batch 11B：`marketing_campaigns` 新增 `archived_at`、`archived_by`、`archive_reason`；v2 排除已封存行銷案並提供只讀歷史清單。Claude 複查通過，記錄於 `CLAUDE_CODE_REVIEW_BATCH11B_RESULT.md`。
    - 決策：v1 暫時不排除已封存行銷案，直到 v2 正式接手行銷案新增 / 編輯再處理 v1 顯示與入口。
    - Batch 12 動工前草案：`BATCH12_CAMPAIGN_CRUD_DRAFT.md`。此批會開始寫入 v1/v2 共用的 `marketing_campaigns`，需先讓 Claude 審查 v1 刪除風險、欄位對齊與手機操作。
+   - Batch 12A：v1 已停用 `marketing_campaigns` 真刪除，避免刪除行銷案時二層 cascade 清掉 v2 廠商合作與交付物。v1 新增 / 編輯暫時保留，供尚未搬遷的任務、預算、文件、風險、成效子模組使用。
 
 ## 暫緩到 Phase 2
 
