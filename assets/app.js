@@ -187,7 +187,7 @@ const pages = {
         ["高重要性", "4", "空調展、公會講座、白皮書、招標工具"],
         ["待補資料", "6", "素材、預算或成效未完整"],
       ],
-      sections: [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()],
+      sections: [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection()],
     },
     budget: {
       title: "預算 / 補助 / 付款",
@@ -437,7 +437,7 @@ function campaignInspectionSections() {
       type: "cards",
       title: titleMap[mode] || "跨專案巡檢",
       wide: true,
-      cards: [["返回行銷專案管理", actionGroup([actionButton("返回列表", "back-campaign-list", "", "is-primary")])]],
+      cards: [["返回行銷專案管理", actionGroup([actionButton("返回行銷專案", "back-campaign-list", "", "is-primary")])]],
     },
     mode === "payments" ? paymentInspectionSection() : mode === "documents" ? documentInspectionSection() : taskInspectionSection(),
   ];
@@ -507,7 +507,7 @@ function campaignDetailSections() {
   const campaign = findCampaign(state.campaignDetailId);
   if (!campaign) {
     state.campaignDetailId = "";
-    return [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()];
+    return [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection()];
   }
 
   return [
@@ -528,7 +528,7 @@ function campaignDetailHeaderSection(campaign = {}) {
     title: `專案詳情：${campaign.name || "未命名行銷案"}`,
     wide: true,
     cards: [
-      ["返回", actionGroup([actionButton("返回列表", "back-campaign-list", "", "is-primary")])],
+      ["返回", actionGroup([actionButton("返回行銷專案", "back-campaign-list", "", "is-primary")])],
       ["執行狀態", `${tag(campaign.status || "未填", campaignStatusTone(campaign.status))} ${tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中"))}`],
       ["期間", campaignDateRange(campaign)],
       ["預算", `${formatMoney(campaign.budget)} / 實支 ${formatMoney(campaign.actual_spend)}`],
@@ -1176,19 +1176,6 @@ function marketingTodoSection() {
   };
 }
 
-function campaignDetailCardsSection() {
-  return {
-    type: "cards",
-    title: "專案詳情要管理的內容",
-    cards: [
-      ["任務 / 里程碑", "規劃、執行、素材、活動、成效與結案。"],
-      ["合作廠商", "展覽公司、裝潢、美編、印刷、公會與講師。"],
-      ["預算 / 補助", "申請、核准、核銷、付款與補助進度。"],
-      ["成效 / 名單", "每個活動或 Channel 回到商機名單追蹤。"],
-    ],
-  };
-}
-
 function vendorSection() {
   if (state.data.campaignVendors.length) {
     return {
@@ -1703,8 +1690,8 @@ function isCancelledSalesRequest(request = {}) {
 function formatRequester(email = "") {
   if (!email) return "未填";
   const [name, domain] = String(email).split("@");
-  if (!domain) return email;
-  return `<span class="cell-main">${name}</span><span class="cell-sub">@${domain}</span>`;
+  if (!domain) return escapeHtml(email);
+  return `<span class="cell-main">${escapeHtml(name)}</span><span class="cell-sub">@${escapeHtml(domain)}</span>`;
 }
 
 function cancellationMeta(record = {}) {
@@ -1813,7 +1800,43 @@ function pendingCampaignPayments() {
       const paymentStatus = item.payment_status || "未請款";
       return !["已付款", "不需付款"].includes(paymentStatus) && hasBudgetAmount(item);
     })
-    .sort((a, b) => String(a.payment_date || "9999-12-31").localeCompare(String(b.payment_date || "9999-12-31")));
+    .sort(comparePendingCampaignPayments);
+}
+
+function comparePendingCampaignPayments(a = {}, b = {}) {
+  const statusDiff = paymentStatusPriority(a) - paymentStatusPriority(b);
+  if (statusDiff) return statusDiff;
+
+  const dueDiff = paymentDuePriority(a) - paymentDuePriority(b);
+  if (dueDiff) return dueDiff;
+
+  const dateDiff = String(a.payment_date || "9999-12-31").localeCompare(String(b.payment_date || "9999-12-31"));
+  if (dateDiff) return dateDiff;
+
+  const amountDiff = budgetComparableAmount(b) - budgetComparableAmount(a);
+  if (amountDiff) return amountDiff;
+
+  const campaignDiff = String(campaignName(a.campaign_id)).localeCompare(String(campaignName(b.campaign_id)), "zh-Hant-TW");
+  if (campaignDiff) return campaignDiff;
+
+  return Number(a.seq || 0) - Number(b.seq || 0);
+}
+
+function paymentStatusPriority(item = {}) {
+  return item.payment_status === "待付款" ? 0 : 1;
+}
+
+function paymentDuePriority(item = {}) {
+  const due = formatDate(item.payment_date);
+  if (!due) return 2;
+  return due <= addDaysString(7) ? 0 : 1;
+}
+
+function budgetComparableAmount(item = {}) {
+  const twd = Number(item.amount_twd || 0);
+  const rmb = Number(item.amount_rmb || 0);
+  const exchangeRate = Number(item.exchange_rate || 0);
+  return twd || (rmb && exchangeRate ? rmb * exchangeRate : rmb);
 }
 
 function hasBudgetAmount(item = {}) {
@@ -2170,12 +2193,14 @@ function requestFormPreviewSection() {
 }
 
 function tag(label, tone = "") {
-  return `<span class="tag ${tone}">${label}</span>`;
+  const toneClass = tone ? ` ${escapeAttr(tone)}` : "";
+  return `<span class="tag${toneClass}">${escapeHtml(label)}</span>`;
 }
 
 function actionButton(label, action, id = "", tone = "", disabled = false) {
+  const toneClass = tone ? ` ${escapeAttr(tone)}` : "";
   const disabledAttr = disabled ? " disabled" : "";
-  return `<button class="inline-action ${tone}" type="button" data-action="${action}" data-id="${escapeAttr(id)}"${disabledAttr}>${label}</button>`;
+  return `<button class="inline-action${toneClass}" type="button" data-action="${escapeAttr(action)}" data-id="${escapeAttr(id)}"${disabledAttr}>${escapeHtml(label)}</button>`;
 }
 
 function actionGroup(actions = []) {
@@ -2183,7 +2208,7 @@ function actionGroup(actions = []) {
 }
 
 function disabledInlineAction(label) {
-  return `<button class="inline-action" type="button" disabled>${label}</button>`;
+  return `<button class="inline-action" type="button" disabled>${escapeHtml(label)}</button>`;
 }
 
 function escapeHtml(value = "") {
@@ -2233,7 +2258,9 @@ function formatFileSize(bytes) {
 
 function progress(label, tone = "") {
   const value = Number.parseInt(label, 10);
-  return `${label}<div class="progress-track"><div class="progress-fill ${tone}" style="width:${value}%"></div></div>`;
+  const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+  const toneClass = tone ? ` ${escapeAttr(tone)}` : "";
+  return `${escapeHtml(label)}<div class="progress-track"><div class="progress-fill${toneClass}" style="width:${safeValue}%"></div></div>`;
 }
 
 function nowIso() {
@@ -4534,7 +4561,7 @@ function buildCurrentSections(page) {
 function campaignPageSections() {
   if (state.campaignDetailId) return campaignDetailSections();
   if (state.campaignInspectionMode) return campaignInspectionSections();
-  return [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()];
+  return [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection()];
 }
 
 function renderNav(navItems) {
@@ -4640,16 +4667,41 @@ function renderSection(section) {
 function renderTable(section, tableClass) {
   return `
     <table class="${tableClass}">
-      <thead><tr>${section.headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
+      <thead><tr>${section.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
       <tbody>
         ${section.rows.map((row) => {
           const cells = Array.isArray(row) ? row : row.cells;
-          const rowClass = Array.isArray(row) ? "" : ` class="${row.className || ""}"`;
-          return `<tr${rowClass}>${cells.map((cell, index) => `<td data-label="${escapeAttr(section.headers[index] || "")}">${cell}</td>`).join("")}</tr>`;
+          const rowClass = Array.isArray(row) ? "" : ` class="${escapeAttr(row.className || "")}"`;
+          return `<tr${rowClass}>${cells.map((cell, index) => `<td data-label="${escapeAttr(section.headers[index] || "")}">${renderTableCell(cell)}</td>`).join("")}</tr>`;
         }).join("")}
       </tbody>
     </table>
   `;
+}
+
+function renderTableCell(cell) {
+  if (cell == null) return "";
+  const html = String(cell);
+  return isTrustedTableMarkup(html) ? html : escapeHtml(html);
+}
+
+function isTrustedTableMarkup(html = "") {
+  if (!html.includes("<")) return false;
+  let remainder = html;
+  remainder = remainder
+    .replaceAll("<br>", "")
+    .replace(/<span class="tag(?: [a-z-]+)?">/g, "")
+    .replace(/<span class="cell-main">/g, "")
+    .replace(/<span class="cell-sub">/g, "")
+    .replaceAll("</span>", "")
+    .replaceAll('<div class="action-group">', "")
+    .replaceAll('<div class="progress-track">', "")
+    .replace(/<div class="progress-fill(?: [a-z-]+)?" style="width:\d+%">/g, "")
+    .replaceAll("</div>", "")
+    .replace(/<button class="inline-action(?: [a-z-]+)?" type="button" data-action="[^"]*" data-id="[^"]*"(?: disabled)?>/g, "")
+    .replaceAll('<button class="inline-action" type="button" disabled>', "")
+    .replaceAll("</button>", "");
+  return !/[<>]/.test(remainder);
 }
 
 document.querySelectorAll(".role-button").forEach((button) => {
