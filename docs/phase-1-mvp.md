@@ -154,8 +154,9 @@
    - 優先順序：先處理 v1 資源刪除風險，再設計行銷案封存，之後才開始 v2 行銷案新增 / 編輯。
    - 任何開始寫入共用表的批次，都需先請 Claude 做 schema / 行為風險審查。
    - Batch 11A：v1 已停用 `marketing_resources` 真刪除，並排除 v2 已封存資源。
-   - Batch 11B：`marketing_campaigns` 新增 `archived_at`、`archived_by`、`archive_reason`；v2 排除已封存行銷案並提供只讀歷史清單。
+   - Batch 11B：`marketing_campaigns` 新增 `archived_at`、`archived_by`、`archive_reason`；v2 排除已封存行銷案並提供只讀歷史清單。Claude 複查通過，記錄於 `CLAUDE_CODE_REVIEW_BATCH11B_RESULT.md`。
    - 決策：v1 暫時不排除已封存行銷案，直到 v2 正式接手行銷案新增 / 編輯再處理 v1 顯示與入口。
+   - Batch 12 動工前草案：`BATCH12_CAMPAIGN_CRUD_DRAFT.md`。此批會開始寫入 v1/v2 共用的 `marketing_campaigns`，需先讓 Claude 審查 v1 刪除風險、欄位對齊與手機操作。
 
 ## 暫緩到 Phase 2
 
