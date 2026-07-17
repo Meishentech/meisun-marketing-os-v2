@@ -162,6 +162,7 @@
    - Batch 13A 動工前草案：`BATCH13_IMPORT_PRECHECK_DRAFT.md`。Claude 草案審查：`CLAUDE_CODE_REVIEW_BATCH13A_DRAFT.md`。採納結論：先替 v1 兩支會整批 DELETE 重建資料的匯入腳本加第二層破壞性旗標，並只停用 v1 文件真刪除；任務 / 預算刪除暫時保留到 Batch 13B。
    - Batch 13A 實作複查：`CLAUDE_CODE_REVIEW_BATCH13A_V1_RESULT.md`。兩支腳本防護、文件刪除停用、任務 / 預算刪除刻意保留、文件編輯不受影響，全部驗證通過。
    - 決策：V1 可以朝資料管理入口逐步停用前進，所有行銷管理資料未來轉到 V2 管理。完整路線記錄於 `V1_DISABLE_AND_FULL_V2_MIGRATION_PLAN.md`。
+   - Batch 13B 正式規格：`BATCH13B_CAMPAIGN_DETAIL_SPEC.md`。採用「詳情頁 + 巡檢卡片」混合架構；巡檢列表唯讀，點列進詳情頁編輯；即將到期任務定義為未完成、未取消、逾期或 7 天內到期；待付款項目排除已付款、不需付款與已取消項目。
 
 ## 暫緩到 Phase 2
 

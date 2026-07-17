@@ -202,12 +202,15 @@ Batch 13A 實作範圍：
 
 目的：接手 v1 行銷案詳情頁最常用的三個子模組。
 
+正式規格：`BATCH13B_CAMPAIGN_DETAIL_SPEC.md`。
+
 建議範圍：
 
 - `marketing_campaign_tasks`：新增 / 編輯 / 軟取消。
 - `marketing_campaign_budget_items`：新增 / 編輯 / 軟取消，納入總經理費用彙總。
 - `marketing_campaign_documents`：上傳 / 替換 / 封存，保留歷史。
-- 手機上要能在行銷案詳情內切換任務、預算、文件。
+- 採用「詳情頁 + 巡檢卡片」混合架構：詳情頁管理單一案子的任務 / 預算 / 文件；巡檢卡片提供跨案只讀列表。
+- 手機上要能在行銷案詳情內切換任務、預算、文件，且能從巡檢列表返回對應行銷案詳情頁。
 
 ### Batch 14：風險 / 待決策整合
 

@@ -32,12 +32,15 @@
 
 目的：讓 V2 接手 v1 行銷案詳情頁最常用的任務、預算、文件。
 
+正式規格：`BATCH13B_CAMPAIGN_DETAIL_SPEC.md`。
+
 範圍：
 
 - `marketing_campaign_tasks`：新增 / 編輯 / 軟取消。
 - `marketing_campaign_budget_items`：新增 / 編輯 / 軟取消。
 - `marketing_campaign_documents`：上傳 / 編輯 / 封存。
-- 行銷案詳情頁手機優先，任務 / 預算 / 文件要能在手機完整操作。
+- 採用「詳情頁 + 巡檢卡片」混合架構：詳情頁深耕單一案子，頂部巡檢卡片進入跨案只讀列表。
+- 行銷案詳情頁手機優先，任務 / 預算 / 文件要能在手機完整操作，巡檢列表點列後回到詳情頁編輯。
 - 已取消 / 已封存資料提供只讀歷史清單，Phase 1 不做恢復。
 
 決策沿用 Batch 13A Claude 審查：
@@ -45,7 +48,9 @@
 - tasks / budget items 用 `cancelled_at`、`cancelled_by`、`cancel_reason`。
 - documents 用 `archived_at`、`archived_by`、`archive_reason`。
 - `all_expenses_overview` 排除已取消預算項目。
-- 文件換檔案規則需先拍板：若要保留歷史版本，需刻意不同於 Batch 9B 資源庫「換檔後清舊檔」模式。
+- 文件版本規則已拍板：新版本 = 新增一筆文件，不覆蓋舊檔；封存套用在單筆文件。
+- 即將到期任務：未完成、未取消、逾期或 7 天內到期。
+- 待付款項目：未取消、付款狀態不是已付款 / 不需付款，且有有效金額。
 
 Batch 13B 完成後，V1 應同步：
 
