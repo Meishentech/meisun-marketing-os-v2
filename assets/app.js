@@ -242,7 +242,7 @@ const pages = {
         ["業務常用", "10", "差異化與異議處理最多"],
         ["關聯文宣", "42", "DM、簡報、案例與型錄"],
       ],
-      sections: [knowledgeSection(true), marketingResourceManagerSection(), knowledgeGovernanceSection()],
+      sections: [knowledgeSection(true), marketingResourceManagerSection(), archivedMarketingResourcesSection(), knowledgeGovernanceSection()],
     },
     requests: {
       title: "業務需求單",
@@ -1397,17 +1397,27 @@ function requestKanbanSection() {
 }
 
 function salesHomeResourcesSection() {
-  if (state.data.resources.length) {
+  const resources = activeResources();
+  if (resources.length) {
     return {
       type: "table",
       title: "常用資料",
       headers: ["資料", "版本", "適用", "操作"],
-      rows: state.data.resources.slice(0, 5).map((resource) => [
+      rows: resources.slice(0, 5).map((resource) => [
         resource.title || "未命名資料",
         resource.version || "未標示",
         resource.audience || resource.product_line || "未分類",
         resourceActionGroup(resource),
       ]),
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: "常用資料",
+      headers: ["狀態", "說明", "下一步"],
+      rows: [[tag("尚無可用資料", "amber"), "目前沒有可供業務使用的未封存文宣資源。", "請向行銷提出素材需求。"]],
     };
   }
 
@@ -1436,13 +1446,14 @@ function salesTodoSection() {
 }
 
 function resourceLibrarySection() {
-  if (state.data.resources.length) {
+  const resources = activeResources();
+  if (resources.length) {
     return {
       type: "table",
       title: "文宣 / 資源資料庫",
       wide: true,
       headers: ["檔案名稱", "類型", "產品線", "適用客群", "狀態", "操作"],
-      rows: state.data.resources.slice(0, 8).map((resource) => [
+      rows: resources.slice(0, 8).map((resource) => [
         resource.title || "未命名資料",
         resource.resource_type || "其他",
         resource.product_line || "未分類",
@@ -1450,6 +1461,16 @@ function resourceLibrarySection() {
         resource.is_external_usable ? tag("可對外", "green") : tag("內部 / 待確認", "amber"),
         resourceActionGroup(resource),
       ]),
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: "文宣 / 資源資料庫",
+      wide: true,
+      headers: ["狀態", "說明", "下一步"],
+      rows: [[tag("尚無可用資料", "amber"), "目前沒有可供業務使用的未封存文宣 / DM / 資源。", "可從業務需求單提出需要的資料。"]],
     };
   }
 
@@ -1468,13 +1489,14 @@ function resourceLibrarySection() {
 }
 
 function marketingResourceManagerSection() {
-  if (state.data.resources.length) {
+  const resources = activeResources();
+  if (resources.length) {
     return {
       type: "table",
       title: "文宣資源管理",
       wide: true,
       headers: ["資源", "類型", "適用", "狀態", "檔案 / 連結", "操作"],
-      rows: state.data.resources.slice(0, 10).map((resource) => [
+      rows: resources.slice(0, 10).map((resource) => [
         resource.title || "未命名資料",
         resource.resource_type || "其他",
         resource.audience || resource.product_line || "未分類",
@@ -1482,6 +1504,7 @@ function marketingResourceManagerSection() {
         resourceActionGroup(resource),
         actionGroup([
           actionButton("編輯", "edit-marketing-resource", resource.id, "is-primary"),
+          actionButton("封存", "archive-marketing-resource", resource.id, "is-danger"),
         ]),
       ]),
     };
@@ -1499,6 +1522,25 @@ function marketingResourceManagerSection() {
         actionButton("新增資源", "create-marketing-resource", "", "is-primary"),
       ],
     ],
+  };
+}
+
+function archivedMarketingResourcesSection() {
+  const rows = archivedResources().slice(0, 20).map((resource) => [
+    resource.title || "未命名資料",
+    resource.resource_type || "其他",
+    resource.audience || resource.product_line || "未分類",
+    resourceReferenceSummary(resource.id),
+    archiveMeta(resource),
+  ]);
+
+  return {
+    type: "details-table",
+    title: `已封存文宣資源（${rows.length}）`,
+    summary: "只讀顯示，不提供復原或真刪除。",
+    wide: true,
+    headers: ["資源", "類型", "適用", "引用", "封存資訊"],
+    rows: rows.length ? rows : [[tag("無封存", "green"), "目前沒有已封存文宣資源。", "無", "無", "無"]],
   };
 }
 
@@ -2450,19 +2492,19 @@ function knowledgeResourceLinksFor(knowledgeItemId) {
 function resourcesForKnowledgeItem(knowledgeItemId) {
   return knowledgeResourceLinksFor(knowledgeItemId).map((link) => ({
     link,
-    resource: state.data.resources.find((resource) => resource.id === link.resource_id),
+    resource: findResource(link.resource_id),
   }));
 }
 
 function availableResourcesForKnowledgeItem(knowledgeItemId) {
   const linkedResourceIds = new Set(knowledgeResourceLinksFor(knowledgeItemId).map((link) => link.resource_id));
-  return state.data.resources.filter((resource) => !linkedResourceIds.has(resource.id));
+  return activeResources().filter((resource) => !linkedResourceIds.has(resource.id));
 }
 
 function knowledgeResourceLinksHtml(item = {}, canManage = false) {
   const linkedResources = resourcesForKnowledgeItem(item.id);
   const manageAction = canManage
-    ? `<div class="action-group">${actionButton("新增資源連結", "add-knowledge-resource", item.id, "is-primary", !state.data.resources.length)}</div>`
+    ? `<div class="action-group">${actionButton("新增資源連結", "add-knowledge-resource", item.id, "is-primary", !activeResources().length)}</div>`
     : "";
   const body = linkedResources.length
     ? `<div class="linked-resource-list">${linkedResources.map(({ link, resource }) => resourceLinkCard(link, resource, canManage)).join("")}</div>`
@@ -2484,11 +2526,12 @@ function resourceLinkCard(link = {}, resource = {}, canManage = false) {
   const resourceActions = resource ? resourceActionButtons(resource) : [disabledInlineAction("尚無檔案")];
   const removeAction = canManage ? actionButton("移除連結", "remove-knowledge-resource", link.id, "is-danger") : "";
   const actions = [...resourceActions, removeAction].filter(Boolean);
+  const archiveTag = resource?.deleted_at ? tag("已封存", "amber") : "";
 
   return `
     <article class="linked-resource-card">
       <div>
-        <strong>${escapeHtml(resourceTitle)}</strong>
+        <strong>${escapeHtml(resourceTitle)} ${archiveTag}</strong>
         <p>${escapeHtml(resource?.resource_type || "資源")}・${escapeHtml(resource?.product_line || "未分類")}・${escapeHtml(resource?.audience || "未設定")}</p>
       </div>
       ${actions.length ? actionGroup(actions) : ""}
@@ -2572,11 +2615,42 @@ function findResource(resourceId) {
   return state.data.resources.find((resource) => resource.id === resourceId);
 }
 
+function activeResources(resources = state.data.resources) {
+  return resources.filter((resource) => !resource.deleted_at);
+}
+
+function archivedResources(resources = state.data.resources) {
+  return resources.filter((resource) => Boolean(resource.deleted_at));
+}
+
+function resourceReferenceCounts(resourceId) {
+  const knowledge = state.data.knowledgeResourceLinks.filter((link) => link.resource_id === resourceId).length;
+  const requests = [...state.data.salesRequests, ...state.data.cancelledSalesRequests]
+    .filter((request) => request.deliverable_resource_id === resourceId).length;
+  return { knowledge, requests, total: knowledge + requests };
+}
+
+function resourceReferenceSummary(resourceId) {
+  const counts = resourceReferenceCounts(resourceId);
+  const parts = [];
+  if (counts.knowledge) parts.push(`知識條目 ${counts.knowledge}`);
+  if (counts.requests) parts.push(`需求單 ${counts.requests}`);
+  return parts.length ? parts.join(" / ") : "目前無引用";
+}
+
+function archiveMeta(resource = {}) {
+  const date = formatDate(resource.deleted_at);
+  const by = resource.deleted_by || "未記錄";
+  return date ? `${date} / ${by}` : by;
+}
+
 function resourceActionGroup(resource = {}) {
   return actionGroup(resourceActionButtons(resource));
 }
 
 function resourceActionButtons(resource = {}) {
+  if (resource.deleted_at) return [disabledInlineAction("已封存")];
+
   const actions = [];
   if (resource.file_path) {
     if (resource.is_external_usable) {
@@ -2736,6 +2810,39 @@ function openEditMarketingResourceModal(id) {
   const resource = findResource(id);
   if (!resource) return;
   openMarketingResourceModal(resource);
+}
+
+function openArchiveMarketingResourceModal(id) {
+  const resource = findResource(id);
+  if (!resource || resource.deleted_at) return;
+
+  const counts = resourceReferenceCounts(id);
+  const referenceText = counts.total
+    ? `這份資源目前被 ${counts.total} 個地方引用（${resourceReferenceSummary(id)}）。封存後仍會保留在既有知識條目的已連結清單中並標記為「已封存」，但不會再出現在業務資料庫、常用資料、新增連結選單或資源管理列表。`
+    : "這份資源目前沒有被知識條目或需求單引用。封存後不會再出現在業務資料庫、常用資料、新增連結選單或資源管理列表。";
+
+  openModal("封存文宣資源", `
+    <p class="empty-note">
+      確定要封存「${escapeHtml(resource.title || "未命名資料")}」嗎？
+    </p>
+    <p class="empty-note">${escapeHtml(referenceText)}</p>
+    <p class="empty-note">Phase 1 只做封存，不做真刪除，也不提供復原按鈕。</p>
+  `, {
+    submitLabel: "封存資源",
+    submitTone: "danger",
+    onSubmit: async () => {
+      await api("PATCH", `marketing_resources?id=eq.${encodeURIComponent(id)}`, {
+        deleted_at: nowIso(),
+        deleted_by: state.auth.email || null,
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+      state.role = "marketing";
+      state.page = "knowledge";
+      render();
+    },
+  });
 }
 
 function openMarketingResourceModal(resource = {}) {
@@ -3263,7 +3370,7 @@ function buildCurrentSections(page) {
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
     "marketing:associations": [associationSection(), associationTagsSection()],
-    "marketing:knowledge": [knowledgeSection(true), marketingResourceManagerSection(), knowledgeGovernanceSection()],
+    "marketing:knowledge": [knowledgeSection(true), marketingResourceManagerSection(), archivedMarketingResourcesSection(), knowledgeGovernanceSection()],
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
@@ -3468,6 +3575,7 @@ document.addEventListener("click", (event) => {
   if (action === "open-resource-canva") openResourceExternalLink(id, "canva");
   if (action === "create-marketing-resource") openCreateMarketingResourceModal();
   if (action === "edit-marketing-resource") openEditMarketingResourceModal(id);
+  if (action === "archive-marketing-resource") openArchiveMarketingResourceModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 
@@ -3554,7 +3662,7 @@ async function loadExistingData() {
       expenses,
     ] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100"),
-      safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,canva_url,file_path,file_name,file_size,is_external_usable,updated_at&order=updated_at.desc&limit=100"),
+      loadMarketingResources(),
       loadTenderResults(),
       safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
       safeGET("associations?limit=50"),
@@ -3618,6 +3726,16 @@ async function loadExistingData() {
   }
 
   render();
+}
+
+async function loadMarketingResources() {
+  const withArchive = await safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,canva_url,file_path,file_name,file_size,is_external_usable,tags,notes,deleted_at,deleted_by,updated_at&order=updated_at.desc&limit=100", null);
+  if (Array.isArray(withArchive)) return withArchive;
+
+  const withEditableFields = await safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,canva_url,file_path,file_name,file_size,is_external_usable,tags,notes,updated_at&order=updated_at.desc&limit=100", null);
+  if (Array.isArray(withEditableFields)) return withEditableFields;
+
+  return safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,canva_url,file_path,file_name,file_size,is_external_usable,updated_at&order=updated_at.desc&limit=100");
 }
 
 async function loadTenderResults() {
