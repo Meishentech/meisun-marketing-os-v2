@@ -166,6 +166,7 @@
    - Batch 13B SQL：`phase1_batch13b_campaign_detail_lifecycle.sql`。任務 / 預算採 `cancelled_*`，文件採 `archived_*`；`all_expenses_overview` 僅排除已取消預算項目，保留歷史行銷案費用。
    - Batch 13B 前端：v2 行銷專案管理已新增跨專案巡檢卡片、單一專案詳情頁、任務新增 / 編輯 / 取消、預算項目新增 / 編輯 / 取消、文件新增版本 / 編輯資訊 / 封存 / 簽名網址開啟。
    - Batch 13B v1 凍結：v2 接手任務與預算項目後，v1 `delTask()` / `delBudgetItem()` 真刪除同步停用；後續由 v2 以取消方式保留歷史紀錄。
+   - Batch 14 動工前草案：`BATCH14_RISK_PERFORMANCE_DRAFT.md`。建議拆成 14A 先凍結 v1 風險 / 追蹤真刪除、14B 搬遷 V2 風險 / 待決事項管理、14C 再接成效資料與 Channel 指標、14D 規劃週報摘要。需先交 Claude Code 審查 V1 刪除風險、命名慣例、`marketing_campaign_performance` 是否應併入本批，以及總經理待決策中心是否直接讀風險表或透過 `approval_requests`。
 
 ## 暫緩到 Phase 2
 
