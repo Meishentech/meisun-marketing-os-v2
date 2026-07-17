@@ -1404,7 +1404,7 @@ function salesHomeResourcesSection() {
         resource.title || "未命名資料",
         resource.version || "未標示",
         resource.audience || resource.product_line || "未分類",
-        resource.resource_url || resource.file_path ? "下載" : "查看",
+        resourceActionGroup(resource),
       ]),
     };
   }
@@ -1446,7 +1446,7 @@ function resourceLibrarySection() {
         resource.product_line || "未分類",
         resource.audience || "未設定",
         resource.is_external_usable ? tag("可對外", "green") : tag("內部 / 待確認", "amber"),
-        resource.resource_url || resource.file_path ? "下載" : "查看",
+        resourceActionGroup(resource),
       ]),
     };
   }
@@ -1614,6 +1614,10 @@ function actionGroup(actions = []) {
   return `<div class="action-group">${actions.join("")}</div>`;
 }
 
+function disabledInlineAction(label) {
+  return `<button class="inline-action" type="button" disabled>${label}</button>`;
+}
+
 function escapeHtml(value = "") {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -1650,6 +1654,13 @@ function formatCurrencyFull(value) {
 function formatDate(value) {
   if (!value) return "";
   return String(value).slice(0, 10);
+}
+
+function formatFileSize(bytes) {
+  const number = Number(bytes || 0);
+  if (!number) return "";
+  if (number < 1024 * 1024) return `${Math.round(number / 1024)} KB`;
+  return `${(number / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function progress(label, tone = "") {
@@ -2433,12 +2444,9 @@ function knowledgeResourceLinksHtml(item = {}, canManage = false) {
 
 function resourceLinkCard(link = {}, resource = {}, canManage = false) {
   const resourceTitle = resource?.title || "已連結資源";
-  const resourceHref = resource?.resource_url || resource?.file_path || "";
-  const openAction = resourceHref
-    ? `<a class="inline-action is-primary" href="${escapeAttr(resourceHref)}" target="_blank" rel="noopener">開啟</a>`
-    : "";
+  const resourceActions = resource ? resourceActionButtons(resource) : [disabledInlineAction("尚無檔案")];
   const removeAction = canManage ? actionButton("移除連結", "remove-knowledge-resource", link.id, "is-danger") : "";
-  const actions = [openAction, removeAction].filter(Boolean);
+  const actions = [...resourceActions, removeAction].filter(Boolean);
 
   return `
     <article class="linked-resource-card">
@@ -2521,6 +2529,76 @@ function resourceOptionLabel(resource = {}) {
     resource.product_line || "未分類",
     resource.audience || "未設定",
   ].join(" / ");
+}
+
+function findResource(resourceId) {
+  return state.data.resources.find((resource) => resource.id === resourceId);
+}
+
+function resourceActionGroup(resource = {}) {
+  return actionGroup(resourceActionButtons(resource));
+}
+
+function resourceActionButtons(resource = {}) {
+  const actions = [];
+  if (resource.file_path) {
+    if (resource.is_external_usable) {
+      actions.push(actionButton(resourceDownloadLabel(resource), "download-resource-file", resource.id, "is-primary"));
+    } else {
+      actions.push(disabledInlineAction("內部檔案"));
+    }
+  }
+  if (resource.resource_url) {
+    actions.push(actionButton(resource.is_external_usable ? "開啟連結" : "查看連結", "open-resource-url", resource.id));
+  }
+  if (resource.canva_url) {
+    actions.push(actionButton("查看 Canva", "open-resource-canva", resource.id));
+  }
+  if (!actions.length) actions.push(disabledInlineAction("尚無檔案"));
+  return actions;
+}
+
+function resourceDownloadLabel(resource = {}) {
+  const size = formatFileSize(resource.file_size);
+  return size ? `下載 ${size}` : "下載";
+}
+
+function openResourceExternalLink(resourceId, source) {
+  const resource = findResource(resourceId);
+  const url = source === "canva" ? resource?.canva_url : resource?.resource_url;
+  if (!url) return;
+  window.open(url, "_blank", "noopener");
+}
+
+async function openResourceFile(resourceId, button) {
+  const resource = findResource(resourceId);
+  if (!resource?.file_path || !resource.is_external_usable) return;
+
+  const popup = window.open("about:blank", "_blank");
+  if (popup) popup.opener = null;
+  const originalText = button?.textContent || "下載";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "產生連結...";
+  }
+
+  try {
+    const signedUrl = await getSignedUrl("marketing-resource-files", resource.file_path);
+    if (popup) {
+      popup.location.href = signedUrl;
+    } else {
+      window.open(signedUrl, "_blank", "noopener");
+    }
+  } catch (error) {
+    if (popup) popup.close();
+    console.warn("resource download failed", error);
+    alert(error.message || "無法開啟檔案，請稍後再試。");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
 }
 
 function knowledgeItemFormHtml(item = {}, readOnly = false) {
@@ -3187,6 +3265,9 @@ document.addEventListener("click", (event) => {
   if (action === "request-knowledge-update") openKnowledgeSupplementRequestModal(id);
   if (action === "add-knowledge-resource") openAddKnowledgeResourceModal(id);
   if (action === "remove-knowledge-resource") openRemoveKnowledgeResourceModal(id);
+  if (action === "download-resource-file") openResourceFile(id, button);
+  if (action === "open-resource-url") openResourceExternalLink(id, "url");
+  if (action === "open-resource-canva") openResourceExternalLink(id, "canva");
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 
@@ -3273,7 +3354,7 @@ async function loadExistingData() {
       expenses,
     ] = await Promise.all([
       safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100"),
-      safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,file_path,is_external_usable,updated_at&order=updated_at.desc&limit=100"),
+      safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,canva_url,file_path,file_name,file_size,is_external_usable,updated_at&order=updated_at.desc&limit=100"),
       loadTenderResults(),
       safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
       safeGET("associations?limit=50"),

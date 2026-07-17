@@ -126,6 +126,13 @@
    - Batch 8B：知識條目可連結既有 `marketing_resources` 文宣 / DM / 資源，不新增檔案上傳。
    - Batch 8B：行銷總監可新增 / 移除 `product_knowledge_resource_links`；業務只可查看已連結資源。
 
+11. 資源下載可操作化 Batch 9
+   - `marketing_resources.file_path` 指向私有 Storage bucket `marketing-resource-files`，不得直接當作公開連結。
+   - v2 新增 `getSignedUrl()`，下載私有檔案時先取得 Supabase Storage 簽名網址。
+   - 資源來源優先順序採 `file_path` ＞ `resource_url` ＞ `canva_url`；三者皆無時顯示「尚無檔案」。
+   - `is_external_usable = true` 才提供私有檔案下載；內部資源可查看外部 / Canva 連結，但不簽出私有檔案。
+   - Batch 9 僅做業務端與知識條目關聯資源的讀取 / 開啟，不新增或編輯 `marketing_resources`。
+
 ## 暫緩到 Phase 2
 
 - 完整資料庫 RLS 權限。

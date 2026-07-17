@@ -39,6 +39,28 @@ async function safeGET(path, fallback = []) {
   }
 }
 
+async function getSignedUrl(bucket, path, expiresIn = 3600) {
+  const token = getToken();
+  const response = await fetch(`${SB}/storage/v1/object/sign/${bucket}/${path}`, {
+    method: "POST",
+    headers: {
+      apikey: KEY,
+      Authorization: `Bearer ${token || KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expiresIn }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "無法取得檔案下載連結。");
+  }
+
+  const data = await response.json();
+  if (!data.signedURL) throw new Error("無法取得檔案下載連結。");
+  return `${SB}/storage/v1${data.signedURL}`;
+}
+
 async function loadUserAccess(email) {
   try {
     const rows = await GET(`app_user_access?email=eq.${encodeURIComponent(email)}&select=email,display_name,role,is_active,must_change_password`);
