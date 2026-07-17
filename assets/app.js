@@ -32,6 +32,7 @@ const state = {
 };
 
 let modalSubmitHandler = null;
+const RESOURCE_FILE_MAX_BYTES = 200 * 1024 * 1024;
 
 const roleAliases = {
   executive: "executive",
@@ -241,7 +242,7 @@ const pages = {
         ["業務常用", "10", "差異化與異議處理最多"],
         ["關聯文宣", "42", "DM、簡報、案例與型錄"],
       ],
-      sections: [knowledgeSection(true), knowledgeGovernanceSection()],
+      sections: [knowledgeSection(true), marketingResourceManagerSection(), knowledgeGovernanceSection()],
     },
     requests: {
       title: "業務需求單",
@@ -1225,6 +1226,7 @@ function knowledgeGovernanceSection() {
     type: "cards",
     title: "證據等級與治理",
     cards: [
+      ["新增文宣資源", actionButton("新增資源", "create-marketing-resource", "", "is-primary")],
       ["A 正式來源", "可對外使用，需關聯 DM、型錄、簡報或正式文件。"],
       ["B 技術確認", "可內部使用，對外需行銷總監確認。"],
       ["C 待確認", "只能內部討論，不給業務預設查詢。"],
@@ -1461,6 +1463,41 @@ function resourceLibrarySection() {
       ["工程公司版公司簡介", "簡報", "公司能力", "工程公司", tag("可對外", "green"), "下載"],
       ["競品比較初稿", "分析", "冰水主機", "內部", tag("內部", "amber"), "查看"],
       ["醫院節能議題包", "文案", "應用場景", "業主", tag("待確認", "gray"), "申請使用"],
+    ],
+  };
+}
+
+function marketingResourceManagerSection() {
+  if (state.data.resources.length) {
+    return {
+      type: "table",
+      title: "文宣資源管理",
+      wide: true,
+      headers: ["資源", "類型", "適用", "狀態", "檔案 / 連結", "操作"],
+      rows: state.data.resources.slice(0, 10).map((resource) => [
+        resource.title || "未命名資料",
+        resource.resource_type || "其他",
+        resource.audience || resource.product_line || "未分類",
+        resource.is_external_usable ? tag("可對外", "green") : tag("內部", "amber"),
+        resourceActionGroup(resource),
+        actionGroup([
+          actionButton("編輯", "edit-marketing-resource", resource.id, "is-primary"),
+        ]),
+      ]),
+    };
+  }
+
+  return {
+    type: "table",
+    title: "文宣資源管理",
+    wide: true,
+    headers: ["狀態", "說明", "下一步"],
+    rows: [
+      [
+        tag("尚無資料", "amber"),
+        "目前沒有從 marketing_resources 讀到文宣 / DM / 資源。",
+        actionButton("新增資源", "create-marketing-resource", "", "is-primary"),
+      ],
     ],
   };
 }
@@ -2601,6 +2638,167 @@ async function openResourceFile(resourceId, button) {
   }
 }
 
+function resourceTypeOptions() {
+  return [
+    ["簡報", "簡報"],
+    ["DM", "DM"],
+    ["型錄", "型錄"],
+    ["技術文章", "技術文章"],
+    ["期刊投稿", "期刊投稿"],
+    ["展場素材", "展場素材"],
+    ["社群文案", "社群文案"],
+    ["圖片影片", "圖片影片"],
+    ["案例", "案例"],
+    ["其他", "其他"],
+  ];
+}
+
+function marketingResourceFormHtml(resource = {}) {
+  const fileLabel = resource.file_path
+    ? `${resource.file_name || resource.file_path}${resource.file_size ? ` ${formatFileSize(resource.file_size)}` : ""}`
+    : "尚未上傳檔案";
+
+  return `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>資源名稱</span>
+        <input name="title" value="${escapeAttr(resource.title || "")}" required>
+      </label>
+      <label class="form-field">
+        <span>類型</span>
+        <select name="resource_type">${selectOptions(resourceTypeOptions(), resource.resource_type || "其他")}</select>
+      </label>
+      <label class="form-field">
+        <span>版本</span>
+        <input name="version" value="${escapeAttr(resource.version || "")}">
+      </label>
+      <label class="form-field">
+        <span>產品線</span>
+        <input name="product_line" value="${escapeAttr(resource.product_line || "")}">
+      </label>
+      <label class="form-field">
+        <span>適用對象</span>
+        <input name="audience" value="${escapeAttr(resource.audience || "")}">
+      </label>
+      <label class="form-field is-wide">
+        <span>外部連結</span>
+        <input name="resource_url" value="${escapeAttr(resource.resource_url || "")}" placeholder="https://...">
+      </label>
+      <label class="form-field is-wide">
+        <span>Canva 連結</span>
+        <input name="canva_url" value="${escapeAttr(resource.canva_url || "")}" placeholder="https://www.canva.com/...">
+      </label>
+      <label class="form-field is-wide checkbox-field">
+        <input name="is_external_usable" type="checkbox" ${resource.is_external_usable ? "checked" : ""}>
+        <span>可對外提供給客戶</span>
+      </label>
+      <label class="form-field is-wide">
+        <span>標籤</span>
+        <input name="tags" value="${escapeAttr(Array.isArray(resource.tags) ? resource.tags.join("、") : "")}" placeholder="用逗號或頓號分隔">
+      </label>
+      <label class="form-field is-wide">
+        <span>備註</span>
+        <textarea name="notes">${escapeHtml(resource.notes || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>目前檔案</span>
+        <input value="${escapeAttr(fileLabel)}" readonly>
+      </label>
+      <label class="form-field is-wide">
+        <span>上傳 / 替換檔案</span>
+        <input name="resource_file" type="file" accept=".pdf,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,image/*,application/pdf">
+      </label>
+    </div>
+  `;
+}
+
+function marketingResourcePayload(values = {}) {
+  return {
+    title: values.title.trim(),
+    resource_type: values.resource_type || "其他",
+    product_line: values.product_line?.trim() || null,
+    audience: values.audience?.trim() || null,
+    version: values.version?.trim() || null,
+    resource_url: values.resource_url?.trim() || null,
+    canva_url: values.canva_url?.trim() || null,
+    is_external_usable: values.is_external_usable === "on",
+    tags: String(values.tags || "").split(/[、,]/).map((tagText) => tagText.trim()).filter(Boolean),
+    notes: values.notes?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateMarketingResourceModal() {
+  openMarketingResourceModal();
+}
+
+function openEditMarketingResourceModal(id) {
+  const resource = findResource(id);
+  if (!resource) return;
+  openMarketingResourceModal(resource);
+}
+
+function openMarketingResourceModal(resource = {}) {
+  const isEditing = Boolean(resource.id);
+  openModal(isEditing ? "編輯文宣資源" : "新增文宣資源", marketingResourceFormHtml(resource), {
+    submitLabel: isEditing ? "儲存變更" : "新增資源",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const file = form.elements.resource_file?.files?.[0] || null;
+      if (file && file.size > RESOURCE_FILE_MAX_BYTES) {
+        throw new Error(`檔案超過上傳上限 ${formatFileSize(RESOURCE_FILE_MAX_BYTES)}，請壓縮後再上傳。`);
+      }
+
+      const payload = marketingResourcePayload(values);
+      let uploadedPath = null;
+      if (file) {
+        try {
+          uploadedPath = await uploadStorageFile("marketing-resource-files", file);
+          payload.file_path = uploadedPath;
+          payload.file_name = file.name;
+          payload.file_size = file.size;
+        } catch (error) {
+          const message = error?.message || "";
+          const isTooLarge = message.includes("Payload too large") || message.includes("413");
+          throw new Error(isTooLarge
+            ? `檔案上傳失敗：檔案超過目前 Storage 上限。請先套用 schema_v16_resource_file_size_limit.sql，或確認檔案小於 ${formatFileSize(RESOURCE_FILE_MAX_BYTES)}。`
+            : "檔案上傳失敗，請確認 Storage 權限與檔案大小。");
+        }
+      }
+
+      try {
+        if (isEditing) {
+          await api("PATCH", `marketing_resources?id=eq.${encodeURIComponent(resource.id)}`, payload);
+          if (file && resource.file_path && resource.file_path !== uploadedPath) {
+            try {
+              await deleteStorageFile("marketing-resource-files", resource.file_path);
+            } catch (error) {
+              console.warn("old resource file cleanup failed", error);
+            }
+          }
+        } else {
+          await api("POST", "marketing_resources", payload);
+        }
+      } catch (error) {
+        if (uploadedPath) {
+          try {
+            await deleteStorageFile("marketing-resource-files", uploadedPath);
+          } catch (cleanupError) {
+            console.warn("uploaded resource rollback failed", cleanupError);
+          }
+        }
+        throw error;
+      }
+
+      closeModal();
+      await loadExistingData();
+      state.role = "marketing";
+      state.page = "knowledge";
+      render();
+    },
+  });
+}
+
 function knowledgeItemFormHtml(item = {}, readOnly = false) {
   const disabled = readOnly ? " disabled" : "";
   const readonly = readOnly ? " readonly" : "";
@@ -3268,6 +3466,8 @@ document.addEventListener("click", (event) => {
   if (action === "download-resource-file") openResourceFile(id, button);
   if (action === "open-resource-url") openResourceExternalLink(id, "url");
   if (action === "open-resource-canva") openResourceExternalLink(id, "canva");
+  if (action === "create-marketing-resource") openCreateMarketingResourceModal();
+  if (action === "edit-marketing-resource") openEditMarketingResourceModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 

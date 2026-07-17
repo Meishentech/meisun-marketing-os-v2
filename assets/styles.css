@@ -896,6 +896,21 @@ h1 {
   resize: vertical;
 }
 
+.checkbox-field {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.checkbox-field input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.checkbox-field span {
+  color: #153852;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;

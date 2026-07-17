@@ -61,6 +61,47 @@ async function getSignedUrl(bucket, path, expiresIn = 3600) {
   return `${SB}/storage/v1${data.signedURL}`;
 }
 
+function storageSafeFileName(name) {
+  const dot = name.lastIndexOf(".");
+  const ext = dot >= 0 ? name.slice(dot) : "";
+  const base = (dot >= 0 ? name.slice(0, dot) : name).replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `${Date.now()}_${base}${ext}`;
+}
+
+async function uploadStorageFile(bucket, file) {
+  const token = getToken();
+  const path = storageSafeFileName(file.name);
+  const response = await fetch(`${SB}/storage/v1/object/${bucket}/${path}`, {
+    method: "POST",
+    headers: {
+      apikey: KEY,
+      Authorization: `Bearer ${token || KEY}`,
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "檔案上傳失敗。");
+  }
+
+  return path;
+}
+
+async function deleteStorageFile(bucket, path) {
+  const token = getToken();
+  const response = await fetch(`${SB}/storage/v1/object/${bucket}/${path}`, {
+    method: "DELETE",
+    headers: { apikey: KEY, Authorization: `Bearer ${token || KEY}` },
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "檔案刪除失敗。");
+  }
+}
+
 async function loadUserAccess(email) {
   try {
     const rows = await GET(`app_user_access?email=eq.${encodeURIComponent(email)}&select=email,display_name,role,is_active,must_change_password`);

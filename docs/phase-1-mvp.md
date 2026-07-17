@@ -133,6 +133,13 @@
    - `is_external_usable = true` 才提供私有檔案下載；內部資源可查看外部 / Canva 連結，但不簽出私有檔案。
    - Batch 9 僅做業務端與知識條目關聯資源的讀取 / 開啟，不新增或編輯 `marketing_resources`。
 
+12. 行銷總監資源管理 Batch 9B
+   - 決策：未來資源庫改以 v2 管理，逐步取代 v1。
+   - 行銷總監可在 v2 新增 / 編輯 `marketing_resources`，包含外部連結、Canva 連結、標籤、備註與檔案上傳 / 替換。
+   - 檔案使用既有 private Storage bucket `marketing-resource-files`；替換檔案成功寫入資料表後，才嘗試清理舊檔案。
+   - 若資料表寫入失敗，已上傳的新檔案會嘗試回滾刪除，避免孤兒檔案。
+   - Phase 1 不做資源刪除；因為 `marketing_resources` 可能已被知識庫或業務需求單引用，刪除需另行設計軟刪除與引用處理。
+
 ## 暫緩到 Phase 2
 
 - 完整資料庫 RLS 權限。
