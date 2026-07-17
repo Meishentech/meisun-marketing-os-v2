@@ -3263,7 +3263,7 @@ function buildCurrentSections(page) {
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
     "marketing:associations": [associationSection(), associationTagsSection()],
-    "marketing:knowledge": [knowledgeSection(true), knowledgeGovernanceSection()],
+    "marketing:knowledge": [knowledgeSection(true), marketingResourceManagerSection(), knowledgeGovernanceSection()],
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
