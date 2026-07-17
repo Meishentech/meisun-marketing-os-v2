@@ -66,7 +66,7 @@ const roleMeta = {
   },
   marketing: {
     eyebrow: "MARKETING DIRECTOR",
-    primaryAction: "v2 暫不新增行銷案",
+    primaryAction: "新增行銷案",
     nav: [
       ["dashboard", "行銷總監工作台"],
       ["campaigns", "行銷專案管理"],
@@ -329,13 +329,16 @@ const pages = {
 };
 
 function projectOverviewSection() {
+  const marketingActions = state.role === "marketing" && state.page === "campaigns";
   if (state.data.campaigns.length) {
     return {
       type: "table",
       title: "專案管理排序",
       wide: true,
-      headers: ["專案", "重要性", "執行狀態", "進度", "預算", "待處理"],
-      rows: sortedCampaignsForExecutive(state.data.campaigns).slice(0, 10).map(formatCampaignRow),
+      headers: marketingActions
+        ? ["專案", "重要性", "執行狀態", "進度", "預算", "待處理", "操作"]
+        : ["專案", "重要性", "執行狀態", "進度", "預算", "待處理"],
+      rows: sortedCampaignsForExecutive(state.data.campaigns).slice(0, 10).map((campaign) => formatCampaignRow(campaign, marketingActions)),
     };
   }
 
@@ -437,13 +440,13 @@ function campaignSummaryRow(label, summary) {
   ];
 }
 
-function formatCampaignRow(campaign) {
+function formatCampaignRow(campaign, includeActions = false) {
   const priority = campaign.priority || "中";
   const budget = formatMoney(campaign.budget);
   const progressLabel = campaignProgress(campaign.status);
   const nextStep = campaign.notes || campaign.purpose || campaign.partner || "待補下一步";
 
-  return [
+  const row = [
     campaign.name || "未命名專案",
     tag(priority, campaignPriorityTone(priority)),
     tag(campaign.status || "未填", campaignStatusTone(campaign.status)),
@@ -451,6 +454,15 @@ function formatCampaignRow(campaign) {
     budget,
     nextStep,
   ];
+
+  if (includeActions) {
+    row.push(actionGroup([
+      actionButton("編輯", "edit-campaign", campaign.id, "is-primary"),
+      actionButton("封存", "archive-campaign", campaign.id, "is-danger"),
+    ]));
+  }
+
+  return row;
 }
 
 function campaignProgress(status = "") {
@@ -1834,6 +1846,26 @@ function campaignOptions(selected = "") {
   return selectOptions(options, selected);
 }
 
+function associationOptions(selected = "") {
+  const options = [["", "不關聯公會"]];
+  state.data.associations
+    .slice()
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant-TW"))
+    .forEach((association) => {
+      options.push([association.id, association.name || "未命名公會"]);
+    });
+  return selectOptions(options, selected);
+}
+
+function associationActivitySuggestions(selected = "") {
+  const fixed = ["會員大會", "協辦活動", "技術講座", "展覽", "餐會", "期刊投稿", "期刊廣告", "年度贊助", "其他"];
+  const existing = [...state.data.campaigns, ...state.data.archivedCampaigns]
+    .map((campaign) => campaign.association_activity_type)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
 function vendorOptions(selected = "") {
   const options = [["", "新增廠商主檔"]];
   state.data.vendors.forEach((vendor) => {
@@ -2153,7 +2185,7 @@ function openVendorApprovalPicker() {
 
 function openCreateCampaignVendorModal() {
   if (!state.data.campaigns.length) {
-    openModal("新增廠商合作", `<p class="empty-note">目前沒有可選擇的行銷案。v2 暫不新增行銷案，請先使用既有行銷案資料。</p>`, {
+    openModal("新增廠商合作", `<p class="empty-note">目前沒有可選擇的進行中行銷案。請先到「行銷專案管理」新增行銷案，或確認既有行銷案是否已封存。</p>`, {
       submitLabel: "關閉",
       hideCancel: true,
       onSubmit: async () => closeModal(),
@@ -3087,15 +3119,239 @@ function openCreateKnowledgeItemModal() {
   });
 }
 
-function openCampaignCreationDeferredModal() {
-  openModal("v2 暫不新增行銷案", `
+function campaignFormHtml(campaign = {}) {
+  const vendorsText = Array.isArray(campaign.vendors) ? campaign.vendors.join("\n") : "";
+  return `
+    <div class="form-section">
+      <h3>基本資訊</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>專案名稱 *</span>
+          <input name="name" value="${escapeAttr(campaign.name || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>狀態</span>
+          <select name="status">
+            ${selectOptions([["預計規劃", "預計規劃"], ["估價中", "估價中"], ["進行中", "進行中"], ["補助申請", "補助申請"], ["結案", "結案"]], campaign.status || "預計規劃")}
+          </select>
+        </label>
+        <label class="form-field">
+          <span>重要性</span>
+          <select name="priority">
+            ${selectOptions([["高", "高"], ["中", "中"], ["低", "低"]], campaign.priority || "中")}
+          </select>
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(campaign.owner || "")}">
+        </label>
+        <label class="form-field">
+          <span>負責單位</span>
+          <input name="owner_unit" value="${escapeAttr(campaign.owner_unit || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>專案說明 / 目的</span>
+          <textarea name="purpose">${escapeHtml(campaign.purpose || "")}</textarea>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>預算與補助</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>預算</span>
+          <input name="budget" type="number" min="0" step="1" value="${escapeAttr(campaign.budget ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>實支</span>
+          <input name="actual_spend" type="number" min="0" step="1" value="${escapeAttr(campaign.actual_spend ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>預估補助</span>
+          <input name="subsidy_planned" type="number" min="0" step="1" value="${escapeAttr(campaign.subsidy_planned ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>實際補助</span>
+          <input name="subsidy_received" type="number" min="0" step="1" value="${escapeAttr(campaign.subsidy_received ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>美的補助申請號碼</span>
+          <input name="midea_budget_code" value="${escapeAttr(campaign.midea_budget_code || "")}">
+        </label>
+        <label class="form-field">
+          <span>機票費用</span>
+          <input name="flight_cost" type="number" min="0" step="1" value="${escapeAttr(campaign.flight_cost ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>付款狀態</span>
+          <input name="payment_status" value="${escapeAttr(campaign.payment_status || "")}">
+        </label>
+        <label class="form-field">
+          <span>請款狀態</span>
+          <input name="claim_status" value="${escapeAttr(campaign.claim_status || "")}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>公會與外部單位</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>關聯公會</span>
+          <select name="association_id">${associationOptions(campaign.association_id || "")}</select>
+        </label>
+        <label class="form-field">
+          <span>公會活動類型</span>
+          <input name="association_activity_type" list="associationActivityTypeOptions" value="${escapeAttr(campaign.association_activity_type || "")}" placeholder="可自由輸入新類型">
+          <datalist id="associationActivityTypeOptions">${associationActivitySuggestions(campaign.association_activity_type || "")}</datalist>
+        </label>
+        <label class="form-field is-wide">
+          <span>外包廠商文字清單</span>
+          <textarea name="vendors" placeholder="每行一筆，正式多廠商管理請使用「合作廠商 / 交付物」">${escapeHtml(vendorsText)}</textarea>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>期間與備註</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>預計開始</span>
+          <input name="planned_start" type="date" value="${escapeAttr(formatDate(campaign.planned_start))}">
+        </label>
+        <label class="form-field">
+          <span>預計結束</span>
+          <input name="planned_end" type="date" value="${escapeAttr(formatDate(campaign.planned_end))}">
+        </label>
+        <label class="form-field">
+          <span>實際開始</span>
+          <input name="actual_start" type="date" value="${escapeAttr(formatDate(campaign.actual_start))}">
+        </label>
+        <label class="form-field">
+          <span>實際結束</span>
+          <input name="actual_end" type="date" value="${escapeAttr(formatDate(campaign.actual_end))}">
+        </label>
+        <label class="form-field is-wide">
+          <span>備註</span>
+          <textarea name="notes">${escapeHtml(campaign.notes || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function parseCampaignVendors(value = "") {
+  return String(value)
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function numericOrNull(value) {
+  return value === "" || value == null ? null : Number(value);
+}
+
+function campaignPayload(values = {}) {
+  return {
+    name: values.name.trim(),
+    association_id: values.association_id || null,
+    association_activity_type: values.association_activity_type?.trim() || null,
+    budget: numericOrNull(values.budget),
+    actual_spend: numericOrNull(values.actual_spend),
+    subsidy_planned: numericOrNull(values.subsidy_planned),
+    subsidy_received: numericOrNull(values.subsidy_received),
+    midea_budget_code: values.midea_budget_code?.trim() || null,
+    payment_status: values.payment_status?.trim() || null,
+    claim_status: values.claim_status?.trim() || null,
+    flight_cost: numericOrNull(values.flight_cost),
+    purpose: values.purpose?.trim() || null,
+    status: values.status || "預計規劃",
+    priority: values.priority || "中",
+    vendors: parseCampaignVendors(values.vendors),
+    owner: values.owner?.trim() || null,
+    owner_unit: values.owner_unit?.trim() || null,
+    planned_start: values.planned_start || null,
+    planned_end: values.planned_end || null,
+    actual_start: values.actual_start || null,
+    actual_end: values.actual_end || null,
+    notes: values.notes?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+async function nextCampaignSortOrder() {
+  const rows = await safeGET("marketing_campaigns?select=sort_order&sort_order=not.is.null&order=sort_order.asc&limit=1", null);
+  const remoteMin = Array.isArray(rows) && rows[0]?.sort_order != null ? Number(rows[0].sort_order) : NaN;
+  if (Number.isFinite(remoteMin)) return remoteMin - 10;
+
+  const localSorts = [...state.data.campaigns, ...state.data.archivedCampaigns]
+    .map((campaign) => Number(campaign.sort_order))
+    .filter(Number.isFinite);
+  if (localSorts.length) return Math.min(...localSorts) - 10;
+  return 990;
+}
+
+function openCreateCampaignModal() {
+  openCampaignModal();
+}
+
+function openEditCampaignModal(id) {
+  const campaign = findCampaign(id);
+  if (!campaign) return;
+  openCampaignModal(campaign);
+}
+
+function openCampaignModal(campaign = {}) {
+  const isEdit = Boolean(campaign.id);
+  openModal(isEdit ? "編輯行銷案主檔" : "新增行銷案主檔", campaignFormHtml(campaign), {
+    submitLabel: isEdit ? "儲存變更" : "建立行銷案",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = campaignPayload(values);
+      if (!payload.name) throw new Error("請輸入專案名稱。");
+
+      if (isEdit) {
+        await api("PATCH", `marketing_campaigns?id=eq.${encodeURIComponent(campaign.id)}`, payload);
+      } else {
+        payload.sort_order = await nextCampaignSortOrder();
+        await api("POST", "marketing_campaigns", payload);
+      }
+
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openArchiveCampaignModal(id) {
+  const campaign = state.data.campaigns.find((item) => String(item.id) === String(id));
+  if (!campaign) return;
+
+  openModal("封存行銷案", `
     <p class="empty-note">
-      目前 v2 不直接新增行銷案，避免測試資料寫入 v1 正式平台共用的 marketing_campaigns。等 v2 全部完成並確認整合 v1 後，再開啟這個新增流程。
+      確定要封存「${escapeHtml(campaign.name || "未命名行銷案")}」嗎？封存後會從進行中列表與新增廠商合作下拉移除，但既有廠商、交付物、費用與歷史資料會保留。
     </p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>封存原因</span>
+        <textarea name="archive_reason" placeholder="例如：專案已結案、年度計畫調整、暫停執行"></textarea>
+      </label>
+    </div>
   `, {
-    submitLabel: "知道了",
-    hideCancel: true,
-    onSubmit: async () => closeModal(),
+    submitLabel: "確認封存",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaigns?id=eq.${encodeURIComponent(id)}`, {
+        archived_at: nowIso(),
+        archived_by: state.auth.email,
+        archive_reason: values.archive_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+    },
   });
 }
 
@@ -3227,7 +3483,7 @@ function dailyGreetingMessage() {
 function primaryActionLabel(meta) {
   if (state.role === "sales") return "提出素材需求";
   if (state.role === "executive") return "查看待決策";
-  if (state.role === "marketing" && state.page === "campaigns") return "v2 暫不新增行銷案";
+  if (state.role === "marketing" && state.page === "campaigns") return "新增行銷案";
   if (state.role === "marketing" && state.page === "requests") return "新增需求單";
   if (state.role === "marketing" && state.page === "vendors") return "新增廠商合作";
   if (state.role === "marketing" && state.page === "knowledge") return "新增知識條目";
@@ -3586,7 +3842,7 @@ document.getElementById("primaryAction").addEventListener("click", () => {
   }
 
   if (state.role === "marketing" && state.page === "campaigns") {
-    openCampaignCreationDeferredModal();
+    openCreateCampaignModal();
     return;
   }
 
@@ -3601,7 +3857,7 @@ document.getElementById("primaryAction").addEventListener("click", () => {
   }
 
   if (state.role === "marketing") {
-    openCampaignCreationDeferredModal();
+    openCreateCampaignModal();
     return;
   }
 
@@ -3636,6 +3892,8 @@ document.addEventListener("click", (event) => {
   if (action === "create-marketing-resource") openCreateMarketingResourceModal();
   if (action === "edit-marketing-resource") openEditMarketingResourceModal(id);
   if (action === "archive-marketing-resource") openArchiveMarketingResourceModal(id);
+  if (action === "edit-campaign") openEditCampaignModal(id);
+  if (action === "archive-campaign") openArchiveCampaignModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 
@@ -3791,7 +4049,8 @@ async function loadExistingData() {
 }
 
 async function loadMarketingCampaigns() {
-  const withArchive = await safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,archived_at,archived_by,archive_reason,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100", null);
+  const fullSelect = "id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,midea_budget_code,payment_status,claim_status,flight_cost,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,owner,owner_unit,vendors,association_id,association_activity_type,sort_order,archived_at,archived_by,archive_reason,created_at";
+  const withArchive = await safeGET(`marketing_campaigns?select=${fullSelect}&order=sort_order.asc.nullslast,created_at.desc&limit=100`, null);
   if (Array.isArray(withArchive)) return withArchive;
 
   return safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100");

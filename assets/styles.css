@@ -862,6 +862,25 @@ h1 {
   gap: 14px;
 }
 
+.form-section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f9fcff;
+}
+
+.form-section + .form-section {
+  margin-top: 14px;
+}
+
+.form-section h3 {
+  margin: 0;
+  color: #133755;
+  font-size: 15px;
+}
+
 .form-field {
   display: grid;
   gap: 7px;

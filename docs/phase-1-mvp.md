@@ -158,6 +158,7 @@
    - 決策：v1 暫時不排除已封存行銷案，直到 v2 正式接手行銷案新增 / 編輯再處理 v1 顯示與入口。
    - Batch 12 動工前草案：`BATCH12_CAMPAIGN_CRUD_DRAFT.md`。此批會開始寫入 v1/v2 共用的 `marketing_campaigns`，需先讓 Claude 審查 v1 刪除風險、欄位對齊與手機操作。
    - Batch 12A：v1 已停用 `marketing_campaigns` 真刪除，避免刪除行銷案時二層 cascade 清掉 v2 廠商合作與交付物。v1 新增 / 編輯暫時保留，供尚未搬遷的任務、預算、文件、風險、成效子模組使用。
+   - Batch 12B：v2 已開放行銷案主檔新增 / 編輯 / 封存；不做真刪除。欄位對齊 v1 `saveCampaign()`，新增時沿用 v1 `sort_order` 最小值減 10 的排序規則，公會活動類型保留自由文字輸入。此批待 Claude 複查。
 
 ## 暫緩到 Phase 2
 
