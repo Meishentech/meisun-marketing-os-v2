@@ -836,6 +836,8 @@ h1 {
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 24px 80px rgba(12, 45, 72, .22);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-header {
@@ -856,6 +858,7 @@ h1 {
 }
 
 .modal-body {
+  flex: 1 1 auto;
   max-height: calc(100vh - 132px);
   overflow: auto;
   padding: 18px;
@@ -936,10 +939,16 @@ h1 {
 }
 
 .modal-actions {
+  position: sticky;
+  bottom: -18px;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 18px;
+  margin: 18px -18px -18px;
+  padding: 14px 18px 18px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, .96);
+  backdrop-filter: blur(8px);
 }
 
 @media (max-width: 1120px) {
@@ -1235,8 +1244,11 @@ h1 {
   }
 
   .modal-actions {
+    bottom: -14px;
     display: grid;
     grid-template-columns: 1fr;
+    margin: 18px -14px -14px;
+    padding: 12px 14px 14px;
   }
 
   .modal-actions .secondary-button {
