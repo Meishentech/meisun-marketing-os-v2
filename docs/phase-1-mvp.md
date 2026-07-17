@@ -160,6 +160,8 @@
    - Batch 12A：v1 已停用 `marketing_campaigns` 真刪除，避免刪除行銷案時二層 cascade 清掉 v2 廠商合作與交付物。v1 新增 / 編輯暫時保留，供尚未搬遷的任務、預算、文件、風險、成效子模組使用。
    - Batch 12B：v2 已開放行銷案主檔新增 / 編輯 / 封存；不做真刪除。欄位對齊 v1 `saveCampaign()`，新增時沿用 v1 `sort_order` 最小值減 10 的排序規則，公會活動類型保留自由文字輸入。Claude 複查通過，記錄於 `CLAUDE_CODE_REVIEW_BATCH12B_RESULT.md`。
    - Batch 13A 動工前草案：`BATCH13_IMPORT_PRECHECK_DRAFT.md`。Claude 草案審查：`CLAUDE_CODE_REVIEW_BATCH13A_DRAFT.md`。採納結論：先替 v1 兩支會整批 DELETE 重建資料的匯入腳本加第二層破壞性旗標，並只停用 v1 文件真刪除；任務 / 預算刪除暫時保留到 Batch 13B。
+   - Batch 13A 實作複查：`CLAUDE_CODE_REVIEW_BATCH13A_V1_RESULT.md`。兩支腳本防護、文件刪除停用、任務 / 預算刪除刻意保留、文件編輯不受影響，全部驗證通過。
+   - 決策：V1 可以朝資料管理入口逐步停用前進，所有行銷管理資料未來轉到 V2 管理。完整路線記錄於 `V1_DISABLE_AND_FULL_V2_MIGRATION_PLAN.md`。
 
 ## 暫緩到 Phase 2
 
