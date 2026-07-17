@@ -783,12 +783,17 @@ h1 {
   color: #163d5d;
 }
 
-.mini-card p {
+.mini-card p,
+.mini-card-body {
   margin: 0;
   color: var(--muted);
   font-size: 14px;
   line-height: 1.55;
   font-weight: 700;
+}
+
+.mini-card-body .action-group {
+  margin-top: 10px;
 }
 
 .toolbar {

@@ -163,6 +163,9 @@
    - Batch 13A 實作複查：`CLAUDE_CODE_REVIEW_BATCH13A_V1_RESULT.md`。兩支腳本防護、文件刪除停用、任務 / 預算刪除刻意保留、文件編輯不受影響，全部驗證通過。
    - 決策：V1 可以朝資料管理入口逐步停用前進，所有行銷管理資料未來轉到 V2 管理。完整路線記錄於 `V1_DISABLE_AND_FULL_V2_MIGRATION_PLAN.md`。
    - Batch 13B 正式規格：`BATCH13B_CAMPAIGN_DETAIL_SPEC.md`。採用「詳情頁 + 巡檢卡片」混合架構；巡檢列表唯讀，點列進詳情頁編輯；即將到期任務定義為未完成、未取消、逾期或 7 天內到期；待付款項目排除已付款、不需付款與已取消項目。
+   - Batch 13B SQL：`phase1_batch13b_campaign_detail_lifecycle.sql`。任務 / 預算採 `cancelled_*`，文件採 `archived_*`；`all_expenses_overview` 僅排除已取消預算項目，保留歷史行銷案費用。
+   - Batch 13B 前端：v2 行銷專案管理已新增跨專案巡檢卡片、單一專案詳情頁、任務新增 / 編輯 / 取消、預算項目新增 / 編輯 / 取消、文件新增版本 / 編輯資訊 / 封存 / 簽名網址開啟。
+   - Batch 13B v1 凍結：v2 接手任務與預算項目後，v1 `delTask()` / `delBudgetItem()` 真刪除同步停用；後續由 v2 以取消方式保留歷史紀錄。
 
 ## 暫緩到 Phase 2
 

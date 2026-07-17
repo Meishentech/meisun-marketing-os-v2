@@ -20,6 +20,12 @@ const state = {
     campaignVendors: [],
     cancelledCampaignVendors: [],
     cancelledDeliverables: [],
+    campaignTasks: [],
+    cancelledCampaignTasks: [],
+    campaignBudgetItems: [],
+    cancelledCampaignBudgetItems: [],
+    campaignDocuments: [],
+    archivedCampaignDocuments: [],
     vendors: [],
     vendorDocuments: [],
     salesRequests: [],
@@ -30,10 +36,13 @@ const state = {
     expenses: [],
   },
   dataStatus: "loading",
+  campaignDetailId: "",
+  campaignInspectionMode: "",
 };
 
 let modalSubmitHandler = null;
 const RESOURCE_FILE_MAX_BYTES = 200 * 1024 * 1024;
+const CAMPAIGN_DOCUMENT_FILE_MAX_BYTES = 20 * 1024 * 1024;
 
 const roleAliases = {
   executive: "executive",
@@ -178,7 +187,7 @@ const pages = {
         ["高重要性", "4", "空調展、公會講座、白皮書、招標工具"],
         ["待補資料", "6", "素材、預算或成效未完整"],
       ],
-      sections: [projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()],
+      sections: [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()],
     },
     budget: {
       title: "預算 / 補助 / 付款",
@@ -386,6 +395,293 @@ function archivedCampaignsSection() {
   };
 }
 
+function campaignInspectionCardsSection() {
+  const upcomingTasks = upcomingCampaignTasks();
+  const pendingPayments = pendingCampaignPayments();
+  const activeDocuments = state.data.campaignDocuments.length;
+
+  return {
+    type: "cards",
+    title: "跨專案巡檢",
+    wide: true,
+    cards: [
+      [
+        "即將到期任務",
+        `${upcomingTasks.length} 件需確認<br>${actionGroup([actionButton("查看任務", "view-campaign-inspection", "tasks", "is-primary", !upcomingTasks.length)])}`,
+      ],
+      [
+        "待付款預算",
+        `${pendingPayments.length} 筆未結清<br>${actionGroup([actionButton("查看付款", "view-campaign-inspection", "payments", "is-primary", !pendingPayments.length)])}`,
+      ],
+      [
+        "專案文件",
+        `${activeDocuments} 份已建檔<br>${actionGroup([actionButton("查看文件", "view-campaign-inspection", "documents", "is-primary", !activeDocuments)])}`,
+      ],
+      [
+        "管理方式",
+        "巡檢清單只做快速定位；實際新增、編輯、取消都回到單一專案詳情頁處理。",
+      ],
+    ],
+  };
+}
+
+function campaignInspectionSections() {
+  const mode = state.campaignInspectionMode;
+  const titleMap = {
+    tasks: "即將到期任務",
+    payments: "待付款預算",
+    documents: "專案文件巡檢",
+  };
+  return [
+    {
+      type: "cards",
+      title: titleMap[mode] || "跨專案巡檢",
+      wide: true,
+      cards: [["返回行銷專案管理", actionGroup([actionButton("返回列表", "back-campaign-list", "", "is-primary")])]],
+    },
+    mode === "payments" ? paymentInspectionSection() : mode === "documents" ? documentInspectionSection() : taskInspectionSection(),
+  ];
+}
+
+function taskInspectionSection() {
+  const rows = upcomingCampaignTasks().map((task) => [
+    campaignName(task.campaign_id),
+    task.task_name || "未命名任務",
+    formatDate(task.planned_end) || "未填",
+    tag(task.status || "未開始", statusTone(task.status || "未開始")),
+    task.owner || "未填",
+    actionGroup([actionButton("進入專案", "view-campaign-detail", task.campaign_id, "is-primary")]),
+  ]);
+
+  return {
+    type: "table",
+    title: "即將到期 / 已逾期任務",
+    wide: true,
+    headers: ["專案", "任務", "到期日", "狀態", "負責人", "操作"],
+    rows: rows.length ? rows : [["目前無到期任務", "無", "無", tag("正常", "green"), "無", "無"]],
+  };
+}
+
+function paymentInspectionSection() {
+  const rows = pendingCampaignPayments().map((item) => [
+    campaignName(item.campaign_id),
+    item.item_name || "未命名費用",
+    budgetAmountText(item),
+    tag(item.payment_status || "未請款", statusTone(item.payment_status || "未請款")),
+    formatDate(item.payment_date) || "未填",
+    actionGroup([actionButton("進入專案", "view-campaign-detail", item.campaign_id, "is-primary")]),
+  ]);
+
+  return {
+    type: "table",
+    title: "待付款 / 未請款預算項目",
+    wide: true,
+    headers: ["專案", "費用項目", "金額", "付款狀態", "付款日", "操作"],
+    rows: rows.length ? rows : [["目前無待付款項目", "無", "無", tag("正常", "green"), "無", "無"]],
+  };
+}
+
+function documentInspectionSection() {
+  const rows = state.data.campaignDocuments.slice(0, 80).map((document) => [
+    campaignName(document.campaign_id),
+    document.title || document.file_name || "未命名文件",
+    document.doc_type || "其他",
+    document.version_note || "未填",
+    formatDate(document.uploaded_at) || "未填",
+    actionGroup([
+      actionButton("進入專案", "view-campaign-detail", document.campaign_id, "is-primary"),
+      document.file_path ? actionButton("開啟", "open-campaign-document", document.id) : disabledInlineAction("無檔案"),
+    ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "專案文件巡檢",
+    wide: true,
+    headers: ["專案", "文件", "類型", "版本", "上傳日", "操作"],
+    rows: rows.length ? rows : [["目前無文件", "無", "無", "無", "無", "無"]],
+  };
+}
+
+function campaignDetailSections() {
+  const campaign = findCampaign(state.campaignDetailId);
+  if (!campaign) {
+    state.campaignDetailId = "";
+    return [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()];
+  }
+
+  return [
+    campaignDetailHeaderSection(campaign),
+    campaignDetailActionCardsSection(campaign),
+    campaignTasksSection(campaign),
+    cancelledCampaignTasksSection(campaign),
+    campaignBudgetItemsSection(campaign),
+    cancelledCampaignBudgetItemsSection(campaign),
+    campaignDocumentsSection(campaign),
+    archivedCampaignDocumentsSection(campaign),
+  ];
+}
+
+function campaignDetailHeaderSection(campaign = {}) {
+  return {
+    type: "cards",
+    title: `專案詳情：${campaign.name || "未命名行銷案"}`,
+    wide: true,
+    cards: [
+      ["返回", actionGroup([actionButton("返回列表", "back-campaign-list", "", "is-primary")])],
+      ["執行狀態", `${tag(campaign.status || "未填", campaignStatusTone(campaign.status))} ${tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中"))}`],
+      ["期間", campaignDateRange(campaign)],
+      ["預算", `${formatMoney(campaign.budget)} / 實支 ${formatMoney(campaign.actual_spend)}`],
+    ],
+  };
+}
+
+function campaignDetailActionCardsSection(campaign = {}) {
+  return {
+    type: "cards",
+    title: "新增專案子項目",
+    wide: true,
+    cards: [
+      ["新增任務", actionGroup([actionButton("新增任務", "create-campaign-task", campaign.id, "is-primary")])],
+      ["新增預算項目", actionGroup([actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary")])],
+      ["新增文件版本", actionGroup([actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary")])],
+      ["資料原則", "取消或封存只會從進行中清單移除，歷史紀錄保留在下方收合區塊。"],
+    ],
+  };
+}
+
+function campaignTasksSection(campaign = {}) {
+  const tasks = campaignTasksFor(campaign.id);
+  const rows = tasks.map((task) => [
+    task.seq ?? "未填",
+    task.task_name || "未命名任務",
+    task.owner || "未填",
+    `${formatDate(task.planned_start) || "未填"} - ${formatDate(task.planned_end) || "未填"}`,
+    tag(task.status || "未開始", statusTone(task.status || "未開始")),
+    `${Number(task.completion_pct || 0)}%`,
+    actionGroup([
+      actionButton("編輯", "edit-campaign-task", task.id, "is-primary"),
+      actionButton("取消", "cancel-campaign-task", task.id, "is-danger"),
+    ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "任務 / 里程碑",
+    wide: true,
+    headers: ["排序", "任務", "負責人", "期間", "狀態", "完成度", "操作"],
+    rows: rows.length ? rows : [["無", "尚未建立任務", "無", "無", tag("未開始", "gray"), "0%", actionButton("新增任務", "create-campaign-task", campaign.id, "is-primary")]],
+  };
+}
+
+function cancelledCampaignTasksSection(campaign = {}) {
+  const rows = state.data.cancelledCampaignTasks
+    .filter((task) => String(task.campaign_id || "") === String(campaign.id || ""))
+    .map((task) => [
+      task.task_name || "未命名任務",
+      tag(task.status || "已取消", "gray"),
+      cancellationMeta(task),
+      task.cancel_reason || "未填寫原因",
+    ]);
+
+  return {
+    type: "details-table",
+    title: `已取消任務（${rows.length}）`,
+    summary: "只讀保留，Phase 1 不做復原。",
+    wide: true,
+    headers: ["任務", "狀態", "取消資訊", "原因"],
+    rows: rows.length ? rows : [["目前沒有已取消任務", tag("無紀錄", "green"), "無", "無"]],
+  };
+}
+
+function campaignBudgetItemsSection(campaign = {}) {
+  const items = campaignBudgetItemsFor(campaign.id);
+  const rows = items.map((item) => [
+    item.seq ?? "未填",
+    item.item_name || "未命名費用",
+    item.budget_nature || "未分類",
+    budgetAmountText(item),
+    tag(item.quote_status || "待報價", statusTone(item.quote_status || "待報價")),
+    tag(item.payment_status || "未請款", statusTone(item.payment_status || "未請款")),
+    actionGroup([
+      actionButton("編輯", "edit-campaign-budget-item", item.id, "is-primary"),
+      actionButton("取消", "cancel-campaign-budget-item", item.id, "is-danger"),
+    ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "預算 / 補助 / 付款項目",
+    wide: true,
+    headers: ["排序", "項目", "性質", "金額", "報價", "付款", "操作"],
+    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未開始", "gray"), tag("未請款", "gray"), actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary")]],
+  };
+}
+
+function cancelledCampaignBudgetItemsSection(campaign = {}) {
+  const rows = state.data.cancelledCampaignBudgetItems
+    .filter((item) => String(item.campaign_id || "") === String(campaign.id || ""))
+    .map((item) => [
+      item.item_name || "未命名費用",
+      budgetAmountText(item),
+      cancellationMeta(item),
+      item.cancel_reason || "未填寫原因",
+    ]);
+
+  return {
+    type: "details-table",
+    title: `已取消預算項目（${rows.length}）`,
+    summary: "已取消項目不納入總支出彙總。",
+    wide: true,
+    headers: ["項目", "金額", "取消資訊", "原因"],
+    rows: rows.length ? rows : [["目前沒有已取消預算項目", "無", "無", "無"]],
+  };
+}
+
+function campaignDocumentsSection(campaign = {}) {
+  const documents = campaignDocumentsFor(campaign.id);
+  const rows = documents.map((document) => [
+    document.doc_type || "其他",
+    document.title || document.file_name || "未命名文件",
+    document.version_note || "未填",
+    document.file_name || "未上傳檔案",
+    formatDate(document.uploaded_at) || "未填",
+    actionGroup([
+      document.file_path ? actionButton("開啟", "open-campaign-document", document.id, "is-primary") : disabledInlineAction("無檔案"),
+      actionButton("編輯", "edit-campaign-document", document.id, "is-primary"),
+      actionButton("封存", "archive-campaign-document", document.id, "is-danger"),
+    ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "文件 / 版本",
+    wide: true,
+    headers: ["類型", "標題", "版本", "檔案", "上傳日", "操作"],
+    rows: rows.length ? rows : [["無", "尚未建立文件", "無", "無", "無", actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary")]],
+  };
+}
+
+function archivedCampaignDocumentsSection(campaign = {}) {
+  const rows = state.data.archivedCampaignDocuments
+    .filter((document) => String(document.campaign_id || "") === String(campaign.id || ""))
+    .map((document) => [
+      document.title || document.file_name || "未命名文件",
+      document.doc_type || "其他",
+      archiveDocumentMeta(document),
+      document.archive_reason || "未填寫原因",
+    ]);
+
+  return {
+    type: "details-table",
+    title: `已封存文件（${rows.length}）`,
+    summary: "只讀保留，Phase 1 不做復原。",
+    wide: true,
+    headers: ["文件", "類型", "封存資訊", "原因"],
+    rows: rows.length ? rows : [["目前沒有已封存文件", "無", "無", "無"]],
+  };
+}
+
 function campaignSummarySection() {
   if (!state.data.campaigns.length) {
     return {
@@ -457,6 +753,7 @@ function formatCampaignRow(campaign, includeActions = false) {
 
   if (includeActions) {
     row.push(actionGroup([
+      actionButton("詳情", "view-campaign-detail", campaign.id, "is-primary"),
       actionButton("編輯", "edit-campaign", campaign.id, "is-primary"),
       actionButton("封存", "archive-campaign", campaign.id, "is-danger"),
     ]));
@@ -1433,6 +1730,126 @@ function activeCampaigns(campaigns = []) {
 
 function archivedCampaigns(campaigns = []) {
   return campaigns.filter((campaign) => Boolean(campaign.archived_at));
+}
+
+function activeCampaignTasks(tasks = state.data.campaignTasks) {
+  return tasks.filter((task) => !task.cancelled_at);
+}
+
+function cancelledCampaignTasks(tasks = state.data.campaignTasks) {
+  return tasks.filter((task) => Boolean(task.cancelled_at));
+}
+
+function activeCampaignBudgetItems(items = state.data.campaignBudgetItems) {
+  return items.filter((item) => !item.cancelled_at);
+}
+
+function cancelledCampaignBudgetItems(items = state.data.campaignBudgetItems) {
+  return items.filter((item) => Boolean(item.cancelled_at));
+}
+
+function activeCampaignDocuments(documents = state.data.campaignDocuments) {
+  return documents.filter((document) => !document.archived_at);
+}
+
+function archivedCampaignDocuments(documents = state.data.campaignDocuments) {
+  return documents.filter((document) => Boolean(document.archived_at));
+}
+
+function campaignTasksFor(campaignId) {
+  return state.data.campaignTasks
+    .filter((task) => String(task.campaign_id || "") === String(campaignId || ""))
+    .sort(sortBySeqThenDate("planned_end"));
+}
+
+function campaignBudgetItemsFor(campaignId) {
+  return state.data.campaignBudgetItems
+    .filter((item) => String(item.campaign_id || "") === String(campaignId || ""))
+    .sort(sortBySeqThenDate("created_at"));
+}
+
+function campaignDocumentsFor(campaignId) {
+  return state.data.campaignDocuments
+    .filter((document) => String(document.campaign_id || "") === String(campaignId || ""))
+    .sort((a, b) => String(b.uploaded_at || b.created_at || "").localeCompare(String(a.uploaded_at || a.created_at || "")));
+}
+
+function sortBySeqThenDate(dateField) {
+  return (a, b) => {
+    const seqA = Number(a.seq);
+    const seqB = Number(b.seq);
+    if (Number.isFinite(seqA) && Number.isFinite(seqB) && seqA !== seqB) return seqA - seqB;
+    if (Number.isFinite(seqA) && !Number.isFinite(seqB)) return -1;
+    if (!Number.isFinite(seqA) && Number.isFinite(seqB)) return 1;
+    return String(a[dateField] || "").localeCompare(String(b[dateField] || ""));
+  };
+}
+
+function localDateString(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function addDaysString(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return localDateString(date);
+}
+
+function upcomingCampaignTasks() {
+  const limit = addDaysString(7);
+  return state.data.campaignTasks
+    .filter((task) => {
+      const due = formatDate(task.planned_end);
+      const status = task.status || "";
+      return due && due <= limit && !["已完成", "完成", "結案"].includes(status);
+    })
+    .sort((a, b) => String(a.planned_end || "").localeCompare(String(b.planned_end || "")));
+}
+
+function pendingCampaignPayments() {
+  return state.data.campaignBudgetItems
+    .filter((item) => {
+      const paymentStatus = item.payment_status || "未請款";
+      return !["已付款", "不需付款"].includes(paymentStatus) && hasBudgetAmount(item);
+    })
+    .sort((a, b) => String(a.payment_date || "9999-12-31").localeCompare(String(b.payment_date || "9999-12-31")));
+}
+
+function hasBudgetAmount(item = {}) {
+  return Number(item.amount_twd || 0) > 0 || Number(item.amount_rmb || 0) > 0;
+}
+
+function budgetAmountText(item = {}) {
+  const twd = Number(item.amount_twd || 0);
+  const rmb = Number(item.amount_rmb || 0);
+  const parts = [];
+  if (twd) parts.push(`NT$ ${twd.toLocaleString("zh-Hant-TW")}`);
+  if (rmb) parts.push(`RMB ${rmb.toLocaleString("zh-Hant-TW")}`);
+  return parts.length ? parts.join(" / ") : "未填";
+}
+
+function archiveDocumentMeta(document = {}) {
+  const archivedBy = document.archived_by ? formatRequester(document.archived_by) : "未記錄封存人";
+  const archivedAt = document.archived_at ? formatDate(document.archived_at) : "未記錄時間";
+  return `${archivedAt}<br>${archivedBy}`;
+}
+
+function findCampaignTask(id) {
+  return [...state.data.campaignTasks, ...state.data.cancelledCampaignTasks].find((task) => String(task.id || "") === String(id || ""));
+}
+
+function findCampaignBudgetItem(id) {
+  return [...state.data.campaignBudgetItems, ...state.data.cancelledCampaignBudgetItems].find((item) => String(item.id || "") === String(id || ""));
+}
+
+function findCampaignDocument(id) {
+  return [...state.data.campaignDocuments, ...state.data.archivedCampaignDocuments].find((document) => String(document.id || "") === String(id || ""));
+}
+
+function clearCampaignDrilldown() {
+  state.campaignDetailId = "";
+  state.campaignInspectionMode = "";
 }
 
 function archiveCampaignMeta(campaign = {}) {
@@ -3355,6 +3772,421 @@ function openArchiveCampaignModal(id) {
   });
 }
 
+function campaignTaskFormHtml(task = {}) {
+  return `
+    <div class="form-grid">
+      <label class="form-field">
+        <span>排序</span>
+        <input name="seq" type="number" step="1" value="${escapeAttr(task.seq ?? "")}">
+      </label>
+      <label class="form-field is-wide">
+        <span>任務名稱</span>
+        <input name="task_name" value="${escapeAttr(task.task_name || "")}" required>
+      </label>
+      <label class="form-field">
+        <span>負責人</span>
+        <input name="owner" value="${escapeAttr(task.owner || state.auth.email || "")}">
+      </label>
+      <label class="form-field">
+        <span>狀態</span>
+        <select name="status">
+          ${selectOptions([["未開始", "未開始"], ["進行中", "進行中"], ["待確認", "待確認"], ["已完成", "已完成"]], task.status || "未開始")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>預計開始</span>
+        <input name="planned_start" type="date" value="${escapeAttr(formatDate(task.planned_start))}">
+      </label>
+      <label class="form-field">
+        <span>預計結束</span>
+        <input name="planned_end" type="date" value="${escapeAttr(formatDate(task.planned_end))}">
+      </label>
+      <label class="form-field">
+        <span>完成度 %</span>
+        <input name="completion_pct" type="number" min="0" max="100" step="1" value="${escapeAttr(task.completion_pct ?? 0)}">
+      </label>
+      <label class="form-field is-wide">
+        <span>預期產出</span>
+        <textarea name="expected_output">${escapeHtml(task.expected_output || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>備註</span>
+        <textarea name="notes">${escapeHtml(task.notes || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
+function campaignTaskPayload(values = {}, campaignId = "") {
+  return {
+    campaign_id: campaignId,
+    seq: numericOrNull(values.seq) ?? 0,
+    task_name: values.task_name.trim(),
+    owner: values.owner?.trim() || null,
+    planned_start: values.planned_start || null,
+    planned_end: values.planned_end || null,
+    status: values.status || "未開始",
+    completion_pct: numericOrNull(values.completion_pct) ?? 0,
+    expected_output: values.expected_output?.trim() || null,
+    notes: values.notes?.trim() || null,
+  };
+}
+
+function openCreateCampaignTaskModal(campaignId) {
+  const campaign = findCampaign(campaignId);
+  if (!campaign) return;
+  openModal("新增專案任務", campaignTaskFormHtml({ owner: state.auth.email }), {
+    submitLabel: "建立任務",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "marketing_campaign_tasks", campaignTaskPayload(values, campaignId));
+      closeModal();
+      state.campaignDetailId = campaignId;
+      await loadExistingData();
+    },
+  });
+}
+
+function openEditCampaignTaskModal(id) {
+  const task = findCampaignTask(id);
+  if (!task) return;
+  openModal("編輯專案任務", campaignTaskFormHtml(task), {
+    submitLabel: "儲存變更",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_tasks?id=eq.${encodeURIComponent(id)}`, campaignTaskPayload(values, task.campaign_id));
+      closeModal();
+      state.campaignDetailId = task.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelCampaignTaskModal(id) {
+  const task = findCampaignTask(id);
+  if (!task) return;
+  openModal("取消專案任務", `
+    <p class="empty-note">確定要取消「${escapeHtml(task.task_name || "未命名任務")}」嗎？取消後會保留在歷史紀錄中，不會直接刪除。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_tasks?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+      });
+      closeModal();
+      state.campaignDetailId = task.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function campaignBudgetItemFormHtml(item = {}) {
+  return `
+    <div class="form-grid">
+      <label class="form-field">
+        <span>排序</span>
+        <input name="seq" type="number" step="1" value="${escapeAttr(item.seq ?? "")}">
+      </label>
+      <label class="form-field is-wide">
+        <span>項目名稱</span>
+        <input name="item_name" value="${escapeAttr(item.item_name || "")}" required>
+      </label>
+      <label class="form-field">
+        <span>費用性質</span>
+        <input name="budget_nature" value="${escapeAttr(item.budget_nature || "")}" placeholder="例如：場地、裝潢、印刷、補助">
+      </label>
+      <label class="form-field">
+        <span>台幣金額</span>
+        <input name="amount_twd" type="number" min="0" step="1" value="${escapeAttr(item.amount_twd ?? "")}">
+      </label>
+      <label class="form-field">
+        <span>匯率</span>
+        <input name="exchange_rate" type="number" min="0" step="0.0001" value="${escapeAttr(item.exchange_rate ?? "")}">
+      </label>
+      <label class="form-field">
+        <span>人民幣金額</span>
+        <input name="amount_rmb" type="number" min="0" step="1" value="${escapeAttr(item.amount_rmb ?? "")}">
+      </label>
+      <label class="form-field">
+        <span>報價狀態</span>
+        <select name="quote_status">
+          ${selectOptions([["待報價", "待報價"], ["待拆價", "待拆價"], ["已報價", "已報價"], ["待核定", "待核定"], ["已核定", "已核定"]], item.quote_status || "待報價")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>付款狀態</span>
+        <select name="payment_status">
+          ${selectOptions([["未請款", "未請款"], ["待付款", "待付款"], ["已付款", "已付款"], ["不需付款", "不需付款"]], item.payment_status || "未請款")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>付款日</span>
+        <input name="payment_date" type="date" value="${escapeAttr(formatDate(item.payment_date))}">
+      </label>
+      <label class="form-field is-wide">
+        <span>估算依據 / 備註</span>
+        <textarea name="basis_note">${escapeHtml(item.basis_note || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
+function campaignBudgetItemPayload(values = {}, campaignId = "") {
+  return {
+    campaign_id: campaignId,
+    seq: numericOrNull(values.seq) ?? 0,
+    item_name: values.item_name.trim(),
+    budget_nature: values.budget_nature?.trim() || null,
+    amount_twd: numericOrNull(values.amount_twd),
+    exchange_rate: numericOrNull(values.exchange_rate),
+    amount_rmb: numericOrNull(values.amount_rmb),
+    basis_note: values.basis_note?.trim() || null,
+    quote_status: values.quote_status || "待報價",
+    payment_status: values.payment_status || "未請款",
+    payment_date: values.payment_date || null,
+  };
+}
+
+function openCreateCampaignBudgetItemModal(campaignId) {
+  const campaign = findCampaign(campaignId);
+  if (!campaign) return;
+  openModal("新增預算項目", campaignBudgetItemFormHtml(), {
+    submitLabel: "建立預算項目",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "marketing_campaign_budget_items", campaignBudgetItemPayload(values, campaignId));
+      closeModal();
+      state.campaignDetailId = campaignId;
+      await loadExistingData();
+    },
+  });
+}
+
+function openEditCampaignBudgetItemModal(id) {
+  const item = findCampaignBudgetItem(id);
+  if (!item) return;
+  openModal("編輯預算項目", campaignBudgetItemFormHtml(item), {
+    submitLabel: "儲存變更",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_budget_items?id=eq.${encodeURIComponent(id)}`, campaignBudgetItemPayload(values, item.campaign_id));
+      closeModal();
+      state.campaignDetailId = item.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelCampaignBudgetItemModal(id) {
+  const item = findCampaignBudgetItem(id);
+  if (!item) return;
+  openModal("取消預算項目", `
+    <p class="empty-note">確定要取消「${escapeHtml(item.item_name || "未命名費用")}」嗎？取消後不會納入總支出彙總，但會保留歷史紀錄。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_budget_items?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+      });
+      closeModal();
+      state.campaignDetailId = item.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function campaignDocumentTypeOptions() {
+  return [
+    ["報價單", "報價單"],
+    ["合約", "合約"],
+    ["設計稿", "設計稿"],
+    ["印刷檔", "印刷檔"],
+    ["施工照片", "施工照片"],
+    ["完工照片", "完工照片"],
+    ["攤位設計圖", "攤位設計圖"],
+    ["大會文件", "大會文件"],
+    ["廠商資料", "廠商資料"],
+    ["其他", "其他"],
+  ];
+}
+
+function campaignDocumentFormHtml(document = {}, isCreate = false) {
+  const fileLabel = document.file_path ? (document.file_name || document.file_path) : "尚未上傳檔案";
+  return `
+    <div class="form-grid">
+      <label class="form-field">
+        <span>文件類型</span>
+        <select name="doc_type">${selectOptions(campaignDocumentTypeOptions(), document.doc_type || "其他")}</select>
+      </label>
+      <label class="form-field is-wide">
+        <span>文件標題</span>
+        <input name="title" value="${escapeAttr(document.title || "")}" required>
+      </label>
+      <label class="form-field">
+        <span>版本註記</span>
+        <input name="version_note" value="${escapeAttr(document.version_note || "")}" placeholder="例如：v1、廠商報價初版、核定版">
+      </label>
+      <label class="form-field is-wide">
+        <span>備註</span>
+        <textarea name="notes">${escapeHtml(document.notes || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>目前檔案</span>
+        <input value="${escapeAttr(fileLabel)}" readonly>
+      </label>
+      ${isCreate ? `
+        <label class="form-field is-wide">
+          <span>上傳文件</span>
+          <input name="document_file" type="file" required>
+        </label>
+      ` : ""}
+    </div>
+  `;
+}
+
+function campaignDocumentPayload(values = {}, campaignId = "") {
+  return {
+    campaign_id: campaignId,
+    doc_type: values.doc_type || "其他",
+    title: values.title.trim(),
+    version_note: values.version_note?.trim() || null,
+    notes: values.notes?.trim() || null,
+  };
+}
+
+function openCreateCampaignDocumentModal(campaignId) {
+  const campaign = findCampaign(campaignId);
+  if (!campaign) return;
+  openModal("新增專案文件版本", campaignDocumentFormHtml({}, true), {
+    submitLabel: "建立文件",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const file = form.elements.document_file?.files?.[0] || null;
+      if (!file) throw new Error("請選擇要上傳的文件。");
+      if (file.size > CAMPAIGN_DOCUMENT_FILE_MAX_BYTES) {
+        throw new Error(`檔案超過上傳上限 ${formatFileSize(CAMPAIGN_DOCUMENT_FILE_MAX_BYTES)}，請壓縮後再上傳。`);
+      }
+
+      let uploadedPath = "";
+      try {
+        uploadedPath = await uploadStorageFile("campaign-documents", file);
+        await api("POST", "marketing_campaign_documents", {
+          ...campaignDocumentPayload(values, campaignId),
+          file_path: uploadedPath,
+          file_name: file.name,
+        });
+      } catch (error) {
+        if (uploadedPath) {
+          try {
+            await deleteStorageFile("campaign-documents", uploadedPath);
+          } catch (cleanupError) {
+            console.warn("campaign document rollback failed", cleanupError);
+          }
+        }
+        throw error;
+      }
+
+      closeModal();
+      state.campaignDetailId = campaignId;
+      await loadExistingData();
+    },
+  });
+}
+
+function openEditCampaignDocumentModal(id) {
+  const document = findCampaignDocument(id);
+  if (!document) return;
+  openModal("編輯專案文件資訊", campaignDocumentFormHtml(document, false), {
+    submitLabel: "儲存變更",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_documents?id=eq.${encodeURIComponent(id)}`, campaignDocumentPayload(values, document.campaign_id));
+      closeModal();
+      state.campaignDetailId = document.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function openArchiveCampaignDocumentModal(id) {
+  const document = findCampaignDocument(id);
+  if (!document) return;
+  openModal("封存專案文件", `
+    <p class="empty-note">確定要封存「${escapeHtml(document.title || document.file_name || "未命名文件")}」嗎？檔案與資料列會保留，但不再出現在目前文件清單。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>封存原因（選填）</span>
+        <textarea name="archive_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認封存",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_documents?id=eq.${encodeURIComponent(id)}`, {
+        archived_at: nowIso(),
+        archived_by: state.auth.email,
+        archive_reason: values.archive_reason?.trim() || null,
+      });
+      closeModal();
+      state.campaignDetailId = document.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+async function openCampaignDocumentFile(id, button) {
+  const document = findCampaignDocument(id);
+  if (!document?.file_path) return;
+
+  const popup = window.open("about:blank", "_blank");
+  if (popup) popup.opener = null;
+  const originalText = button?.textContent || "開啟";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "產生連結...";
+  }
+
+  try {
+    const signedUrl = await getSignedUrl("campaign-documents", document.file_path);
+    if (popup) {
+      popup.location.href = signedUrl;
+    } else {
+      window.open(signedUrl, "_blank", "noopener");
+    }
+  } catch (error) {
+    if (popup) popup.close();
+    console.warn("campaign document open failed", error);
+    alert(error.message || "無法開啟文件，請稍後再試。");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
 function openApprovalReviewModal(id) {
   const request = state.data.approvalRequests.find((item) => item.id === id);
   if (!request) return;
@@ -3681,7 +4513,7 @@ function buildCurrentSections(page) {
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:decisions": [decisionListSection(), approvalFlowSection()],
     "marketing:dashboard": [campaignSummarySection(), marketingWorklistSection(), marketingTodoSection()],
-    "marketing:campaigns": [projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()],
+    "marketing:campaigns": campaignPageSections(),
     "marketing:budget": [budgetSection(), subsidySection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
@@ -3699,6 +4531,12 @@ function buildCurrentSections(page) {
   return dynamicSections[key] || page.sections;
 }
 
+function campaignPageSections() {
+  if (state.campaignDetailId) return campaignDetailSections();
+  if (state.campaignInspectionMode) return campaignInspectionSections();
+  return [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection(), campaignDetailCardsSection()];
+}
+
 function renderNav(navItems) {
   const nav = document.getElementById("navList");
   nav.innerHTML = navItems.map(([id, label]) => `
@@ -3708,6 +4546,7 @@ function renderNav(navItems) {
   nav.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => {
       state.page = button.dataset.page;
+      clearCampaignDrilldown();
       render();
     });
   });
@@ -3787,7 +4626,7 @@ function renderSection(section) {
           ${section.cards.map(([title, body]) => `
             <div class="mini-card">
               <h3>${title}</h3>
-              <p>${body}</p>
+              <div class="mini-card-body">${body}</div>
             </div>
           `).join("")}
         </div>
@@ -3818,6 +4657,7 @@ document.querySelectorAll(".role-button").forEach((button) => {
     if (!state.auth.canSwitchRoles && button.dataset.role !== state.role) return;
     state.role = button.dataset.role;
     state.page = "dashboard";
+    clearCampaignDrilldown();
     render();
   });
 });
@@ -3842,6 +4682,7 @@ document.getElementById("primaryAction").addEventListener("click", () => {
   }
 
   if (state.role === "marketing" && state.page === "campaigns") {
+    clearCampaignDrilldown();
     openCreateCampaignModal();
     return;
   }
@@ -3892,8 +4733,33 @@ document.addEventListener("click", (event) => {
   if (action === "create-marketing-resource") openCreateMarketingResourceModal();
   if (action === "edit-marketing-resource") openEditMarketingResourceModal(id);
   if (action === "archive-marketing-resource") openArchiveMarketingResourceModal(id);
+  if (action === "view-campaign-detail") {
+    state.page = "campaigns";
+    state.campaignInspectionMode = "";
+    state.campaignDetailId = id;
+    render();
+  }
+  if (action === "back-campaign-list") {
+    clearCampaignDrilldown();
+    render();
+  }
+  if (action === "view-campaign-inspection") {
+    state.campaignDetailId = "";
+    state.campaignInspectionMode = id;
+    render();
+  }
   if (action === "edit-campaign") openEditCampaignModal(id);
   if (action === "archive-campaign") openArchiveCampaignModal(id);
+  if (action === "create-campaign-task") openCreateCampaignTaskModal(id);
+  if (action === "edit-campaign-task") openEditCampaignTaskModal(id);
+  if (action === "cancel-campaign-task") openCancelCampaignTaskModal(id);
+  if (action === "create-campaign-budget-item") openCreateCampaignBudgetItemModal(id);
+  if (action === "edit-campaign-budget-item") openEditCampaignBudgetItemModal(id);
+  if (action === "cancel-campaign-budget-item") openCancelCampaignBudgetItemModal(id);
+  if (action === "create-campaign-document") openCreateCampaignDocumentModal(id);
+  if (action === "edit-campaign-document") openEditCampaignDocumentModal(id);
+  if (action === "archive-campaign-document") openArchiveCampaignDocumentModal(id);
+  if (action === "open-campaign-document") openCampaignDocumentFile(id, button);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 
@@ -3970,8 +4836,10 @@ async function loadExistingData() {
       associationCooperations,
       associationStages,
       campaignVendors,
+      campaignTasks,
+      campaignBudgetItems,
+      campaignDocuments,
       vendors,
-      vendorDocuments,
       salesRequests,
       cancelledSalesRequests,
       approvalRequests,
@@ -3988,8 +4856,10 @@ async function loadExistingData() {
       safeGET("association_cooperation_overview?select=id,association_id,item_name,item_type,stage,owner,due_date,progress_pct,next_step,notes,created_at,source_table&order=due_date.asc.nullslast,created_at.desc&limit=80"),
       safeGET("association_stage_options?select=entity_type,stage_name,sort_order,pct_value&order=entity_type.asc,sort_order.asc"),
       loadCampaignVendors(),
+      loadCampaignTasks(),
+      loadCampaignBudgetItems(),
+      loadCampaignDocuments(),
       safeGET("vendors?select=id,name,vendor_type,contact_name,contact_phone,contact_email&order=name.asc&limit=100"),
-      safeGET("marketing_campaign_documents?select=id,doc_type,vendor_id,deliverable_id&vendor_id=not.is.null&limit=100"),
       loadSalesRequests(),
       loadCancelledSalesRequests(),
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
@@ -4010,8 +4880,14 @@ async function loadExistingData() {
     state.data.campaignVendors = Array.isArray(campaignVendors) ? activeCampaignVendors(campaignVendors) : [];
     state.data.cancelledCampaignVendors = Array.isArray(campaignVendors) ? cancelledCampaignVendors(campaignVendors) : [];
     state.data.cancelledDeliverables = Array.isArray(campaignVendors) ? cancelledDeliverablesFromAll(campaignVendors) : [];
+    state.data.campaignTasks = Array.isArray(campaignTasks) ? activeCampaignTasks(campaignTasks) : [];
+    state.data.cancelledCampaignTasks = Array.isArray(campaignTasks) ? cancelledCampaignTasks(campaignTasks) : [];
+    state.data.campaignBudgetItems = Array.isArray(campaignBudgetItems) ? activeCampaignBudgetItems(campaignBudgetItems) : [];
+    state.data.cancelledCampaignBudgetItems = Array.isArray(campaignBudgetItems) ? cancelledCampaignBudgetItems(campaignBudgetItems) : [];
+    state.data.campaignDocuments = Array.isArray(campaignDocuments) ? activeCampaignDocuments(campaignDocuments) : [];
+    state.data.archivedCampaignDocuments = Array.isArray(campaignDocuments) ? archivedCampaignDocuments(campaignDocuments) : [];
     state.data.vendors = Array.isArray(vendors) ? vendors : [];
-    state.data.vendorDocuments = Array.isArray(vendorDocuments) ? vendorDocuments : [];
+    state.data.vendorDocuments = state.data.campaignDocuments.filter((document) => document.vendor_id);
     state.data.salesRequests = Array.isArray(salesRequests) ? salesRequests : [];
     state.data.cancelledSalesRequests = Array.isArray(cancelledSalesRequests) ? cancelledSalesRequests : [];
     state.data.approvalRequests = Array.isArray(approvalRequests) ? approvalRequests : [];
@@ -4031,6 +4907,12 @@ async function loadExistingData() {
       + state.data.campaignVendors.length
       + state.data.cancelledCampaignVendors.length
       + state.data.cancelledDeliverables.length
+      + state.data.campaignTasks.length
+      + state.data.cancelledCampaignTasks.length
+      + state.data.campaignBudgetItems.length
+      + state.data.cancelledCampaignBudgetItems.length
+      + state.data.campaignDocuments.length
+      + state.data.archivedCampaignDocuments.length
       + state.data.vendors.length
       + state.data.vendorDocuments.length
       + state.data.salesRequests.length
@@ -4054,6 +4936,30 @@ async function loadMarketingCampaigns() {
   if (Array.isArray(withArchive)) return withArchive;
 
   return safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100");
+}
+
+async function loadCampaignTasks() {
+  const withLifecycle = await safeGET("marketing_campaign_tasks?select=id,campaign_id,seq,task_name,owner,planned_start,planned_end,status,completion_pct,expected_output,notes,cancelled_at,cancelled_by,cancel_reason,created_at&order=planned_end.asc.nullslast,seq.asc,created_at.asc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("marketing_campaign_tasks?select=id,campaign_id,seq,task_name,owner,planned_start,planned_end,status,completion_pct,expected_output,notes,created_at&order=planned_end.asc.nullslast,seq.asc,created_at.asc&limit=300");
+}
+
+async function loadCampaignBudgetItems() {
+  const withLifecycle = await safeGET("marketing_campaign_budget_items?select=id,campaign_id,seq,item_name,budget_nature,amount_twd,exchange_rate,amount_rmb,basis_note,quote_status,payment_status,payment_date,cancelled_at,cancelled_by,cancel_reason,created_at&order=seq.asc,created_at.asc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  const withPayment = await safeGET("marketing_campaign_budget_items?select=id,campaign_id,seq,item_name,budget_nature,amount_twd,exchange_rate,amount_rmb,basis_note,quote_status,payment_status,payment_date,created_at&order=seq.asc,created_at.asc&limit=300", null);
+  if (Array.isArray(withPayment)) return withPayment;
+
+  return safeGET("marketing_campaign_budget_items?select=id,campaign_id,seq,item_name,budget_nature,amount_twd,exchange_rate,amount_rmb,basis_note,quote_status,created_at&order=seq.asc,created_at.asc&limit=300");
+}
+
+async function loadCampaignDocuments() {
+  const withLifecycle = await safeGET("marketing_campaign_documents?select=id,campaign_id,doc_type,title,version_note,file_path,file_name,notes,vendor_id,deliverable_id,uploaded_at,archived_at,archived_by,archive_reason&order=uploaded_at.desc.nullslast,id.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("marketing_campaign_documents?select=id,campaign_id,doc_type,title,version_note,file_path,file_name,notes,vendor_id,deliverable_id,uploaded_at&order=uploaded_at.desc.nullslast,id.desc&limit=300");
 }
 
 async function loadMarketingResources() {
