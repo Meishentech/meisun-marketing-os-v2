@@ -1214,6 +1214,41 @@ function approvalPriority(request = {}) {
 }
 
 function channelSummarySection(wide) {
+  const rows = channelPerformanceRows().map((row) => [
+    row.channel,
+    formatCount(row.reach),
+    `${formatCount(row.totalLeads)}<br><span class="cell-sub">成效 ${formatCount(row.performanceLeads)} / 名單庫 ${formatCount(row.leadRecords)}</span>`,
+    formatCount(row.inquiries),
+    formatCount(row.qualified),
+    `${formatCount(row.deals)} 件`,
+    formatCurrencyFull(row.dealAmount),
+    tag(row.judgment.label, row.judgment.tone),
+  ]);
+
+  if (rows.length) {
+    return {
+      type: "table",
+      title: "Channel 成效摘要",
+      wide,
+      headers: ["Channel", "觸及", "名單", "詢問", "有效名單", "成交", "成交金額", "管理判斷"],
+      rows,
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: "Channel 成效摘要",
+      wide,
+      headers: ["狀態", "說明", "下一步"],
+      rows: [[
+        tag("尚未回傳", "amber"),
+        "目前沒有從成效資料或名單來源讀到可彙總的 Channel。",
+        "請先在行銷案詳情頁填成效資料，或確認 leads.source_channel 是否有資料。",
+      ]],
+    };
+  }
+
   return {
     type: "table",
     title: "Channel 成效摘要",
@@ -1226,6 +1261,90 @@ function channelSummarySection(wide) {
       ["Facebook", "41", "9", "1", tag("調整", "amber")],
     ],
   };
+}
+
+function channelPerformanceRows() {
+  const channels = new Map();
+
+  state.data.campaignPerformance.forEach((performance) => {
+    const stats = ensureChannelStats(channels, performance.channel);
+    stats.performanceRecords += 1;
+    stats.reach += Number(performance.reach_count || 0);
+    stats.performanceLeads += Number(performance.lead_count || 0);
+    stats.inquiries += Number(performance.inquiry_count || 0);
+    stats.qualified += Number(performance.qualified_lead_count || 0);
+    stats.estimatedOpportunityAmount += Number(performance.estimated_opportunity_amount || 0);
+    stats.deals += Number(performance.deal_count || 0);
+    stats.dealAmount += Number(performance.deal_amount || 0);
+  });
+
+  state.data.leads.forEach((lead) => {
+    const stats = ensureChannelStats(channels, lead.source_channel);
+    stats.leadRecords += 1;
+    if (lead.stage === "詢問") stats.inquiries += 1;
+    if (["有效名單", "業務跟進", "形成商機", "需主管協助"].includes(lead.stage)) stats.qualified += 1;
+    if (["形成商機", "需主管協助"].includes(lead.stage)) stats.opportunities += 1;
+  });
+
+  return [...channels.values()]
+    .map((stats) => {
+      const totalLeads = stats.performanceLeads + stats.leadRecords;
+      const judgment = channelJudgment({ ...stats, totalLeads });
+      return { ...stats, totalLeads, judgment };
+    })
+    .sort(compareChannelRows);
+}
+
+function ensureChannelStats(channels, rawChannel) {
+  const channel = normalizeChannel(rawChannel);
+  if (!channels.has(channel)) {
+    channels.set(channel, {
+      channel,
+      performanceRecords: 0,
+      reach: 0,
+      performanceLeads: 0,
+      leadRecords: 0,
+      inquiries: 0,
+      qualified: 0,
+      opportunities: 0,
+      estimatedOpportunityAmount: 0,
+      deals: 0,
+      dealAmount: 0,
+    });
+  }
+  return channels.get(channel);
+}
+
+function normalizeChannel(value = "") {
+  const channel = String(value || "").trim();
+  return channel || "未分類";
+}
+
+function compareChannelRows(a = {}, b = {}) {
+  const dealAmountDiff = Number(b.dealAmount || 0) - Number(a.dealAmount || 0);
+  if (dealAmountDiff) return dealAmountDiff;
+
+  const qualifiedDiff = Number(b.qualified || 0) - Number(a.qualified || 0);
+  if (qualifiedDiff) return qualifiedDiff;
+
+  const leadDiff = Number(b.totalLeads || 0) - Number(a.totalLeads || 0);
+  if (leadDiff) return leadDiff;
+
+  return String(a.channel || "").localeCompare(String(b.channel || ""), "zh-Hant-TW");
+}
+
+function channelJudgment(row = {}) {
+  if (!row.performanceRecords) return { label: "待補資料", tone: "amber" };
+  if (Number(row.dealAmount || 0) > 0 || Number(row.qualified || 0) >= 10) return { label: "加碼", tone: "green" };
+  if (Number(row.reach || 0) >= 100 && ratioValue(row.qualified, row.reach) < 0.05) return { label: "調整", tone: "amber" };
+  if (Number(row.totalLeads || 0) > 0 || Number(row.inquiries || 0) > 0 || Number(row.reach || 0) > 0) return { label: "持續", tone: "green" };
+  return { label: "待補資料", tone: "amber" };
+}
+
+function ratioValue(numerator, denominator) {
+  const top = Number(numerator || 0);
+  const bottom = Number(denominator || 0);
+  return bottom ? top / bottom : 0;
 }
 
 function budgetSection() {
@@ -1354,6 +1473,42 @@ function executiveLeadRiskSection() {
 }
 
 function channelDecisionSection() {
+  const rows = channelPerformanceRows();
+  if (rows.length) {
+    const best = rows[0];
+    const adjustment = rows.find((row) => row.judgment.label === "調整");
+    const missing = rows.filter((row) => row.judgment.label === "待補資料");
+    const qualified = rows
+      .filter((row) => Number(row.qualified || 0) > 0)
+      .slice(0, 3)
+      .map((row) => `${row.channel} ${formatCount(row.qualified)}`)
+      .join("、") || "尚未形成有效名單";
+
+    return {
+      type: "cards",
+      title: "管理判斷",
+      cards: [
+        ["應增加資源", `${best.channel} 目前排序最高，${best.judgment.label}；有效名單 ${formatCount(best.qualified)}、成交金額 ${formatCurrencyFull(best.dealAmount)}。`],
+        ["需調整內容", adjustment ? `${adjustment.channel} 觸及 ${formatCount(adjustment.reach)}，但有效名單 ${formatCount(adjustment.qualified)}，建議檢查內容或受眾。` : "目前沒有被標示為需調整的 Channel。"],
+        ["待補資料", missing.length ? `${missing.map((row) => row.channel).slice(0, 3).join("、")} 尚未填成效資料或只有 leads 來源，需補觸及與轉換數字。` : "主要 Channel 已有成效資料，可持續累積。"],
+        ["有效名單來源", qualified],
+      ],
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "cards",
+      title: "管理判斷",
+      cards: [
+        ["目前狀態", "尚未有可彙總的 Channel 成效資料。"],
+        ["下一步", "先從行銷案詳情頁補主要 Channel、觸及、名單、有效商機與成交金額。"],
+        ["名單來源", "若 leads.source_channel 已有資料，Channel 頁會先顯示來源摘要。"],
+        ["治理提醒", "第一版先依原字串分類，後續再設計 Channel 命名對照表。"],
+      ],
+    };
+  }
+
   return {
     type: "cards",
     title: "管理判斷",
@@ -5216,8 +5371,10 @@ function buildCurrentKpis(page) {
   const dynamicKpis = {
     "executive:budget": expenseKpis(),
     "executive:leads": leadKpis(),
+    "executive:channels": channelKpis(),
     "executive:decisions": approvalKpis(),
     "marketing:budget": expenseKpis(),
+    "marketing:channels": channelKpis(),
     "marketing:associations": associationKpis(),
     "marketing:vendors": vendorKpis(),
     "marketing:knowledge": knowledgeKpis(),
@@ -5243,6 +5400,27 @@ function leadKpis() {
     ["有效名單", String(qualified), "可分派業務追蹤"],
     ["形成商機", String(opportunities), `${needsExecutive} 件需主管協助`],
     ["平均轉換", `${conversionRate}%`, "以有效名單轉商機計算"],
+  ];
+}
+
+function channelKpis() {
+  const rows = channelPerformanceRows();
+  if (!rows.length) {
+    const page = pages[state.role]?.channels || pages.executive.channels;
+    return page.kpis;
+  }
+
+  const best = rows[0];
+  const totalLeads = rows.reduce((sum, row) => sum + Number(row.totalLeads || 0), 0);
+  const totalQualified = rows.reduce((sum, row) => sum + Number(row.qualified || 0), 0);
+  const totalDealAmount = rows.reduce((sum, row) => sum + Number(row.dealAmount || 0), 0);
+  const adjustmentRows = rows.filter((row) => row.judgment.label === "調整").length;
+
+  return [
+    ["最佳來源", best.channel, `${best.judgment.label}；有效名單 ${formatCount(best.qualified)}`],
+    ["總名單", formatCount(totalLeads), "成效資料名單 + leads 來源筆數"],
+    ["有效名單", formatCount(totalQualified), `平均有效率 ${ratioText(totalQualified, totalLeads)}`],
+    ["成交金額", formatCurrencyFull(totalDealAmount), adjustmentRows ? `${adjustmentRows} 個 Channel 建議調整` : "目前無需調整標記"],
   ];
 }
 
@@ -5400,10 +5578,12 @@ function buildCurrentSections(page) {
     "executive:dashboard": [campaignSummarySection(), projectOverviewSection(), campaignRiskSummarySection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
     "executive:budget": [budgetSection(), subsidySection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
+    "executive:channels": [channelSummarySection(false), channelDecisionSection()],
     "executive:decisions": [decisionListSection(), campaignRiskSummarySection(), approvalFlowSection()],
     "marketing:dashboard": [campaignSummarySection(), marketingRiskInspectionCardsSection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     "marketing:campaigns": campaignPageSections(),
     "marketing:budget": [budgetSection(), subsidySection()],
+    "marketing:channels": [channelSummarySection(false), channelDecisionSection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
     "marketing:associations": [associationSection(), associationTagsSection()],

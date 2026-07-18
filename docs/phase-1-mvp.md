@@ -173,6 +173,7 @@
    - Batch 14C 動工前草案：`BATCH14C_PERFORMANCE_CHANNEL_DRAFT.md`。目標是讓 V2 接手 `marketing_campaign_performance` 與 Channel 成效摘要；建議先停用 V1 `delPerformance()` 真刪除，再補 `channel` 欄位並實際執行 live smoke test。14C 第一版不做多 Channel attribution 明細表、不做成效資料刪除或封存。
    - Batch 14C-B SQL：`phase1_batch14c_performance_channel.sql`。已執行到 live Supabase，smoke test 確認 `channel` 欄位存在且 `performance_count` 可讀。
    - Batch 14C-C 前端：v2 行銷案詳情頁新增成效資料讀取、新增 / 編輯 modal、衍生轉換率與成本效率顯示；不做刪除。若競態造成 `unique(campaign_id)` 重複建立，前端需顯示中文提示並重新載入資料。
+   - Batch 14C-D 前端：總經理與行銷總監 Channel 成效頁改讀真資料，彙總 `marketing_campaign_performance.channel` 與 `leads.source_channel`；第一版依原字串分類，不做 Channel mapping table。
 
 ## 暫緩到 Phase 2
 
