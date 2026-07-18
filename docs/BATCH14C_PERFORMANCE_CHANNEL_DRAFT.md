@@ -154,6 +154,7 @@ notify pgrst, 'reload schema';
 - 因 `unique(campaign_id)`，新增時需處理重複：
   - 如果該 campaign 已有 performance，按鈕應顯示「編輯成效」。
   - 不應讓使用者重複 POST 造成 unique constraint error。
+  - 若仍因競態或資料重新整理落差遇到 Postgres `23505` unique constraint 錯誤，前端需優雅顯示「此行銷案已有成效資料，請重新整理後編輯既有紀錄」，並重新載入資料，不可把原始 JSON 錯誤直接丟給使用者。
 
 欄位：
 
