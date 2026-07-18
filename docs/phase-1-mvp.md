@@ -171,7 +171,8 @@
    - Batch 14B SQL 草案：`phase1_batch14b_risk_lifecycle.sql`。新增風險 `archived_*` 與追蹤紀錄 `cancelled_*` 欄位，並包含 PostgREST schema cache reload。此 SQL 必須在 Claude Code 審查通過後實際執行到 live Supabase，再用 live smoke test 驗證 6 個欄位存在。
    - Batch 14B 前端：v2 行銷案詳情頁已新增風險 / 待決事項管理、追蹤紀錄管理、已取消追蹤與已封存風險只讀清單；總經理戰情室與行銷總監工作台新增風險摘要。第一版不自動寫入 `approval_requests`，避免兩套待決策來源互相打架。
    - Batch 14C 動工前草案：`BATCH14C_PERFORMANCE_CHANNEL_DRAFT.md`。目標是讓 V2 接手 `marketing_campaign_performance` 與 Channel 成效摘要；建議先停用 V1 `delPerformance()` 真刪除，再補 `channel` 欄位並實際執行 live smoke test。14C 第一版不做多 Channel attribution 明細表、不做成效資料刪除或封存。
-   - Batch 14C-B SQL 草案：`phase1_batch14c_performance_channel.sql`。此檔只新增 `marketing_campaign_performance.channel` 與索引；尚未執行 live Supabase，需 Claude Code 複查通過後再執行並跑 smoke test。
+   - Batch 14C-B SQL：`phase1_batch14c_performance_channel.sql`。已執行到 live Supabase，smoke test 確認 `channel` 欄位存在且 `performance_count` 可讀。
+   - Batch 14C-C 前端：v2 行銷案詳情頁新增成效資料讀取、新增 / 編輯 modal、衍生轉換率與成本效率顯示；不做刪除。若競態造成 `unique(campaign_id)` 重複建立，前端需顯示中文提示並重新載入資料。
 
 ## 暫緩到 Phase 2
 

@@ -940,12 +940,12 @@ h1 {
 
 .modal-actions {
   position: sticky;
-  bottom: -18px;
+  bottom: 0;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin: 18px -18px -18px;
-  padding: 14px 18px 18px;
+  margin: 18px -18px 0;
+  padding: 14px 18px;
   border-top: 1px solid var(--line);
   background: rgba(255, 255, 255, .96);
   backdrop-filter: blur(8px);
@@ -1244,11 +1244,11 @@ h1 {
   }
 
   .modal-actions {
-    bottom: -14px;
+    bottom: 0;
     display: grid;
     grid-template-columns: 1fr;
-    margin: 18px -14px -14px;
-    padding: 12px 14px 14px;
+    margin: 18px -14px 0;
+    padding: 12px 14px;
   }
 
   .modal-actions .secondary-button {

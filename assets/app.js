@@ -30,6 +30,7 @@ const state = {
     archivedCampaignRisks: [],
     campaignRiskUpdates: [],
     cancelledCampaignRiskUpdates: [],
+    campaignPerformance: [],
     vendors: [],
     vendorDocuments: [],
     salesRequests: [],
@@ -586,6 +587,7 @@ function campaignDetailSections() {
     campaignRiskUpdatesSection(campaign),
     cancelledCampaignRiskUpdatesSection(campaign),
     archivedCampaignRisksSection(campaign),
+    campaignPerformanceSection(campaign),
   ];
 }
 
@@ -613,6 +615,7 @@ function campaignDetailActionCardsSection(campaign = {}) {
       ["新增預算項目", actionGroup([actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary")])],
       ["新增文件版本", actionGroup([actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary")])],
       ["新增風險 / 待決事項", actionGroup([actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary")])],
+      ["新增 / 編輯成效", actionGroup([actionButton(performanceForCampaign(campaign.id) ? "編輯成效" : "新增成效", "edit-campaign-performance", campaign.id, "is-primary")])],
       ["資料原則", "取消或封存只會從進行中清單移除，歷史紀錄保留在下方收合區塊。"],
     ],
   };
@@ -848,6 +851,42 @@ function cancelledCampaignRiskUpdatesSection(campaign = {}) {
     wide: true,
     headers: ["事項", "更新日", "內容", "取消資訊", "原因"],
     rows: rows.length ? rows : [["目前沒有已取消追蹤", "無", "無", tag("無紀錄", "green"), "無"]],
+  };
+}
+
+function campaignPerformanceSection(campaign = {}) {
+  const performance = performanceForCampaign(campaign.id);
+  if (!performance) {
+    return {
+      type: "table",
+      title: "成效資料",
+      wide: true,
+      headers: ["狀態", "說明", "操作"],
+      rows: [[
+        tag("尚未填寫", "amber"),
+        "此行銷案尚未建立成效資料，可先填主要 Channel、觸及、名單、有效商機與成交金額。",
+        actionButton("新增成效", "edit-campaign-performance", campaign.id, "is-primary"),
+      ]],
+    };
+  }
+
+  const spend = campaignPerformanceSpend(campaign);
+  const rows = [
+    ["主要 Channel", performance.channel || "未填", "行銷案主要歸因來源", actionButton("編輯成效", "edit-campaign-performance", campaign.id, "is-primary")],
+    ["觸及 / 名單", `${formatCount(performance.reach_count)} / ${formatCount(performance.lead_count)}`, `名單轉換率 ${ratioText(performance.lead_count, performance.reach_count)}`, "無"],
+    ["詢問 / 有效商機", `${formatCount(performance.inquiry_count)} / ${formatCount(performance.qualified_lead_count)}`, `詢問率 ${ratioText(performance.inquiry_count, performance.reach_count)}，有效名單率 ${ratioText(performance.qualified_lead_count, performance.lead_count)}`, "無"],
+    ["成交", `${formatCount(performance.deal_count)} 件 / ${formatCurrencyFull(performance.deal_amount)}`, `成交率 ${ratioText(performance.deal_count, performance.qualified_lead_count)}`, "無"],
+    ["成本效率", `名單成本 ${costPerText(spend, performance.lead_count)}`, `有效商機成本 ${costPerText(spend, performance.qualified_lead_count)}`, "無"],
+    ["預估商機金額", formatCurrencyFull(performance.estimated_opportunity_amount), "用於總經理判斷後續業務投入價值", "無"],
+    ["備註", escapeHtml(performance.notes || "未填"), `最後更新 ${formatDate(performance.updated_at) || formatDate(performance.created_at) || "未記錄"}`, "無"],
+  ];
+
+  return {
+    type: "table",
+    title: "成效資料",
+    wide: true,
+    headers: ["項目", "數值", "判讀", "操作"],
+    rows,
   };
 }
 
@@ -2036,6 +2075,16 @@ function cancelledCampaignRiskUpdatesForCampaign(campaignId) {
     .sort(compareRiskUpdates);
 }
 
+function performanceForCampaign(campaignId) {
+  return state.data.campaignPerformance
+    .find((item) => String(item.campaign_id || "") === String(campaignId || ""));
+}
+
+function findCampaignPerformance(id) {
+  return state.data.campaignPerformance
+    .find((item) => String(item.id || "") === String(id || ""));
+}
+
 function sortBySeqThenDate(dateField) {
   return (a, b) => {
     const seqA = Number(a.seq);
@@ -2123,6 +2172,33 @@ function budgetComparableAmount(item = {}) {
 
 function hasBudgetAmount(item = {}) {
   return Number(item.amount_twd || 0) > 0 || Number(item.amount_rmb || 0) > 0;
+}
+
+function campaignPerformanceSpend(campaign = {}) {
+  const actual = Number(campaign.actual_spend || 0);
+  const budget = Number(campaign.budget || 0);
+  if (actual > 0) return actual;
+  if (budget > 0) return budget;
+  return null;
+}
+
+function ratioText(numerator, denominator) {
+  const top = Number(numerator || 0);
+  const bottom = Number(denominator || 0);
+  if (!bottom || top < 0) return "未填";
+  return `${Math.round((top / bottom) * 100)}%`;
+}
+
+function costPerText(amount, count) {
+  const total = Number(amount || 0);
+  const qty = Number(count || 0);
+  if (!total || !qty) return "未填";
+  return formatCurrencyFull(Math.round(total / qty));
+}
+
+function formatCount(value) {
+  const number = Number(value || 0);
+  return number.toLocaleString("zh-Hant-TW");
 }
 
 function compareCampaignRisks(a = {}, b = {}) {
@@ -2735,6 +2811,14 @@ function associationActivitySuggestions(selected = "") {
     .map((campaign) => campaign.association_activity_type)
     .filter(Boolean);
   const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
+function performanceChannelSuggestions(selected = "") {
+  const fixed = ["公會", "展覽", "官網", "LINE", "Facebook", "標案", "業務轉介", "講座", "期刊", "其他"];
+  const performanceChannels = state.data.campaignPerformance.map((item) => item.channel).filter(Boolean);
+  const leadChannels = state.data.leads.map((lead) => lead.source_channel).filter(Boolean);
+  const values = [...new Set([...fixed, ...performanceChannels, ...leadChannels, selected].filter(Boolean))];
   return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
 }
 
@@ -4880,6 +4964,118 @@ function openCancelRiskUpdateModal(id) {
   });
 }
 
+function campaignPerformanceFormHtml(performance = {}, campaign = {}) {
+  return `
+    <div class="form-section">
+      <h3>歸因與觸及</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>行銷案</span>
+          <input value="${escapeAttr(campaign.name || "未命名行銷案")}" readonly>
+        </label>
+        <label class="form-field">
+          <span>主要 Channel</span>
+          <input name="channel" list="performance-channel-options" value="${escapeAttr(performance.channel || "")}" placeholder="例如：公會、展覽、LINE、標案">
+          <datalist id="performance-channel-options">${performanceChannelSuggestions(performance.channel || "")}</datalist>
+        </label>
+        <label class="form-field">
+          <span>觸及人數</span>
+          <input name="reach_count" type="number" min="0" step="1" value="${escapeAttr(performance.reach_count ?? 0)}">
+        </label>
+        <label class="form-field">
+          <span>名單數</span>
+          <input name="lead_count" type="number" min="0" step="1" value="${escapeAttr(performance.lead_count ?? 0)}">
+        </label>
+        <label class="form-field">
+          <span>詢問數</span>
+          <input name="inquiry_count" type="number" min="0" step="1" value="${escapeAttr(performance.inquiry_count ?? 0)}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>商機與成交</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>有效商機數</span>
+          <input name="qualified_lead_count" type="number" min="0" step="1" value="${escapeAttr(performance.qualified_lead_count ?? 0)}">
+        </label>
+        <label class="form-field">
+          <span>預估商機金額</span>
+          <input name="estimated_opportunity_amount" type="number" min="0" step="1" value="${escapeAttr(performance.estimated_opportunity_amount ?? 0)}">
+        </label>
+        <label class="form-field">
+          <span>成交件數</span>
+          <input name="deal_count" type="number" min="0" step="1" value="${escapeAttr(performance.deal_count ?? 0)}">
+        </label>
+        <label class="form-field">
+          <span>成交金額</span>
+          <input name="deal_amount" type="number" min="0" step="1" value="${escapeAttr(performance.deal_amount ?? 0)}">
+        </label>
+        <label class="form-field is-wide">
+          <span>備註</span>
+          <textarea name="notes">${escapeHtml(performance.notes || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function campaignPerformancePayload(values = {}, campaignId = "") {
+  return {
+    campaign_id: campaignId,
+    channel: values.channel?.trim() || null,
+    reach_count: numericOrNull(values.reach_count) ?? 0,
+    lead_count: numericOrNull(values.lead_count) ?? 0,
+    inquiry_count: numericOrNull(values.inquiry_count) ?? 0,
+    qualified_lead_count: numericOrNull(values.qualified_lead_count) ?? 0,
+    estimated_opportunity_amount: numericOrNull(values.estimated_opportunity_amount) ?? 0,
+    deal_count: numericOrNull(values.deal_count) ?? 0,
+    deal_amount: numericOrNull(values.deal_amount) ?? 0,
+    notes: values.notes?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function isUniqueCampaignPerformanceError(error) {
+  const message = String(error?.message || error || "");
+  return message.includes("23505") || message.includes("marketing_campaign_performance_campaign_unique");
+}
+
+function openCampaignPerformanceModal(campaignId) {
+  const campaign = findCampaign(campaignId);
+  if (!campaign) return;
+  const performance = performanceForCampaign(campaignId) || {};
+  const isEdit = Boolean(performance.id);
+
+  openModal(isEdit ? "編輯成效資料" : "新增成效資料", campaignPerformanceFormHtml(performance, campaign), {
+    submitLabel: isEdit ? "儲存變更" : "建立成效資料",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = campaignPerformancePayload(values, campaignId);
+
+      try {
+        if (isEdit) {
+          await api("PATCH", `marketing_campaign_performance?id=eq.${encodeURIComponent(performance.id)}`, payload);
+        } else {
+          await api("POST", "marketing_campaign_performance", payload);
+        }
+      } catch (error) {
+        if (isUniqueCampaignPerformanceError(error)) {
+          state.campaignDetailId = campaignId;
+          await loadExistingData();
+          throw new Error("此行銷案已有成效資料，請重新打開此專案後編輯既有紀錄。");
+        }
+        throw error;
+      }
+
+      closeModal();
+      state.campaignDetailId = campaignId;
+      await loadExistingData();
+    },
+  });
+}
+
 function openApprovalReviewModal(id) {
   const request = state.data.approvalRequests.find((item) => item.id === id);
   if (!request) return;
@@ -5484,6 +5680,7 @@ document.addEventListener("click", (event) => {
   if (action === "create-risk-update") openCreateRiskUpdateModal(id);
   if (action === "edit-risk-update") openEditRiskUpdateModal(id);
   if (action === "cancel-risk-update") openCancelRiskUpdateModal(id);
+  if (action === "edit-campaign-performance") openCampaignPerformanceModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 
@@ -5565,6 +5762,7 @@ async function loadExistingData() {
       campaignDocuments,
       campaignRisks,
       campaignRiskUpdates,
+      campaignPerformance,
       vendors,
       salesRequests,
       cancelledSalesRequests,
@@ -5587,6 +5785,7 @@ async function loadExistingData() {
       loadCampaignDocuments(),
       loadCampaignRisks(),
       loadCampaignRiskUpdates(),
+      loadCampaignPerformance(),
       safeGET("vendors?select=id,name,vendor_type,contact_name,contact_phone,contact_email&order=name.asc&limit=100"),
       loadSalesRequests(),
       loadCancelledSalesRequests(),
@@ -5618,6 +5817,7 @@ async function loadExistingData() {
     state.data.archivedCampaignRisks = Array.isArray(campaignRisks) ? archivedCampaignRisks(campaignRisks) : [];
     state.data.campaignRiskUpdates = Array.isArray(campaignRiskUpdates) ? activeCampaignRiskUpdates(campaignRiskUpdates) : [];
     state.data.cancelledCampaignRiskUpdates = Array.isArray(campaignRiskUpdates) ? cancelledCampaignRiskUpdates(campaignRiskUpdates) : [];
+    state.data.campaignPerformance = Array.isArray(campaignPerformance) ? campaignPerformance : [];
     state.data.vendors = Array.isArray(vendors) ? vendors : [];
     state.data.vendorDocuments = state.data.campaignDocuments.filter((document) => document.vendor_id);
     state.data.salesRequests = Array.isArray(salesRequests) ? salesRequests : [];
@@ -5649,6 +5849,7 @@ async function loadExistingData() {
       + state.data.archivedCampaignRisks.length
       + state.data.campaignRiskUpdates.length
       + state.data.cancelledCampaignRiskUpdates.length
+      + state.data.campaignPerformance.length
       + state.data.vendors.length
       + state.data.vendorDocuments.length
       + state.data.salesRequests.length
@@ -5710,6 +5911,13 @@ async function loadCampaignRiskUpdates() {
   if (Array.isArray(withLifecycle)) return withLifecycle;
 
   return safeGET("marketing_campaign_risk_updates?select=id,risk_id,update_note,updated_by,update_date,next_followup_date,is_important,created_at&order=update_date.desc,created_at.desc&limit=500");
+}
+
+async function loadCampaignPerformance() {
+  const withChannel = await safeGET("marketing_campaign_performance?select=id,campaign_id,channel,reach_count,lead_count,inquiry_count,qualified_lead_count,estimated_opportunity_amount,deal_count,deal_amount,notes,created_at,updated_at&order=updated_at.desc.nullslast,created_at.desc&limit=300", null);
+  if (Array.isArray(withChannel)) return withChannel;
+
+  return safeGET("marketing_campaign_performance?select=id,campaign_id,reach_count,lead_count,inquiry_count,qualified_lead_count,estimated_opportunity_amount,deal_count,deal_amount,notes,created_at,updated_at&order=updated_at.desc.nullslast,created_at.desc&limit=300");
 }
 
 async function loadMarketingResources() {
