@@ -114,11 +114,16 @@ constraint marketing_campaign_performance_campaign_unique unique (campaign_id)
 
 ## SQL 規格建議
 
+SQL 檔案：
+
+- `sql/phase1_batch14b_risk_lifecycle.sql`
+
 重要執行規則：
 
 - Batch 14B 的 SQL 不只要寫入 repo，也必須在 live Supabase SQL Editor 或等效 live migration 流程實際執行。
 - 執行後必須驗證 `marketing_campaign_risks.archived_at`、`marketing_campaign_risk_updates.cancelled_at` 等欄位真的存在於 live project。
 - 前端功能驗收前，必須先完成 live SQL 驗證；避免重演 Batch 13B「SQL 已審查但未實際套用」導致正式站取消 / 封存失敗的問題。
+- SQL 已內含 `notify pgrst, 'reload schema';`，但仍須以 live smoke test 確認 PostgREST 已讀到新欄位。
 
 ### 風險封存
 
