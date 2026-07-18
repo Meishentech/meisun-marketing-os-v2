@@ -26,6 +26,10 @@ const state = {
     cancelledCampaignBudgetItems: [],
     campaignDocuments: [],
     archivedCampaignDocuments: [],
+    campaignRisks: [],
+    archivedCampaignRisks: [],
+    campaignRiskUpdates: [],
+    cancelledCampaignRiskUpdates: [],
     vendors: [],
     vendorDocuments: [],
     salesRequests: [],
@@ -519,6 +523,10 @@ function campaignDetailSections() {
     cancelledCampaignBudgetItemsSection(campaign),
     campaignDocumentsSection(campaign),
     archivedCampaignDocumentsSection(campaign),
+    campaignRisksSection(campaign),
+    campaignRiskUpdatesSection(campaign),
+    cancelledCampaignRiskUpdatesSection(campaign),
+    archivedCampaignRisksSection(campaign),
   ];
 }
 
@@ -545,6 +553,7 @@ function campaignDetailActionCardsSection(campaign = {}) {
       ["新增任務", actionGroup([actionButton("新增任務", "create-campaign-task", campaign.id, "is-primary")])],
       ["新增預算項目", actionGroup([actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary")])],
       ["新增文件版本", actionGroup([actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary")])],
+      ["新增風險 / 待決事項", actionGroup([actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary")])],
       ["資料原則", "取消或封存只會從進行中清單移除，歷史紀錄保留在下方收合區塊。"],
     ],
   };
@@ -682,6 +691,106 @@ function archivedCampaignDocumentsSection(campaign = {}) {
   };
 }
 
+function campaignRisksSection(campaign = {}) {
+  const risks = campaignRisksFor(campaign.id);
+  const rows = risks.map((risk) => {
+    const latest = latestRiskUpdate(risk.id);
+    return [
+      risk.risk_type || "其他",
+      risk.title || "未命名事項",
+      tag(risk.impact_level || "中", riskImpactTone(risk.impact_level || "中")),
+      risk.owner || "未填",
+      formatDate(risk.due_date) || "未填",
+      tag(risk.status || "待處理", riskStatusTone(risk.status || "待處理")),
+      risk.show_on_dashboard ? tag("戰情室", "amber") : tag("專案內", "gray"),
+      latestRiskUpdateText(latest),
+      actionGroup([
+        actionButton("編輯", "edit-campaign-risk", risk.id, "is-primary"),
+        actionButton("追蹤", "create-risk-update", risk.id, "is-primary"),
+        actionButton("封存", "archive-campaign-risk", risk.id, "is-danger"),
+      ]),
+    ];
+  });
+
+  return {
+    type: "table",
+    title: "風險 / 待決事項",
+    wide: true,
+    headers: ["類型", "事項", "影響", "負責人", "到期日", "狀態", "顯示", "最新追蹤", "操作"],
+    rows: rows.length ? rows : [["無", "尚未建立風險 / 待決事項", tag("正常", "green"), "無", "無", tag("無", "green"), "無", "無", actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary")]],
+  };
+}
+
+function archivedCampaignRisksSection(campaign = {}) {
+  const rows = state.data.archivedCampaignRisks
+    .filter((risk) => String(risk.campaign_id || "") === String(campaign.id || ""))
+    .map((risk) => [
+      risk.title || "未命名事項",
+      risk.risk_type || "其他",
+      tag(risk.impact_level || "中", riskImpactTone(risk.impact_level || "中")),
+      archiveRiskMeta(risk),
+      risk.archive_reason || "未填寫原因",
+    ]);
+
+  return {
+    type: "details-table",
+    title: `已封存風險 / 待決事項（${rows.length}）`,
+    summary: "只讀保留，封存後不進入戰情室與逾期追蹤。",
+    wide: true,
+    headers: ["事項", "類型", "影響", "封存資訊", "原因"],
+    rows: rows.length ? rows : [["目前沒有已封存風險", "無", tag("無紀錄", "green"), "無", "無"]],
+  };
+}
+
+function campaignRiskUpdatesSection(campaign = {}) {
+  const rows = campaignRiskUpdatesForCampaign(campaign.id).map((update) => {
+    const risk = findCampaignRisk(update.risk_id);
+    return [
+      risk?.title || "未關聯事項",
+      formatDate(update.update_date) || "未填",
+      update.update_note || "未填內容",
+      formatDate(update.next_followup_date) || "未設定",
+      update.is_important ? tag("重要", "amber") : tag("一般", "gray"),
+      update.updated_by || "未填",
+      actionGroup([
+        actionButton("編輯", "edit-risk-update", update.id, "is-primary"),
+        actionButton("取消", "cancel-risk-update", update.id, "is-danger"),
+      ]),
+    ];
+  });
+
+  return {
+    type: "details-table",
+    title: `風險追蹤紀錄（${rows.length}）`,
+    summary: "依重要性與更新日期排序，預設收合。",
+    wide: true,
+    headers: ["事項", "更新日", "內容", "下次追蹤", "標記", "更新人", "操作"],
+    rows: rows.length ? rows : [["目前沒有追蹤紀錄", "無", "無", "無", tag("無紀錄", "green"), "無", "無"]],
+  };
+}
+
+function cancelledCampaignRiskUpdatesSection(campaign = {}) {
+  const rows = cancelledCampaignRiskUpdatesForCampaign(campaign.id).map((update) => {
+    const risk = findCampaignRisk(update.risk_id);
+    return [
+      risk?.title || "未關聯事項",
+      formatDate(update.update_date) || "未填",
+      update.update_note || "未填內容",
+      cancellationMeta(update),
+      update.cancel_reason || "未填寫原因",
+    ];
+  });
+
+  return {
+    type: "details-table",
+    title: `已取消風險追蹤（${rows.length}）`,
+    summary: "只讀保留，Phase 1 不做復原。",
+    wide: true,
+    headers: ["事項", "更新日", "內容", "取消資訊", "原因"],
+    rows: rows.length ? rows : [["目前沒有已取消追蹤", "無", "無", tag("無紀錄", "green"), "無"]],
+  };
+}
+
 function campaignSummarySection() {
   if (!state.data.campaigns.length) {
     return {
@@ -734,6 +843,27 @@ function campaignSummaryRow(label, summary) {
     formatCurrencyFull(summary.subsidyPlanned),
     formatCurrencyFull(summary.subsidyReceived),
   ];
+}
+
+function campaignRiskSummarySection() {
+  const risks = executiveRiskItems();
+  const rows = risks.slice(0, 8).map((risk) => [
+    campaignName(risk.campaign_id),
+    risk.title || "未命名事項",
+    tag(risk.impact_level || "中", riskImpactTone(risk.impact_level || "中")),
+    tag(isRiskOverdue(risk) ? "逾期" : risk.status || "待處理", isRiskOverdue(risk) ? "red" : riskStatusTone(risk.status || "待處理")),
+    formatDate(riskNextFollowupDate(risk)) || "未設定",
+    latestRiskUpdateText(latestRiskUpdate(risk.id)),
+    actionButton("進入專案", "view-campaign-detail", risk.campaign_id, "is-primary"),
+  ]);
+
+  return {
+    type: "table",
+    title: "風險 / 待決事項摘要",
+    wide: true,
+    headers: ["專案", "事項", "影響", "狀態", "期限 / 追蹤", "最新追蹤", "操作"],
+    rows: rows.length ? rows : [["目前無重大風險", "無", tag("正常", "green"), tag("無待辦", "green"), "無", "無", "無"]],
+  };
 }
 
 function formatCampaignRow(campaign, includeActions = false) {
@@ -1743,6 +1873,22 @@ function archivedCampaignDocuments(documents = state.data.campaignDocuments) {
   return documents.filter((document) => Boolean(document.archived_at));
 }
 
+function activeCampaignRisks(risks = state.data.campaignRisks) {
+  return risks.filter((risk) => !risk.archived_at);
+}
+
+function archivedCampaignRisks(risks = state.data.campaignRisks) {
+  return risks.filter((risk) => Boolean(risk.archived_at));
+}
+
+function activeCampaignRiskUpdates(updates = state.data.campaignRiskUpdates) {
+  return updates.filter((update) => !update.cancelled_at);
+}
+
+function cancelledCampaignRiskUpdates(updates = state.data.campaignRiskUpdates) {
+  return updates.filter((update) => Boolean(update.cancelled_at));
+}
+
 function campaignTasksFor(campaignId) {
   return state.data.campaignTasks
     .filter((task) => String(task.campaign_id || "") === String(campaignId || ""))
@@ -1759,6 +1905,44 @@ function campaignDocumentsFor(campaignId) {
   return state.data.campaignDocuments
     .filter((document) => String(document.campaign_id || "") === String(campaignId || ""))
     .sort((a, b) => String(b.uploaded_at || b.created_at || "").localeCompare(String(a.uploaded_at || a.created_at || "")));
+}
+
+function campaignRisksFor(campaignId) {
+  return state.data.campaignRisks
+    .filter((risk) => String(risk.campaign_id || "") === String(campaignId || ""))
+    .sort(compareCampaignRisks);
+}
+
+function allCampaignRisksFor(campaignId) {
+  return [...state.data.campaignRisks, ...state.data.archivedCampaignRisks]
+    .filter((risk) => String(risk.campaign_id || "") === String(campaignId || ""))
+    .sort(compareCampaignRisks);
+}
+
+function campaignRiskUpdatesFor(riskId) {
+  return state.data.campaignRiskUpdates
+    .filter((update) => String(update.risk_id || "") === String(riskId || ""))
+    .sort(compareRiskUpdates);
+}
+
+function cancelledCampaignRiskUpdatesFor(riskId) {
+  return state.data.cancelledCampaignRiskUpdates
+    .filter((update) => String(update.risk_id || "") === String(riskId || ""))
+    .sort(compareRiskUpdates);
+}
+
+function campaignRiskUpdatesForCampaign(campaignId) {
+  const riskIds = new Set(allCampaignRisksFor(campaignId).map((risk) => String(risk.id || "")));
+  return state.data.campaignRiskUpdates
+    .filter((update) => riskIds.has(String(update.risk_id || "")))
+    .sort(compareRiskUpdates);
+}
+
+function cancelledCampaignRiskUpdatesForCampaign(campaignId) {
+  const riskIds = new Set(allCampaignRisksFor(campaignId).map((risk) => String(risk.id || "")));
+  return state.data.cancelledCampaignRiskUpdates
+    .filter((update) => riskIds.has(String(update.risk_id || "")))
+    .sort(compareRiskUpdates);
 }
 
 function sortBySeqThenDate(dateField) {
@@ -1843,6 +2027,97 @@ function hasBudgetAmount(item = {}) {
   return Number(item.amount_twd || 0) > 0 || Number(item.amount_rmb || 0) > 0;
 }
 
+function compareCampaignRisks(a = {}, b = {}) {
+  const impactDiff = riskImpactPriority(a) - riskImpactPriority(b);
+  if (impactDiff) return impactDiff;
+
+  const statusDiff = riskStatusPriority(a) - riskStatusPriority(b);
+  if (statusDiff) return statusDiff;
+
+  const dateDiff = String(formatDate(a.due_date) || "9999-12-31").localeCompare(String(formatDate(b.due_date) || "9999-12-31"));
+  if (dateDiff) return dateDiff;
+
+  return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
+function compareRiskUpdates(a = {}, b = {}) {
+  const importantDiff = Number(b.is_important === true) - Number(a.is_important === true);
+  if (importantDiff) return importantDiff;
+
+  const updateDateDiff = String(b.update_date || b.created_at || "").localeCompare(String(a.update_date || a.created_at || ""));
+  if (updateDateDiff) return updateDateDiff;
+
+  return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+}
+
+function riskImpactPriority(risk = {}) {
+  return { 高: 0, 中: 1, 低: 2 }[risk.impact_level] ?? 3;
+}
+
+function riskStatusPriority(risk = {}) {
+  return { 待處理: 0, 處理中: 1, 暫緩: 2, 已解決: 3 }[risk.status] ?? 4;
+}
+
+function riskImpactTone(level = "") {
+  if (level === "高") return "red";
+  if (level === "中") return "amber";
+  if (level === "低") return "green";
+  return "gray";
+}
+
+function riskStatusTone(status = "") {
+  if (status === "已解決") return "green";
+  if (status === "處理中") return "amber";
+  if (status === "待處理") return "red";
+  if (status === "暫緩") return "gray";
+  return statusTone(status);
+}
+
+function latestRiskUpdate(riskId) {
+  return campaignRiskUpdatesFor(riskId)[0] || null;
+}
+
+function latestRiskUpdateText(update = null) {
+  if (!update) return "尚無追蹤";
+  const date = formatDate(update.update_date) || "未填日期";
+  const important = update.is_important ? "重要 / " : "";
+  const next = update.next_followup_date ? ` / 下次：${formatDate(update.next_followup_date)}` : "";
+  return `${important}${date} / ${update.update_note || "未填內容"}${next}`;
+}
+
+function riskNextFollowupDate(risk = {}) {
+  return latestRiskUpdate(risk.id)?.next_followup_date || risk.due_date || "";
+}
+
+function isRiskOverdue(risk = {}) {
+  if (risk.status === "已解決") return false;
+  const date = formatDate(riskNextFollowupDate(risk));
+  return Boolean(date && date < localDateString());
+}
+
+function executiveRiskItems() {
+  return state.data.campaignRisks
+    .filter((risk) => risk.status !== "已解決")
+    .filter((risk) => {
+      const latest = latestRiskUpdate(risk.id);
+      return risk.show_on_dashboard === true || risk.impact_level === "高" || latest?.is_important === true || isRiskOverdue(risk);
+    })
+    .sort(compareExecutiveRisks);
+}
+
+function compareExecutiveRisks(a = {}, b = {}) {
+  const highDiff = Number(b.impact_level === "高") - Number(a.impact_level === "高");
+  if (highDiff) return highDiff;
+
+  const overdueDiff = Number(isRiskOverdue(b)) - Number(isRiskOverdue(a));
+  if (overdueDiff) return overdueDiff;
+
+  const dashboardDiff = Number(b.show_on_dashboard === true) - Number(a.show_on_dashboard === true);
+  if (dashboardDiff) return dashboardDiff;
+
+  return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
 function budgetAmountText(item = {}) {
   const twd = Number(item.amount_twd || 0);
   const rmb = Number(item.amount_rmb || 0);
@@ -1858,6 +2133,12 @@ function archiveDocumentMeta(document = {}) {
   return `${archivedAt}<br>${archivedBy}`;
 }
 
+function archiveRiskMeta(risk = {}) {
+  const archivedBy = risk.archived_by ? formatRequester(risk.archived_by) : "未記錄封存人";
+  const archivedAt = risk.archived_at ? formatDate(risk.archived_at) : "未記錄時間";
+  return `${archivedAt}<br>${archivedBy}`;
+}
+
 function findCampaignTask(id) {
   return [...state.data.campaignTasks, ...state.data.cancelledCampaignTasks].find((task) => String(task.id || "") === String(id || ""));
 }
@@ -1868,6 +2149,14 @@ function findCampaignBudgetItem(id) {
 
 function findCampaignDocument(id) {
   return [...state.data.campaignDocuments, ...state.data.archivedCampaignDocuments].find((document) => String(document.id || "") === String(id || ""));
+}
+
+function findCampaignRisk(id) {
+  return [...state.data.campaignRisks, ...state.data.archivedCampaignRisks].find((risk) => String(risk.id || "") === String(id || ""));
+}
+
+function findCampaignRiskUpdate(id) {
+  return [...state.data.campaignRiskUpdates, ...state.data.cancelledCampaignRiskUpdates].find((update) => String(update.id || "") === String(id || ""));
 }
 
 function clearCampaignDrilldown() {
@@ -4214,6 +4503,244 @@ async function openCampaignDocumentFile(id, button) {
   }
 }
 
+function campaignRiskTypeOptions() {
+  return [
+    ["預算", "預算"],
+    ["時程", "時程"],
+    ["廠商", "廠商"],
+    ["原廠", "原廠"],
+    ["素材", "素材"],
+    ["業務配合", "業務配合"],
+    ["補助請款", "補助請款"],
+    ["其他", "其他"],
+  ];
+}
+
+function campaignRiskFormHtml(risk = {}) {
+  return `
+    <div class="form-grid">
+      <label class="form-field">
+        <span>類型</span>
+        <select name="risk_type">${selectOptions(campaignRiskTypeOptions(), risk.risk_type || "其他")}</select>
+      </label>
+      <label class="form-field">
+        <span>影響程度</span>
+        <select name="impact_level">${selectOptions([["高", "高"], ["中", "中"], ["低", "低"]], risk.impact_level || "中")}</select>
+      </label>
+      <label class="form-field is-wide">
+        <span>事項名稱</span>
+        <input name="title" value="${escapeAttr(risk.title || "")}" required>
+      </label>
+      <label class="form-field">
+        <span>負責人</span>
+        <input name="owner" value="${escapeAttr(risk.owner || state.auth.email || "")}" readonly>
+      </label>
+      <label class="form-field">
+        <span>狀態</span>
+        <select name="status">${selectOptions([["待處理", "待處理"], ["處理中", "處理中"], ["暫緩", "暫緩"], ["已解決", "已解決"]], risk.status || "待處理")}</select>
+      </label>
+      <label class="form-field">
+        <span>到期 / 決策日</span>
+        <input name="due_date" type="date" value="${escapeAttr(formatDate(risk.due_date))}">
+      </label>
+      <label class="form-field is-wide checkbox-field">
+        <input name="show_on_dashboard" type="checkbox" ${risk.show_on_dashboard ? "checked" : ""}>
+        <span>顯示在總經理戰情室</span>
+      </label>
+      <label class="form-field is-wide">
+        <span>說明</span>
+        <textarea name="description">${escapeHtml(risk.description || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>解決 / 決議備註</span>
+        <textarea name="resolution_note">${escapeHtml(risk.resolution_note || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
+function campaignRiskPayload(values = {}, campaignId = "") {
+  return {
+    campaign_id: campaignId,
+    risk_type: values.risk_type || "其他",
+    title: values.title.trim(),
+    description: values.description?.trim() || null,
+    impact_level: values.impact_level || "中",
+    owner: values.owner || state.auth.email,
+    due_date: values.due_date || null,
+    status: values.status || "待處理",
+    show_on_dashboard: values.show_on_dashboard === "on",
+    resolution_note: values.resolution_note?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateCampaignRiskModal(campaignId) {
+  const campaign = findCampaign(campaignId);
+  if (!campaign) return;
+  openModal("新增風險 / 待決事項", campaignRiskFormHtml(), {
+    submitLabel: "建立事項",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "marketing_campaign_risks", campaignRiskPayload(values, campaignId));
+      closeModal();
+      state.campaignDetailId = campaignId;
+      await loadExistingData();
+    },
+  });
+}
+
+function openEditCampaignRiskModal(id) {
+  const risk = findCampaignRisk(id);
+  if (!risk) return;
+  openModal("編輯風險 / 待決事項", campaignRiskFormHtml(risk), {
+    submitLabel: "儲存變更",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_risks?id=eq.${encodeURIComponent(id)}`, campaignRiskPayload(values, risk.campaign_id));
+      closeModal();
+      state.campaignDetailId = risk.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function openArchiveCampaignRiskModal(id) {
+  const risk = findCampaignRisk(id);
+  if (!risk) return;
+  openModal("封存風險 / 待決事項", `
+    <p class="empty-note">確定要封存「${escapeHtml(risk.title || "未命名事項")}」嗎？封存後不會出現在戰情室與進行中清單，但歷史紀錄會保留。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>封存原因（選填）</span>
+        <textarea name="archive_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認封存",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_risks?id=eq.${encodeURIComponent(id)}`, {
+        archived_at: nowIso(),
+        archived_by: state.auth.email,
+        archive_reason: values.archive_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      closeModal();
+      state.campaignDetailId = risk.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function riskUpdateFormHtml(update = {}) {
+  return `
+    <div class="form-grid">
+      <label class="form-field">
+        <span>更新人</span>
+        <input name="updated_by" value="${escapeAttr(update.updated_by || state.auth.email || "")}" readonly>
+      </label>
+      <label class="form-field">
+        <span>更新日</span>
+        <input name="update_date" type="date" value="${escapeAttr(formatDate(update.update_date) || localDateString())}">
+      </label>
+      <label class="form-field">
+        <span>下次追蹤日</span>
+        <input name="next_followup_date" type="date" value="${escapeAttr(formatDate(update.next_followup_date))}">
+      </label>
+      <label class="form-field is-wide checkbox-field">
+        <input name="is_important" type="checkbox" ${update.is_important ? "checked" : ""}>
+        <span>標記為重要追蹤</span>
+      </label>
+      <label class="form-field is-wide">
+        <span>追蹤內容</span>
+        <textarea name="update_note" required>${escapeHtml(update.update_note || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
+function riskUpdatePayload(values = {}, riskId = "") {
+  return {
+    risk_id: riskId,
+    update_note: values.update_note.trim(),
+    updated_by: values.updated_by || state.auth.email,
+    update_date: values.update_date || localDateString(),
+    next_followup_date: values.next_followup_date || null,
+    is_important: values.is_important === "on",
+  };
+}
+
+async function touchCampaignRisk(riskId) {
+  await api("PATCH", `marketing_campaign_risks?id=eq.${encodeURIComponent(riskId)}`, { updated_at: nowIso() });
+}
+
+function openCreateRiskUpdateModal(riskId) {
+  const risk = findCampaignRisk(riskId);
+  if (!risk) return;
+  openModal("新增風險追蹤", riskUpdateFormHtml(), {
+    submitLabel: "建立追蹤",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("POST", "marketing_campaign_risk_updates", riskUpdatePayload(values, riskId));
+      await touchCampaignRisk(riskId);
+      closeModal();
+      state.campaignDetailId = risk.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function openEditRiskUpdateModal(id) {
+  const update = findCampaignRiskUpdate(id);
+  if (!update) return;
+  const risk = findCampaignRisk(update.risk_id);
+  if (!risk) return;
+  openModal("編輯風險追蹤", riskUpdateFormHtml(update), {
+    submitLabel: "儲存變更",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_risk_updates?id=eq.${encodeURIComponent(id)}`, riskUpdatePayload(values, update.risk_id));
+      await touchCampaignRisk(update.risk_id);
+      closeModal();
+      state.campaignDetailId = risk.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelRiskUpdateModal(id) {
+  const update = findCampaignRiskUpdate(id);
+  if (!update) return;
+  const risk = findCampaignRisk(update.risk_id);
+  if (!risk) return;
+  openModal("取消風險追蹤", `
+    <p class="empty-note">確定要取消這筆追蹤紀錄嗎？取消後會保留在歷史紀錄中，不會直接刪除。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `marketing_campaign_risk_updates?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+      });
+      await touchCampaignRisk(update.risk_id);
+      closeModal();
+      state.campaignDetailId = risk.campaign_id;
+      await loadExistingData();
+    },
+  });
+}
+
 function openApprovalReviewModal(id) {
   const request = state.data.approvalRequests.find((item) => item.id === id);
   if (!request) return;
@@ -4535,11 +5062,11 @@ function knowledgeKpis() {
 function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
-    "executive:dashboard": [campaignSummarySection(), projectOverviewSection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
+    "executive:dashboard": [campaignSummarySection(), projectOverviewSection(), campaignRiskSummarySection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
     "executive:budget": [budgetSection(), subsidySection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
-    "executive:decisions": [decisionListSection(), approvalFlowSection()],
-    "marketing:dashboard": [campaignSummarySection(), marketingWorklistSection(), marketingTodoSection()],
+    "executive:decisions": [decisionListSection(), campaignRiskSummarySection(), approvalFlowSection()],
+    "marketing:dashboard": [campaignSummarySection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     "marketing:campaigns": campaignPageSections(),
     "marketing:budget": [budgetSection(), subsidySection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
@@ -4812,6 +5339,12 @@ document.addEventListener("click", (event) => {
   if (action === "edit-campaign-document") openEditCampaignDocumentModal(id);
   if (action === "archive-campaign-document") openArchiveCampaignDocumentModal(id);
   if (action === "open-campaign-document") openCampaignDocumentFile(id, button);
+  if (action === "create-campaign-risk") openCreateCampaignRiskModal(id);
+  if (action === "edit-campaign-risk") openEditCampaignRiskModal(id);
+  if (action === "archive-campaign-risk") openArchiveCampaignRiskModal(id);
+  if (action === "create-risk-update") openCreateRiskUpdateModal(id);
+  if (action === "edit-risk-update") openEditRiskUpdateModal(id);
+  if (action === "cancel-risk-update") openCancelRiskUpdateModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
 });
 
@@ -4891,6 +5424,8 @@ async function loadExistingData() {
       campaignTasks,
       campaignBudgetItems,
       campaignDocuments,
+      campaignRisks,
+      campaignRiskUpdates,
       vendors,
       salesRequests,
       cancelledSalesRequests,
@@ -4911,6 +5446,8 @@ async function loadExistingData() {
       loadCampaignTasks(),
       loadCampaignBudgetItems(),
       loadCampaignDocuments(),
+      loadCampaignRisks(),
+      loadCampaignRiskUpdates(),
       safeGET("vendors?select=id,name,vendor_type,contact_name,contact_phone,contact_email&order=name.asc&limit=100"),
       loadSalesRequests(),
       loadCancelledSalesRequests(),
@@ -4938,6 +5475,10 @@ async function loadExistingData() {
     state.data.cancelledCampaignBudgetItems = Array.isArray(campaignBudgetItems) ? cancelledCampaignBudgetItems(campaignBudgetItems) : [];
     state.data.campaignDocuments = Array.isArray(campaignDocuments) ? activeCampaignDocuments(campaignDocuments) : [];
     state.data.archivedCampaignDocuments = Array.isArray(campaignDocuments) ? archivedCampaignDocuments(campaignDocuments) : [];
+    state.data.campaignRisks = Array.isArray(campaignRisks) ? activeCampaignRisks(campaignRisks) : [];
+    state.data.archivedCampaignRisks = Array.isArray(campaignRisks) ? archivedCampaignRisks(campaignRisks) : [];
+    state.data.campaignRiskUpdates = Array.isArray(campaignRiskUpdates) ? activeCampaignRiskUpdates(campaignRiskUpdates) : [];
+    state.data.cancelledCampaignRiskUpdates = Array.isArray(campaignRiskUpdates) ? cancelledCampaignRiskUpdates(campaignRiskUpdates) : [];
     state.data.vendors = Array.isArray(vendors) ? vendors : [];
     state.data.vendorDocuments = state.data.campaignDocuments.filter((document) => document.vendor_id);
     state.data.salesRequests = Array.isArray(salesRequests) ? salesRequests : [];
@@ -4965,6 +5506,10 @@ async function loadExistingData() {
       + state.data.cancelledCampaignBudgetItems.length
       + state.data.campaignDocuments.length
       + state.data.archivedCampaignDocuments.length
+      + state.data.campaignRisks.length
+      + state.data.archivedCampaignRisks.length
+      + state.data.campaignRiskUpdates.length
+      + state.data.cancelledCampaignRiskUpdates.length
       + state.data.vendors.length
       + state.data.vendorDocuments.length
       + state.data.salesRequests.length
@@ -5012,6 +5557,20 @@ async function loadCampaignDocuments() {
   if (Array.isArray(withLifecycle)) return withLifecycle;
 
   return safeGET("marketing_campaign_documents?select=id,campaign_id,doc_type,title,version_note,file_path,file_name,notes,vendor_id,deliverable_id,uploaded_at&order=uploaded_at.desc.nullslast,id.desc&limit=300");
+}
+
+async function loadCampaignRisks() {
+  const withLifecycle = await safeGET("marketing_campaign_risks?select=id,campaign_id,risk_type,title,description,impact_level,owner,due_date,status,show_on_dashboard,resolution_note,archived_at,archived_by,archive_reason,created_at,updated_at&order=due_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("marketing_campaign_risks?select=id,campaign_id,risk_type,title,description,impact_level,owner,due_date,status,show_on_dashboard,resolution_note,created_at,updated_at&order=due_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
+}
+
+async function loadCampaignRiskUpdates() {
+  const withLifecycle = await safeGET("marketing_campaign_risk_updates?select=id,risk_id,update_note,updated_by,update_date,next_followup_date,is_important,cancelled_at,cancelled_by,cancel_reason,created_at&order=update_date.desc,created_at.desc&limit=500", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("marketing_campaign_risk_updates?select=id,risk_id,update_note,updated_by,update_date,next_followup_date,is_important,created_at&order=update_date.desc,created_at.desc&limit=500");
 }
 
 async function loadMarketingResources() {
