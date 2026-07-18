@@ -435,6 +435,10 @@ function campaignInspectionSections() {
     tasks: "即將到期任務",
     payments: "待付款預算",
     documents: "專案文件巡檢",
+    "risks-high": "高風險未解決",
+    "risks-overdue": "逾期未追蹤",
+    "risks-weekly": "本週新增追蹤",
+    "risks-executive": "待總經理確認",
   };
   return [
     {
@@ -443,7 +447,13 @@ function campaignInspectionSections() {
       wide: true,
       cards: [["返回行銷專案管理", actionGroup([actionButton("返回行銷專案", "back-campaign-list", "", "is-primary")])]],
     },
-    mode === "payments" ? paymentInspectionSection() : mode === "documents" ? documentInspectionSection() : taskInspectionSection(),
+    mode === "payments"
+      ? paymentInspectionSection()
+      : mode === "documents"
+        ? documentInspectionSection()
+        : mode === "risks-high" || mode === "risks-overdue" || mode === "risks-weekly" || mode === "risks-executive"
+          ? riskInspectionSection(mode)
+          : taskInspectionSection(),
   ];
 }
 
@@ -504,6 +514,55 @@ function documentInspectionSection() {
     wide: true,
     headers: ["專案", "文件", "類型", "版本", "上傳日", "操作"],
     rows: rows.length ? rows : [["目前無文件", "無", "無", "無", "無", "無"]],
+  };
+}
+
+function riskInspectionSection(mode = "") {
+  const riskRows = {
+    "risks-high": highOpenRisks(),
+    "risks-overdue": overdueRisks(),
+    "risks-executive": executiveConfirmRisks(),
+  };
+  const updateRows = mode === "risks-weekly" ? weeklyRiskUpdates() : [];
+
+  if (mode === "risks-weekly") {
+    const rows = updateRows.map((update) => {
+      const risk = findCampaignRisk(update.risk_id);
+      return [
+        campaignName(risk?.campaign_id),
+        risk?.title || "未關聯事項",
+        formatDate(update.update_date) || "未填",
+        update.update_note || "未填內容",
+        update.is_important ? tag("重要", "amber") : tag("一般", "gray"),
+        risk?.campaign_id ? actionButton("進入專案", "view-campaign-detail", risk.campaign_id, "is-primary") : "無",
+      ];
+    });
+
+    return {
+      type: "table",
+      title: "本週新增追蹤",
+      wide: true,
+      headers: ["專案", "事項", "更新日", "內容", "標記", "操作"],
+      rows: rows.length ? rows : [["本週沒有新增追蹤", "無", "無", "無", tag("正常", "green"), "無"]],
+    };
+  }
+
+  const rows = (riskRows[mode] || []).map((risk) => [
+    campaignName(risk.campaign_id),
+    risk.title || "未命名事項",
+    tag(risk.impact_level || "中", riskImpactTone(risk.impact_level || "中")),
+    tag(isRiskOverdue(risk) ? "逾期" : risk.status || "待處理", isRiskOverdue(risk) ? "red" : riskStatusTone(risk.status || "待處理")),
+    formatDate(riskNextFollowupDate(risk)) || "未設定",
+    risk.owner || "未填",
+    actionButton("進入專案", "view-campaign-detail", risk.campaign_id, "is-primary"),
+  ]);
+
+  return {
+    type: "table",
+    title: mode === "risks-high" ? "高風險未解決" : mode === "risks-overdue" ? "逾期未追蹤" : "待總經理確認",
+    wide: true,
+    headers: ["專案", "事項", "影響", "狀態", "期限 / 追蹤", "負責人", "操作"],
+    rows: rows.length ? rows : [["目前無符合項目", "無", tag("正常", "green"), tag("無待辦", "green"), "無", "無", "無"]],
   };
 }
 
@@ -704,6 +763,7 @@ function campaignRisksSection(campaign = {}) {
       tag(risk.status || "待處理", riskStatusTone(risk.status || "待處理")),
       risk.show_on_dashboard ? tag("戰情室", "amber") : tag("專案內", "gray"),
       latestRiskUpdateText(latest),
+      riskUpdateTimelineText(risk.id),
       actionGroup([
         actionButton("編輯", "edit-campaign-risk", risk.id, "is-primary"),
         actionButton("追蹤", "create-risk-update", risk.id, "is-primary"),
@@ -716,8 +776,8 @@ function campaignRisksSection(campaign = {}) {
     type: "table",
     title: "風險 / 待決事項",
     wide: true,
-    headers: ["類型", "事項", "影響", "負責人", "到期日", "狀態", "顯示", "最新追蹤", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立風險 / 待決事項", tag("正常", "green"), "無", "無", tag("無", "green"), "無", "無", actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary")]],
+    headers: ["類型", "事項", "影響", "負責人", "到期日", "狀態", "顯示", "最新追蹤", "追蹤脈絡", "操作"],
+    rows: rows.length ? rows : [["無", "尚未建立風險 / 待決事項", tag("正常", "green"), "無", "無", tag("無", "green"), "無", "無", "無", actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary")]],
   };
 }
 
@@ -863,6 +923,37 @@ function campaignRiskSummarySection() {
     wide: true,
     headers: ["專案", "事項", "影響", "狀態", "期限 / 追蹤", "最新追蹤", "操作"],
     rows: rows.length ? rows : [["目前無重大風險", "無", tag("正常", "green"), tag("無待辦", "green"), "無", "無", "無"]],
+  };
+}
+
+function marketingRiskInspectionCardsSection() {
+  const highRisks = highOpenRisks();
+  const overdue = overdueRisks();
+  const weekly = weeklyRiskUpdates();
+  const executiveConfirm = executiveConfirmRisks();
+
+  return {
+    type: "cards",
+    title: "風險巡檢",
+    wide: true,
+    cards: [
+      [
+        "高風險未解決",
+        `${highRisks.length} 件需追蹤<br>${actionGroup([actionButton("查看", "view-campaign-inspection", "risks-high", "is-primary", !highRisks.length)])}`,
+      ],
+      [
+        "逾期未追蹤",
+        `${overdue.length} 件需更新<br>${actionGroup([actionButton("查看", "view-campaign-inspection", "risks-overdue", "is-primary", !overdue.length)])}`,
+      ],
+      [
+        "本週新增追蹤",
+        `${weekly.length} 筆更新<br>${actionGroup([actionButton("查看", "view-campaign-inspection", "risks-weekly", "is-primary", !weekly.length)])}`,
+      ],
+      [
+        "待總經理確認",
+        `${executiveConfirm.length} 件已標示<br>${actionGroup([actionButton("查看", "view-campaign-inspection", "risks-executive", "is-primary", !executiveConfirm.length)])}`,
+      ],
+    ],
   };
 }
 
@@ -1967,6 +2058,13 @@ function addDaysString(days) {
   return localDateString(date);
 }
 
+function startOfWeekString() {
+  const date = new Date();
+  const day = date.getDay() || 7;
+  date.setDate(date.getDate() - day + 1);
+  return localDateString(date);
+}
+
 function upcomingCampaignTasks() {
   const limit = addDaysString(7);
   return state.data.campaignTasks
@@ -2085,6 +2183,17 @@ function latestRiskUpdateText(update = null) {
   return `${important}${date} / ${update.update_note || "未填內容"}${next}`;
 }
 
+function riskUpdateTimelineText(riskId) {
+  const updates = campaignRiskUpdatesFor(riskId);
+  if (!updates.length) return "尚無追蹤";
+  const shown = updates.slice(0, 3).map((update) => {
+    const important = update.is_important ? "重要 / " : "";
+    return `${important}${formatDate(update.update_date) || "未填日期"} / ${update.update_note || "未填內容"}`;
+  });
+  const more = updates.length > 3 ? `另有 ${updates.length - 3} 筆，可展開下方全案追蹤表查看` : "";
+  return [...shown, more].filter(Boolean).join("<br>");
+}
+
 function riskNextFollowupDate(risk = {}) {
   return latestRiskUpdate(risk.id)?.next_followup_date || risk.due_date || "";
 }
@@ -2116,6 +2225,36 @@ function compareExecutiveRisks(a = {}, b = {}) {
   if (dashboardDiff) return dashboardDiff;
 
   return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
+function highOpenRisks() {
+  return state.data.campaignRisks
+    .filter((risk) => risk.impact_level === "高" && risk.status !== "已解決")
+    .sort(compareCampaignRisks);
+}
+
+function overdueRisks() {
+  return state.data.campaignRisks
+    .filter((risk) => risk.status !== "已解決")
+    .filter(isRiskOverdue)
+    .sort(compareExecutiveRisks);
+}
+
+function executiveConfirmRisks() {
+  return state.data.campaignRisks
+    .filter((risk) => risk.status !== "已解決" && risk.show_on_dashboard === true)
+    .sort(compareExecutiveRisks);
+}
+
+function weeklyRiskUpdates() {
+  const start = startOfWeekString();
+  const end = localDateString();
+  return state.data.campaignRiskUpdates
+    .filter((update) => {
+      const date = formatDate(update.update_date || update.created_at);
+      return date && date >= start && date <= end;
+    })
+    .sort(compareRiskUpdates);
 }
 
 function budgetAmountText(item = {}) {
@@ -4533,7 +4672,7 @@ function campaignRiskFormHtml(risk = {}) {
       </label>
       <label class="form-field">
         <span>負責人</span>
-        <input name="owner" value="${escapeAttr(risk.owner || state.auth.email || "")}" readonly>
+        <input name="owner" value="${escapeAttr(risk.owner || state.auth.email || "")}">
       </label>
       <label class="form-field">
         <span>狀態</span>
@@ -5066,7 +5205,7 @@ function buildCurrentSections(page) {
     "executive:budget": [budgetSection(), subsidySection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:decisions": [decisionListSection(), campaignRiskSummarySection(), approvalFlowSection()],
-    "marketing:dashboard": [campaignSummarySection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
+    "marketing:dashboard": [campaignSummarySection(), marketingRiskInspectionCardsSection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     "marketing:campaigns": campaignPageSections(),
     "marketing:budget": [budgetSection(), subsidySection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
