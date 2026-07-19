@@ -176,6 +176,7 @@
    - Batch 14C-D 前端：總經理與行銷總監 Channel 成效頁改讀真資料，彙總 `marketing_campaign_performance.channel` 與 `leads.source_channel`；第一版依原字串分類，不做 Channel mapping table。同一 Channel 有 performance 紀錄時，詢問、名單、有效名單以 performance 為主；只有 performance 缺資料時才用 leads 來源補缺，不疊加。
    - Batch 14D 動工前草案：`BATCH14D_WEEKLY_SUMMARY_DRAFT.md`。第一版做即時計算週報摘要，不建 `marketing_campaign_weekly_summaries` 快照表、不接 AI、不做自動寄送；週期預設本週一到今天；`approval_requests` 只讀進週報，不由週報自動新增或修改。總經理與行銷總監可在獨立週報頁查看、複製與匯出週報，原始資料仍回到各行銷案詳情頁編輯。
    - Batch 15 動工前草案：`BATCH15_PLATFORM_STABILIZATION_DRAFT.md`。此批不新增大型功能，先穩平台：盤點並停用已由 V2 接手模組的 V1 寫入入口、建立 production smoke test、建立 live schema dependency 清單、擴充手機版回歸驗收，並正式記錄 14D 週報完成數與待付款估計金額的已知限制。
+   - Batch 15A / 15B：已拍板並執行 v1 寫入入口凍結。V1 對 `marketing_resources`、`marketing_campaigns`、`marketing_campaign_tasks`、`marketing_campaign_budget_items`、`marketing_campaign_documents`、`marketing_campaign_risks`、`marketing_campaign_risk_updates`、`marketing_campaign_performance` 的新增 / 編輯入口停用；畫面按鈕 disabled，儲存 / 快速處理 / 行銷案排序函式直接顯示「此功能已移至 V2，請至新版行銷管理平台操作。」且不送 API。V1 保留只讀列表、詳情、下載與匯出。
 
 ## 暫緩到 Phase 2
 
