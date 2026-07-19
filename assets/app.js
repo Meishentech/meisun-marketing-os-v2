@@ -76,6 +76,7 @@ const roleMeta = {
       ["leads", "商機轉換"],
       ["channels", "Channel 成效"],
       ["decisions", "待決策中心"],
+      ["weekly", "週報摘要"],
     ],
   },
   marketing: {
@@ -91,6 +92,7 @@ const roleMeta = {
       ["associations", "公會管理"],
       ["knowledge", "產品知識庫"],
       ["requests", "業務需求單"],
+      ["weekly", "週報摘要"],
     ],
   },
   sales: {
@@ -169,6 +171,17 @@ const pages = {
         ["已處理", "8", "本月已完成決策項"],
       ],
       sections: [decisionListSection(), approvalFlowSection()],
+    },
+    weekly: {
+      title: "週報摘要",
+      subtitle: "自動彙整本週行銷案、風險、預算、成效與下週優先事項，可直接複製或匯出。",
+      kpis: [
+        ["週期", "本週", "週一到今天"],
+        ["異動行銷案", "0", "本週有資料異動"],
+        ["待處理", "0", "風險、付款與決策"],
+        ["可匯出", "TXT", "可貼到 LINE 或週報"],
+      ],
+      sections: [],
     },
   },
   marketing: {
@@ -270,6 +283,17 @@ const pages = {
         ["本月完成", "14", "平均處理 4.2 天"],
       ],
       sections: [salesRequestSection(true), requestKanbanSection()],
+    },
+    weekly: {
+      title: "週報摘要",
+      subtitle: "自動整理本週行銷案進度、預算付款、風險追蹤、成效與下週優先事項。",
+      kpis: [
+        ["週期", "本週", "週一到今天"],
+        ["異動行銷案", "0", "本週有資料異動"],
+        ["待處理", "0", "風險、付款與決策"],
+        ["可匯出", "TXT", "可貼到 LINE 或週報"],
+      ],
+      sections: [],
     },
   },
   sales: {
@@ -888,6 +912,406 @@ function campaignPerformanceSection(campaign = {}) {
     headers: ["項目", "數值", "判讀", "操作"],
     rows,
   };
+}
+
+function weeklySummaryEntrySection() {
+  const summary = weeklySummaryData();
+  return {
+    type: "cards",
+    title: "週報摘要",
+    wide: true,
+    cards: [
+      ["本週期間", `${summary.start} ~ ${summary.end}`],
+      ["異動行銷案", `${summary.changedCampaigns.length} 件有資料異動。`],
+      ["下週優先", `${summary.nextPriorities.length} 件需要先確認。`],
+      ["產出週報", actionButton("查看週報摘要", "view-weekly-summary", "", "is-primary")],
+    ],
+  };
+}
+
+function weeklySummarySections() {
+  const summary = weeklySummaryData();
+  return [
+    weeklyOverviewSection(summary),
+    weeklyReportSection(summary),
+    weeklyCampaignProgressSection(summary),
+    weeklyRiskDecisionSection(summary),
+    weeklyBudgetPaymentSection(summary),
+    weeklyPerformanceChannelSection(summary),
+    weeklyNextPrioritySection(summary),
+  ];
+}
+
+function weeklyOverviewSection(summary = weeklySummaryData()) {
+  return {
+    type: "cards",
+    title: `本週總覽：${summary.start} ~ ${summary.end}`,
+    wide: true,
+    cards: [
+      ["行銷案異動", `${summary.changedCampaigns.length} 件行銷案本週有任務、預算、文件、風險或成效異動。`],
+      ["任務", `新增 ${summary.newTasks.length} 件，完成 ${summary.completedTasks.length} 件，取消 ${summary.cancelledTasks.length} 件。`],
+      ["風險追蹤", `本週新增 ${summary.weeklyRiskUpdates.length} 筆追蹤，高風險未解決 ${summary.highRisks.length} 件。`],
+      ["預算付款", `待付款 ${summary.pendingPayments.length} 筆，估計金額 ${formatCurrencyFull(summary.pendingPaymentTotal)}。`],
+      ["成效資料", `本週更新 ${summary.weeklyPerformance.length} 筆，最佳 Channel：${summary.bestChannel?.channel || "尚未有資料"}。`],
+      ["待決策", `${summary.pendingApprovals.length} 筆 approval_requests 待處理；週報只讀，不自動新增審核單。`],
+    ],
+  };
+}
+
+function weeklyReportSection(summary = weeklySummaryData()) {
+  return {
+    type: "weekly-report",
+    title: "可複製週報文字",
+    wide: true,
+    text: weeklyReportText(summary),
+  };
+}
+
+function weeklyCampaignProgressSection(summary = weeklySummaryData()) {
+  const rows = summary.changedCampaigns.slice(0, 12).map((campaign) => {
+    const facts = weeklyCampaignFacts(campaign.id, summary);
+    return [
+      campaign.name || "未命名行銷案",
+      tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中")),
+      tag(campaign.status || "未填", campaignStatusTone(campaign.status || "未填")),
+      facts,
+      actionButton("進入專案", "view-campaign-detail", campaign.id, "is-primary"),
+    ];
+  });
+
+  return {
+    type: "table",
+    title: "行銷案進度摘要",
+    wide: true,
+    headers: ["行銷案", "重要性", "狀態", "本週摘要", "操作"],
+    rows: rows.length ? rows : [["本週尚無行銷案異動", tag("無", "green"), tag("正常", "green"), "任務、預算、文件、風險與成效目前沒有本週異動。", "無"]],
+  };
+}
+
+function weeklyRiskDecisionSection(summary = weeklySummaryData()) {
+  const riskRows = summary.weeklyRisks.slice(0, 10).map((risk) => [
+    tag("風險", isRiskOverdue(risk) ? "red" : riskImpactTone(risk.impact_level || "中")),
+    `${campaignName(risk.campaign_id)} / ${risk.title || "未命名事項"}`,
+    `${tag(risk.impact_level || "中", riskImpactTone(risk.impact_level || "中"))} ${tag(isRiskOverdue(risk) ? "逾期" : risk.status || "待處理", isRiskOverdue(risk) ? "red" : riskStatusTone(risk.status || "待處理"))}`,
+    formatDate(riskNextFollowupDate(risk)) || "未設定",
+    risk.owner || "未填",
+    actionButton("進入專案", "view-campaign-detail", risk.campaign_id, "is-primary"),
+  ]);
+  const approvalRows = summary.pendingApprovals.slice(0, 6).map((request) => [
+    tag("決策", approvalPriority(request) === "high" ? "red" : "amber"),
+    request.title || approvalEntityLabel(request.entity_type),
+    request.summary || approvalEntityLabel(request.entity_type),
+    formatDate(request.due_date) || "未設定",
+    "待決策中心處理",
+    actionButton("前往待決策", "view-decisions", "", "is-primary"),
+  ]);
+
+  return {
+    type: "table",
+    title: "風險 / 待決策摘要",
+    wide: true,
+    headers: ["類型", "項目", "內容 / 狀態", "期限", "負責 / 處理", "操作"],
+    rows: [
+      ...riskRows,
+      ...approvalRows,
+    ].length
+      ? [...riskRows, ...approvalRows]
+      : [["目前無重大風險", "沒有高風險、逾期追蹤或待審核事項。", tag("正常", "green"), "無", "無", "無"]],
+  };
+}
+
+function weeklyBudgetPaymentSection(summary = weeklySummaryData()) {
+  const rows = summary.pendingPayments.slice(0, 10).map((item) => [
+    campaignName(item.campaign_id),
+    item.item_name || "未命名費用",
+    budgetAmountText(item),
+    tag(item.payment_status || "未請款", statusTone(item.payment_status || "未請款")),
+    formatDate(item.payment_date) || "未設定",
+    actionButton("進入專案", "view-campaign-detail", item.campaign_id, "is-primary"),
+  ]);
+
+  return {
+    type: "table",
+    title: "預算 / 付款摘要",
+    wide: true,
+    headers: ["行銷案", "項目", "金額", "付款狀態", "付款日", "操作"],
+    rows: rows.length ? rows : [["目前無待付款項目", "無", "無", tag("正常", "green"), "無", "無"]],
+  };
+}
+
+function weeklyPerformanceChannelSection(summary = weeklySummaryData()) {
+  const rows = summary.weeklyPerformance.slice(0, 10).map((performance) => [
+    campaignName(performance.campaign_id),
+    performance.channel || "未分類",
+    `${formatCount(performance.reach_count)} / ${formatCount(performance.lead_count)}`,
+    `${formatCount(performance.qualified_lead_count)} / ${formatCount(performance.deal_count)} 件`,
+    formatCurrencyFull(performance.deal_amount),
+    formatDate(performance.updated_at || performance.created_at) || "未記錄",
+    actionButton("進入專案", "view-campaign-detail", performance.campaign_id, "is-primary"),
+  ]);
+
+  return {
+    type: "table",
+    title: "成效 / Channel 摘要",
+    wide: true,
+    headers: ["行銷案", "Channel", "觸及 / 名單", "有效 / 成交", "成交金額", "更新日", "操作"],
+    rows: rows.length ? rows : [["本週尚無成效更新", "無", "無", "無", "無", "無", "無"]],
+  };
+}
+
+function weeklyNextPrioritySection(summary = weeklySummaryData()) {
+  const rows = summary.nextPriorities.slice(0, 12).map((item) => [
+    tag(item.type, item.tone),
+    item.title,
+    item.detail,
+    item.campaign_id ? actionButton("進入專案", "view-campaign-detail", item.campaign_id, "is-primary") : item.action || "無",
+  ]);
+
+  return {
+    type: "table",
+    title: "下週優先事項",
+    wide: true,
+    headers: ["類型", "事項", "原因", "操作"],
+    rows: rows.length ? rows : [[tag("正常", "green"), "目前沒有下週優先事項", "沒有 7 天內到期任務、待付款、高風險或待決策事項。", "無"]],
+  };
+}
+
+function weeklySummaryData() {
+  const start = startOfWeekString();
+  const end = localDateString();
+  const nextLimit = addDaysString(7);
+  const allCampaigns = [...state.data.campaigns, ...state.data.archivedCampaigns];
+
+  const newTasks = state.data.campaignTasks.filter((task) => isDateInRange(task.created_at, start, end));
+  const completedTasks = state.data.campaignTasks.filter((task) => {
+    const status = task.status || "";
+    return ["已完成", "完成", "結案"].includes(status) && isDateInRange(task.planned_end, start, end);
+  });
+  const cancelledTasks = state.data.cancelledCampaignTasks.filter((task) => isDateInRange(task.cancelled_at, start, end));
+  const newBudgetItems = state.data.campaignBudgetItems.filter((item) => isDateInRange(item.created_at, start, end));
+  const cancelledBudgetItems = state.data.cancelledCampaignBudgetItems.filter((item) => isDateInRange(item.cancelled_at, start, end));
+  const paidBudgetItems = state.data.campaignBudgetItems.filter((item) => item.payment_status === "已付款" && isDateInRange(item.payment_date, start, end));
+  const newDocuments = state.data.campaignDocuments.filter((document) => isDateInRange(document.uploaded_at || document.created_at, start, end));
+  const archivedDocuments = state.data.archivedCampaignDocuments.filter((document) => isDateInRange(document.archived_at, start, end));
+  const newRisks = state.data.campaignRisks.filter((risk) => isDateInRange(risk.created_at, start, end));
+  const updatedRisks = state.data.campaignRisks.filter((risk) => isDateInRange(risk.updated_at, start, end));
+  const archivedRisks = state.data.archivedCampaignRisks.filter((risk) => isDateInRange(risk.archived_at, start, end));
+  const weeklyRiskUpdatesRows = weeklyRiskUpdates();
+  const weeklyPerformance = state.data.campaignPerformance.filter((performance) => isDateInRange(performance.updated_at || performance.created_at, start, end));
+  const weeklyLeads = state.data.leads.filter((lead) => isDateInRange(lead.created_at, start, end));
+  const pendingPayments = pendingCampaignPayments();
+  const highRisks = highOpenRisks();
+  const overdue = overdueRisks();
+  const executiveRisks = executiveConfirmRisks();
+  const pendingApprovals = state.data.approvalRequests
+    .filter((request) => request.status !== "已核准")
+    .sort((a, b) => approvalPriorityScore(b) - approvalPriorityScore(a) || String(a.due_date || "9999-12-31").localeCompare(String(b.due_date || "9999-12-31")));
+  const bestChannel = channelPerformanceRows()[0] || null;
+
+  const changedIds = new Set();
+  [
+    ...newTasks,
+    ...completedTasks,
+    ...cancelledTasks,
+    ...newBudgetItems,
+    ...cancelledBudgetItems,
+    ...paidBudgetItems,
+    ...newDocuments,
+    ...archivedDocuments,
+    ...newRisks,
+    ...updatedRisks,
+    ...archivedRisks,
+    ...weeklyPerformance,
+  ].forEach((record) => {
+    if (record.campaign_id) changedIds.add(String(record.campaign_id));
+  });
+  weeklyRiskUpdatesRows.forEach((update) => {
+    const risk = findCampaignRisk(update.risk_id);
+    if (risk?.campaign_id) changedIds.add(String(risk.campaign_id));
+  });
+
+  const changedCampaigns = allCampaigns
+    .filter((campaign) => changedIds.has(String(campaign.id)))
+    .sort(compareWeeklyCampaigns);
+
+  const weeklyRisks = uniqueById([...highRisks, ...overdue, ...executiveRisks, ...newRisks, ...updatedRisks])
+    .sort(compareExecutiveRisks);
+
+  const nextTasks = state.data.campaignTasks.filter((task) => {
+    const due = formatDate(task.planned_end);
+    const status = task.status || "";
+    return due && due <= nextLimit && !["已完成", "完成", "結案"].includes(status);
+  });
+  const missingPerformanceCampaigns = state.data.campaigns
+    .filter((campaign) => campaign.priority === "高" && !performanceForCampaign(campaign.id));
+
+  const nextPriorities = [
+    ...nextTasks.map((task) => ({
+      type: "任務",
+      tone: isPastDate(task.planned_end) ? "red" : "amber",
+      title: task.task_name || "未命名任務",
+      detail: `${campaignName(task.campaign_id)} / 到期 ${formatDate(task.planned_end) || "未填"} / ${task.owner || "未填負責人"}`,
+      campaign_id: task.campaign_id,
+    })),
+    ...pendingPayments.slice(0, 8).map((item) => ({
+      type: "付款",
+      tone: paymentDuePriority(item) === 0 ? "red" : "amber",
+      title: item.item_name || "未命名費用",
+      detail: `${campaignName(item.campaign_id)} / ${budgetAmountText(item)} / ${item.payment_status || "未請款"}`,
+      campaign_id: item.campaign_id,
+    })),
+    ...highRisks.slice(0, 8).map((risk) => ({
+      type: "風險",
+      tone: "red",
+      title: risk.title || "未命名風險",
+      detail: `${campaignName(risk.campaign_id)} / ${risk.status || "待處理"} / ${formatDate(riskNextFollowupDate(risk)) || "未設定追蹤"}`,
+      campaign_id: risk.campaign_id,
+    })),
+    ...pendingApprovals.slice(0, 6).map((request) => ({
+      type: "決策",
+      tone: approvalPriority(request) === "high" ? "red" : "amber",
+      title: request.title || approvalEntityLabel(request.entity_type),
+      detail: `${request.summary || approvalEntityLabel(request.entity_type)} / ${formatDate(request.due_date) || "未設定期限"}`,
+      action: "待決策中心",
+    })),
+    ...missingPerformanceCampaigns.slice(0, 6).map((campaign) => ({
+      type: "成效",
+      tone: "amber",
+      title: campaign.name || "未命名行銷案",
+      detail: "高重要性行銷案尚未填成效資料。",
+      campaign_id: campaign.id,
+    })),
+  ];
+
+  return {
+    start,
+    end,
+    changedCampaigns,
+    newTasks,
+    completedTasks,
+    cancelledTasks,
+    newBudgetItems,
+    cancelledBudgetItems,
+    paidBudgetItems,
+    newDocuments,
+    archivedDocuments,
+    newRisks,
+    updatedRisks,
+    archivedRisks,
+    weeklyRiskUpdates: weeklyRiskUpdatesRows,
+    weeklyPerformance,
+    weeklyLeads,
+    weeklyRisks,
+    pendingPayments,
+    pendingPaymentTotal: pendingPayments.reduce((sum, item) => sum + budgetComparableAmount(item), 0),
+    highRisks,
+    overdueRisks: overdue,
+    executiveRisks,
+    pendingApprovals,
+    bestChannel,
+    nextPriorities: uniqueWeeklyPriorities(nextPriorities),
+  };
+}
+
+function weeklyCampaignFacts(campaignId, summary = weeklySummaryData()) {
+  const facts = [];
+  const taskCount = [
+    ...summary.newTasks,
+    ...summary.completedTasks,
+    ...summary.cancelledTasks,
+  ].filter((task) => String(task.campaign_id || "") === String(campaignId || "")).length;
+  const budgetCount = [
+    ...summary.newBudgetItems,
+    ...summary.cancelledBudgetItems,
+    ...summary.paidBudgetItems,
+  ].filter((item) => String(item.campaign_id || "") === String(campaignId || "")).length;
+  const documentCount = [
+    ...summary.newDocuments,
+    ...summary.archivedDocuments,
+  ].filter((document) => String(document.campaign_id || "") === String(campaignId || "")).length;
+  const riskCount = summary.weeklyRisks.filter((risk) => String(risk.campaign_id || "") === String(campaignId || "")).length;
+  const performanceCount = summary.weeklyPerformance.filter((performance) => String(performance.campaign_id || "") === String(campaignId || "")).length;
+
+  if (taskCount) facts.push(`任務 ${taskCount}`);
+  if (budgetCount) facts.push(`預算 ${budgetCount}`);
+  if (documentCount) facts.push(`文件 ${documentCount}`);
+  if (riskCount) facts.push(`風險 ${riskCount}`);
+  if (performanceCount) facts.push(`成效 ${performanceCount}`);
+  return facts.length ? facts.join(" / ") : "本週有資料異動";
+}
+
+function weeklyReportText(summary = weeklySummaryData()) {
+  const campaignLines = summary.changedCampaigns.slice(0, 8).map((campaign) => `- ${campaign.name || "未命名行銷案"}：${weeklyCampaignFacts(campaign.id, summary)}`);
+  const riskLines = summary.weeklyRisks.slice(0, 8).map((risk) => `- ${campaignName(risk.campaign_id)}｜${risk.title || "未命名事項"}：${risk.impact_level || "中"} / ${risk.status || "待處理"} / ${formatDate(riskNextFollowupDate(risk)) || "未設定追蹤"}`);
+  const paymentLines = summary.pendingPayments.slice(0, 8).map((item) => `- ${campaignName(item.campaign_id)}｜${item.item_name || "未命名費用"}：${budgetAmountText(item)} / ${item.payment_status || "未請款"} / ${formatDate(item.payment_date) || "未設定付款日"}`);
+  const performanceLines = summary.weeklyPerformance.slice(0, 8).map((performance) => `- ${campaignName(performance.campaign_id)}｜${performance.channel || "未分類"}：名單 ${formatCount(performance.lead_count)}，有效 ${formatCount(performance.qualified_lead_count)}，成交 ${formatCurrencyFull(performance.deal_amount)}`);
+  const priorityLines = summary.nextPriorities.slice(0, 10).map((item) => `- ${item.type}｜${item.title}：${item.detail}`);
+
+  return [
+    "美昇 Marketing OS 週報摘要",
+    `期間：${summary.start} ~ ${summary.end}`,
+    "",
+    "一、本週重點",
+    `- 異動行銷案：${summary.changedCampaigns.length} 件。`,
+    `- 任務：新增 ${summary.newTasks.length} 件、完成 ${summary.completedTasks.length} 件、取消 ${summary.cancelledTasks.length} 件。`,
+    `- 風險追蹤：本週新增 ${summary.weeklyRiskUpdates.length} 筆，高風險未解決 ${summary.highRisks.length} 件。`,
+    `- 預算付款：待付款 ${summary.pendingPayments.length} 筆，估計 ${formatCurrencyFull(summary.pendingPaymentTotal)}。`,
+    `- 成效：本週更新 ${summary.weeklyPerformance.length} 筆，最佳 Channel：${summary.bestChannel?.channel || "尚未有資料"}。`,
+    "",
+    "二、行銷案進度",
+    ...(campaignLines.length ? campaignLines : ["- 本週尚無行銷案異動。"]),
+    "",
+    "三、風險 / 待決事項",
+    ...(riskLines.length ? riskLines : ["- 目前沒有高風險、逾期追蹤或重要待決事項。"]),
+    summary.pendingApprovals.length ? `- 待決策中心：${summary.pendingApprovals.length} 筆 approval_requests 待處理。` : "- 待決策中心：目前沒有待處理審核。",
+    "",
+    "四、預算 / 付款",
+    ...(paymentLines.length ? paymentLines : ["- 目前沒有待付款項目。"]),
+    "",
+    "五、成效 / Channel",
+    ...(performanceLines.length ? performanceLines : ["- 本週尚無成效資料更新。"]),
+    summary.weeklyLeads.length ? `- 本週新增名單：${summary.weeklyLeads.length} 筆。` : "- 本週尚無新增名單。",
+    "",
+    "六、下週優先事項",
+    ...(priorityLines.length ? priorityLines : ["- 目前沒有系統標示的下週優先事項。"]),
+  ].join("\n");
+}
+
+function isDateInRange(value, start, end) {
+  const date = formatDate(value);
+  return Boolean(date && date >= start && date <= end);
+}
+
+function compareWeeklyCampaigns(a = {}, b = {}) {
+  return campaignUrgencyScore(b) - campaignUrgencyScore(a)
+    || String(b.created_at || "").localeCompare(String(a.created_at || ""))
+    || String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant-TW");
+}
+
+function uniqueById(items = []) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const id = String(item.id || "");
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function uniqueWeeklyPriorities(items = []) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = `${item.type}-${item.title}-${item.campaign_id || item.detail}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function approvalPriorityScore(request = {}) {
+  if (approvalPriority(request) === "high") return 100;
+  if (request.status === "需修正") return 60;
+  return 30;
 }
 
 function campaignSummarySection() {
@@ -5290,7 +5714,21 @@ function openApprovalReviewModal(id) {
   });
 }
 
+function downloadTextFile(content, filename) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
 function exportCurrentSummary() {
+  if (state.page === "weekly") {
+    exportWeeklyReport();
+    return;
+  }
+
   const title = document.getElementById("pageTitle").textContent;
   const kpis = [...document.querySelectorAll(".kpi-card")]
     .map((card) => {
@@ -5301,12 +5739,30 @@ function exportCurrentSummary() {
     })
     .join("\n");
   const content = [`${title} 摘要`, `匯出時間：${new Date().toLocaleString("zh-Hant-TW")}`, "", kpis].join("\n");
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `meisun-marketing-os-${state.role}-${state.page}.txt`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+  downloadTextFile(content, `meisun-marketing-os-${state.role}-${state.page}.txt`);
+}
+
+function exportWeeklyReport() {
+  const summary = weeklySummaryData();
+  downloadTextFile(weeklyReportText(summary), `meisun-marketing-os-weekly-${summary.start}-${summary.end}.txt`);
+}
+
+async function copyWeeklyReport() {
+  const text = weeklyReportText(weeklySummaryData());
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+  }
+  window.alert("已複製本週週報文字。");
 }
 
 function render() {
@@ -5317,6 +5773,7 @@ function render() {
   document.getElementById("pageTitle").textContent = page.title;
   document.getElementById("pageSubtitle").textContent = page.subtitle;
   document.getElementById("primaryAction").textContent = primaryActionLabel(meta);
+  document.getElementById("secondaryAction").textContent = secondaryActionLabel();
 
   renderNav(meta.nav);
   renderKpis(buildCurrentKpis(page));
@@ -5370,6 +5827,7 @@ function dailyGreetingMessage() {
 
 function primaryActionLabel(meta) {
   if (state.role === "sales") return "提出素材需求";
+  if (state.page === "weekly") return "複製週報";
   if (state.role === "executive") return "查看待決策";
   if (state.role === "marketing" && state.page === "campaigns") return "新增行銷案";
   if (state.role === "marketing" && state.page === "requests") return "新增需求單";
@@ -5378,9 +5836,15 @@ function primaryActionLabel(meta) {
   return meta.primaryAction;
 }
 
+function secondaryActionLabel() {
+  if (state.page === "weekly") return "匯出週報";
+  return "匯出摘要";
+}
+
 function buildCurrentKpis(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicKpis = {
+    "executive:weekly": weeklyKpis(),
     "executive:budget": expenseKpis(),
     "executive:leads": leadKpis(),
     "executive:channels": channelKpis(),
@@ -5391,11 +5855,22 @@ function buildCurrentKpis(page) {
     "marketing:vendors": vendorKpis(),
     "marketing:knowledge": knowledgeKpis(),
     "marketing:requests": requestKpis(),
+    "marketing:weekly": weeklyKpis(),
     "sales:knowledge": knowledgeKpis(),
     "sales:requests": requestKpis(),
   };
 
   return dynamicKpis[key] || page.kpis;
+}
+
+function weeklyKpis() {
+  const summary = weeklySummaryData();
+  return [
+    ["週期", `${summary.start.slice(5)} ~ ${summary.end.slice(5)}`, "本週一到今天"],
+    ["異動行銷案", String(summary.changedCampaigns.length), "本週有資料異動"],
+    ["待處理", String(summary.nextPriorities.length), "下週優先事項"],
+    ["成效更新", String(summary.weeklyPerformance.length), "本週更新成效資料"],
+  ];
 }
 
 function leadKpis() {
@@ -5430,7 +5905,7 @@ function channelKpis() {
 
   return [
     ["最佳來源", best.channel, `${best.judgment.label}；有效名單 ${formatCount(best.qualified)}`],
-    ["總名單", formatCount(totalLeads), "成效資料名單 + leads 來源筆數"],
+    ["總名單", formatCount(totalLeads), "成效資料為主，leads 來源補缺"],
     ["有效名單", formatCount(totalQualified), `平均有效率 ${ratioText(totalQualified, totalLeads)}`],
     ["成交金額", formatCurrencyFull(totalDealAmount), adjustmentRows ? `${adjustmentRows} 個 Channel 建議調整` : "目前無需調整標記"],
   ];
@@ -5587,12 +6062,13 @@ function knowledgeKpis() {
 function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
-    "executive:dashboard": [campaignSummarySection(), projectOverviewSection(), campaignRiskSummarySection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
+    "executive:dashboard": [weeklySummaryEntrySection(), campaignSummarySection(), projectOverviewSection(), campaignRiskSummarySection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
     "executive:budget": [budgetSection(), subsidySection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:channels": [channelSummarySection(false), channelDecisionSection()],
     "executive:decisions": [decisionListSection(), campaignRiskSummarySection(), approvalFlowSection()],
-    "marketing:dashboard": [campaignSummarySection(), marketingRiskInspectionCardsSection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
+    "executive:weekly": weeklySummarySections(),
+    "marketing:dashboard": [weeklySummaryEntrySection(), campaignSummarySection(), marketingRiskInspectionCardsSection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     "marketing:campaigns": campaignPageSections(),
     "marketing:budget": [budgetSection(), subsidySection()],
     "marketing:channels": [channelSummarySection(false), channelDecisionSection()],
@@ -5601,6 +6077,7 @@ function buildCurrentSections(page) {
     "marketing:associations": [associationSection(), associationTagsSection()],
     "marketing:knowledge": [knowledgeSection(true), marketingResourceManagerSection(), archivedMarketingResourcesSection(), knowledgeGovernanceSection()],
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
+    "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
     "sales:knowledge": [knowledgeSection(false), knowledgeDetailSection()],
@@ -5715,6 +6192,23 @@ function renderSection(section) {
     `;
   }
 
+  if (section.type === "weekly-report") {
+    return `
+      <article class="panel${wideClass}">
+        <div class="panel-header">
+          <h2>${section.title}</h2>
+          <div class="action-group">
+            ${actionButton("複製週報", "copy-weekly-report", "", "is-primary")}
+            ${actionButton("匯出 .txt", "export-weekly-report")}
+          </div>
+        </div>
+        <div class="panel-body">
+          <textarea class="weekly-report-text" readonly>${escapeHtml(section.text || "")}</textarea>
+        </div>
+      </article>
+    `;
+  }
+
   return `<article class="panel${wideClass}"><div class="panel-body empty-note">尚未定義內容。</div></article>`;
 }
 
@@ -5769,6 +6263,11 @@ document.querySelectorAll(".role-button").forEach((button) => {
 });
 
 document.getElementById("primaryAction").addEventListener("click", () => {
+  if (state.page === "weekly") {
+    copyWeeklyReport();
+    return;
+  }
+
   if (state.role === "sales") {
     openCreateSalesRequestModal();
     return;
@@ -5874,6 +6373,26 @@ document.addEventListener("click", (event) => {
   if (action === "cancel-risk-update") openCancelRiskUpdateModal(id);
   if (action === "edit-campaign-performance") openCampaignPerformanceModal(id);
   if (action === "review-approval") openApprovalReviewModal(id);
+  if (action === "view-weekly-summary") {
+    state.page = "weekly";
+    clearCampaignDrilldown();
+    render();
+  }
+  if (action === "view-decisions") {
+    if (state.role === "executive") {
+      state.page = "decisions";
+      clearCampaignDrilldown();
+      render();
+      return;
+    }
+    openModal("待決策中心", `<p class="empty-note">此項目需由總經理在待決策中心處理；週報頁只做摘要提醒，不會自動新增或修改審核單。</p>`, {
+      submitLabel: "關閉",
+      hideCancel: true,
+      onSubmit: async () => closeModal(),
+    });
+  }
+  if (action === "copy-weekly-report") copyWeeklyReport();
+  if (action === "export-weekly-report") exportWeeklyReport();
 });
 
 document.getElementById("modalClose").addEventListener("click", closeModal);

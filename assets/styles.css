@@ -923,6 +923,19 @@ h1 {
   resize: vertical;
 }
 
+.weekly-report-text {
+  width: 100%;
+  min-height: 520px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: #fbfdff;
+  color: var(--text);
+  font: 800 14px/1.75 "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", Arial, sans-serif;
+  resize: vertical;
+  white-space: pre-wrap;
+}
+
 .checkbox-field {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -1140,6 +1153,13 @@ h1 {
   .form-field select,
   .form-field textarea {
     min-height: 46px;
+  }
+
+  .weekly-report-text {
+    min-height: 440px;
+    padding: 12px;
+    font-size: 13px;
+    line-height: 1.7;
   }
 
   .table,
