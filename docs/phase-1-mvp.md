@@ -175,6 +175,7 @@
    - Batch 14C-C 前端：v2 行銷案詳情頁新增成效資料讀取、新增 / 編輯 modal、衍生轉換率與成本效率顯示；不做刪除。若競態造成 `unique(campaign_id)` 重複建立，前端需顯示中文提示並重新載入資料。
    - Batch 14C-D 前端：總經理與行銷總監 Channel 成效頁改讀真資料，彙總 `marketing_campaign_performance.channel` 與 `leads.source_channel`；第一版依原字串分類，不做 Channel mapping table。同一 Channel 有 performance 紀錄時，詢問、名單、有效名單以 performance 為主；只有 performance 缺資料時才用 leads 來源補缺，不疊加。
    - Batch 14D 動工前草案：`BATCH14D_WEEKLY_SUMMARY_DRAFT.md`。第一版做即時計算週報摘要，不建 `marketing_campaign_weekly_summaries` 快照表、不接 AI、不做自動寄送；週期預設本週一到今天；`approval_requests` 只讀進週報，不由週報自動新增或修改。總經理與行銷總監可在獨立週報頁查看、複製與匯出週報，原始資料仍回到各行銷案詳情頁編輯。
+   - Batch 15 動工前草案：`BATCH15_PLATFORM_STABILIZATION_DRAFT.md`。此批不新增大型功能，先穩平台：盤點並停用已由 V2 接手模組的 V1 寫入入口、建立 production smoke test、建立 live schema dependency 清單、擴充手機版回歸驗收，並正式記錄 14D 週報完成數與待付款估計金額的已知限制。
 
 ## 暫緩到 Phase 2
 
