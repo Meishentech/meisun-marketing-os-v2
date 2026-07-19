@@ -211,6 +211,7 @@ notify pgrst, 'reload schema';
 - `leads.source_channel` 與 `performance.channel` 可能命名不一致，例如「官網 / LINE」與「LINE」。
 - 14C 第一版建議不做複雜 mapping table，先用原字串分類；命名治理留到後續。
 - 若 performance 沒資料但 leads 有資料，Channel 頁仍應顯示 leads 來源摘要，不要退回假資料。
+- 數字合併規則：同一個 Channel 若已有 `marketing_campaign_performance` 紀錄，詢問、有效名單與名單數以 performance 手動填寫數字為主；只有該 Channel 完全沒有 performance 紀錄時，才用 `leads.source_channel` 與 `leads.stage` 做替代摘要。leads 用來補缺，不與 performance 數字疊加。
 
 ## V2 UI 位置
 

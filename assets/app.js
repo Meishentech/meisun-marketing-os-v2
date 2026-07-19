@@ -1217,7 +1217,7 @@ function channelSummarySection(wide) {
   const rows = channelPerformanceRows().map((row) => [
     row.channel,
     formatCount(row.reach),
-    `${formatCount(row.totalLeads)}<br><span class="cell-sub">成效 ${formatCount(row.performanceLeads)} / 名單庫 ${formatCount(row.leadRecords)}</span>`,
+    `${formatCount(row.totalLeads)}<br><span class="cell-sub">${row.performanceRecords ? "以成效資料為主" : "以名單庫補缺"}</span>`,
     formatCount(row.inquiries),
     formatCount(row.qualified),
     `${formatCount(row.deals)} 件`,
@@ -1271,8 +1271,8 @@ function channelPerformanceRows() {
     stats.performanceRecords += 1;
     stats.reach += Number(performance.reach_count || 0);
     stats.performanceLeads += Number(performance.lead_count || 0);
-    stats.inquiries += Number(performance.inquiry_count || 0);
-    stats.qualified += Number(performance.qualified_lead_count || 0);
+    stats.performanceInquiries += Number(performance.inquiry_count || 0);
+    stats.performanceQualified += Number(performance.qualified_lead_count || 0);
     stats.estimatedOpportunityAmount += Number(performance.estimated_opportunity_amount || 0);
     stats.deals += Number(performance.deal_count || 0);
     stats.dealAmount += Number(performance.deal_amount || 0);
@@ -1281,16 +1281,22 @@ function channelPerformanceRows() {
   state.data.leads.forEach((lead) => {
     const stats = ensureChannelStats(channels, lead.source_channel);
     stats.leadRecords += 1;
-    if (lead.stage === "詢問") stats.inquiries += 1;
-    if (["有效名單", "業務跟進", "形成商機", "需主管協助"].includes(lead.stage)) stats.qualified += 1;
-    if (["形成商機", "需主管協助"].includes(lead.stage)) stats.opportunities += 1;
+    if (lead.stage === "詢問") stats.leadInquiries += 1;
+    if (["有效名單", "業務跟進", "形成商機", "需主管協助"].includes(lead.stage)) stats.leadQualified += 1;
+    if (["形成商機", "需主管協助"].includes(lead.stage)) stats.leadOpportunities += 1;
   });
 
   return [...channels.values()]
     .map((stats) => {
-      const totalLeads = stats.performanceLeads + stats.leadRecords;
-      const judgment = channelJudgment({ ...stats, totalLeads });
-      return { ...stats, totalLeads, judgment };
+      const hasPerformance = stats.performanceRecords > 0;
+      const resolvedStats = {
+        ...stats,
+        totalLeads: hasPerformance ? stats.performanceLeads : stats.leadRecords,
+        inquiries: hasPerformance ? stats.performanceInquiries : stats.leadInquiries,
+        qualified: hasPerformance ? stats.performanceQualified : stats.leadQualified,
+        opportunities: hasPerformance ? stats.performanceOpportunities : stats.leadOpportunities,
+      };
+      return { ...resolvedStats, judgment: channelJudgment(resolvedStats) };
     })
     .sort(compareChannelRows);
 }
@@ -1303,7 +1309,13 @@ function ensureChannelStats(channels, rawChannel) {
       performanceRecords: 0,
       reach: 0,
       performanceLeads: 0,
+      performanceInquiries: 0,
+      performanceQualified: 0,
+      performanceOpportunities: 0,
       leadRecords: 0,
+      leadInquiries: 0,
+      leadQualified: 0,
+      leadOpportunities: 0,
       inquiries: 0,
       qualified: 0,
       opportunities: 0,
