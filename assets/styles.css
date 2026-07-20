@@ -107,12 +107,15 @@ button {
 }
 
 .app-shell {
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 280px 1fr;
 }
 
 .sidebar {
+  min-width: 0;
   min-height: 100vh;
   padding: 24px 18px;
   background: var(--blue-dark);
@@ -269,6 +272,7 @@ button {
 }
 
 .main {
+  min-width: 0;
   padding: 32px;
 }
 
@@ -859,9 +863,24 @@ h1 {
 
 .modal-body {
   flex: 1 1 auto;
+  min-height: 0;
   max-height: calc(100vh - 132px);
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#modalContent {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 18px;
+}
+
+#modalMessage {
+  margin: 0;
+  padding: 0 18px;
 }
 
 .form-grid {
@@ -952,12 +971,11 @@ h1 {
 }
 
 .modal-actions {
-  position: sticky;
-  bottom: 0;
+  flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin: 18px -18px 0;
+  margin: 0;
   padding: 14px 18px;
   border-top: 1px solid var(--line);
   background: rgba(255, 255, 255, .96);
@@ -1260,14 +1278,21 @@ h1 {
 
   .modal-body {
     max-height: calc(100vh - 94px);
+    padding: 0;
+  }
+
+  #modalContent {
     padding: 14px;
   }
 
+  #modalMessage {
+    padding: 0 14px;
+  }
+
   .modal-actions {
-    bottom: 0;
     display: grid;
     grid-template-columns: 1fr;
-    margin: 18px -14px 0;
+    margin: 0;
     padding: 12px 14px;
   }
 
