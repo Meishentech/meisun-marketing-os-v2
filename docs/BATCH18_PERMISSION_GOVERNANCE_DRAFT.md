@@ -265,6 +265,22 @@ SQL 草案：`sql/phase1_batch18f_association_rls.sql`。
 
 Storage 必須納入 Batch 18 系列一起收斂，不延後到未定期程。若 Storage policy 無法方便 join business table 欄位，需考慮改用 Edge Function / server-side signed URL 流程，避免單靠前端按鈕保護。
 
+SQL 草案：`sql/phase1_batch18g_storage_rls.sql`。
+
+落地決策：
+
+- 沿用 private bucket，不改 bucket public/private 狀態與檔案大小限制。
+- 移除舊的「authenticated 可管理整個 bucket」Storage policy，改成兩個 bucket 各自 4 條 policy（select / insert / update / delete）。
+- `marketing-resource-files`：
+  - 行銷 / admin 與總經理可簽出 / 下載全部資源檔案。
+  - 業務 / member 只能簽出 `marketing_resources.deleted_at is null` 且 `is_external_usable is true`、並且 `file_path = storage.objects.name` 的資源檔案。
+  - 只有行銷 / admin 可上傳、覆寫、刪除物件；保留 delete 是為了支援新增失敗 rollback 與替換檔案後清理舊檔。
+- `campaign-documents`：
+  - 行銷 / admin 與總經理可簽出 / 下載。
+  - 業務 / member 不可簽出 / 下載。
+  - 只有行銷 / admin 可上傳、覆寫、刪除物件；保留 delete 是為了支援文件上傳失敗 rollback。
+- 這批應在 18E 之後執行，因為資源檔案讀取 policy 會 join `marketing_resources` 判斷 `deleted_at` / `is_external_usable`。
+
 ## SQL 實作注意
 
 1. 不要用 `auth.role()`。

@@ -194,6 +194,7 @@
    - Batch 18D SQL 草案：`sql/phase1_batch18d_approval_requests_rls.sql`。目標是收斂 `approval_requests`：行銷 / admin 可建立送審與補非決策快照欄位；總經理可決策；業務 / member 不讀不寫；撤掉 delete。因欄位層決策限制無法只靠 RLS 表達，草案新增普通 trigger 阻擋非總經理更新決策欄位。前端取消廠商合作時，待審核單改標 `status = '已撤回'` 並不寫 `decided_by` / `decided_at` / `decision_note`，保留「只有總經理決策」原則。此 SQL 尚未執行 live Supabase，需 Claude 複查通過後再執行。
    - Batch 18E SQL 草案：`sql/phase1_batch18e_marketing_core_rls.sql`。目標是收斂行銷核心資料表寫入權限：行銷案、任務、預算、文件、風險、追蹤、成效、廠商、交付物與資源 / 知識庫只允許行銷 / admin 寫入；總經理維持讀取；業務 / member 可讀必要行銷核心資料、有效資源與可用知識，但不可寫。第一版保守保留行銷案核心表 authenticated 讀取，以免目前前端一次載入資料造成業務視角初始化失敗；資源與知識庫讀取則依 `deleted_at` / `visibility_status` 收斂。本批尚未執行 live Supabase，需 Claude 複查通過後再執行。
    - Batch 18F SQL 草案：`sql/phase1_batch18f_association_rls.sql`。目標是收斂公會資料表權限：行銷 / admin 與總經理可讀公會主檔、標籤、任務、費用、活動、期刊、年費、權益、備註與階段選項；只有行銷 / admin 可新增與更新；業務 / member 不讀、不寫公會資料。`association_relationship_tags` 保留行銷 / admin delete 以支援移除標籤，其餘公會表均撤掉 authenticated delete，沿用取消 / 封存生命週期。本批尚未執行 live Supabase，需 Claude 複查通過後再執行。
+   - Batch 18G SQL 草案：`sql/phase1_batch18g_storage_rls.sql`。目標是收斂 private Storage bucket 權限：`marketing-resource-files` 只有行銷 / admin 與總經理可讀全部，業務 / member 只能簽出有效且可對外的資源檔案；`campaign-documents` 僅行銷 / admin 與總經理可簽出。兩個 bucket 的上傳、覆寫、刪除皆限制行銷 / admin，刪除僅保留給上傳失敗 rollback 與替換檔清理。本批尚未執行 live Supabase，需 Claude 複查通過後再執行，且應排在 18E 之後。
 
 ## 暫緩到 Phase 2
 
