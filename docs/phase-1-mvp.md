@@ -188,7 +188,7 @@
    - Batch 17E：v2 公會詳情頁新增 `association_events` 公會活動 / 講座 / 贊助管理，以及 `association_publication_schedules` 期刊排程管理。兩者皆採新增 / 編輯 / 取消，不做真刪除；取消資料集中顯示在同一個歷史紀錄區塊。活動與期刊的階段下拉正式接上 `association_stage_options`，附件維持純文字連結，不升級 Storage 上傳。
    - Batch 17F：v2 公會詳情頁新增 `association_fee_records` 年費 / 會費、`association_benefits` 會員權益、`association_notes` 備註 / 附件連結管理。年費與備註採新增 / 編輯 / 取消；會員權益採新增 / 編輯 / 封存。所有取消 / 封存資料都集中顯示在同一個歷史紀錄區塊，附件仍維持純文字連結。
    - Batch 17G：v1 公會管理新增 / 編輯入口全面停用，8 張公會資料表改由 v2 作為新增、編輯、取消、封存與歷史查詢的主操作介面。`MOBILE_ACCEPTANCE_CHECKLIST.md` 已補入公會管理手機總驗收範圍，涵蓋任務、費用、活動、期刊、年費、權益、備註 7 組進行中與歷史清單。
-   - Batch 18 動工前草案：`BATCH18_PERMISSION_GOVERNANCE_DRAFT.md`。公會管理收尾後，下一階段先穩平台權限：17S 已處理未登入 anon/public，18 系列改處理 authenticated 內部角色權限。草案建議先做權限 helper 與 `app_user_access` 自身政策，再從業務自有資料、待決策中心、行銷核心表、公會表與 Storage 分批收斂；每批 SQL 必須先複查、實際跑 live Supabase，再用真實角色帳號 smoke test。
+   - Batch 18 動工前草案：`BATCH18_PERMISSION_GOVERNANCE_DRAFT.md`。公會管理收尾後，下一階段先穩平台權限：17S 已處理未登入 anon/public，18 系列改處理 authenticated 內部角色權限。已拍板：業務不讀公會、業務可看全部名單但只能更新自己的、總經理全站可讀但直接編輯另案討論、待決策只能總經理決策、Storage 一起收斂、RLS 若影響 V1 查詢可接受但需記錄。草案建議先做權限 helper 與 `app_user_access` 自身政策，再從業務自有資料、待決策中心、行銷核心表、公會表與 Storage 分批收斂；每批 SQL 必須先複查、實際跑 live Supabase，再用真實角色帳號 smoke test。
 
 ## 暫緩到 Phase 2
 

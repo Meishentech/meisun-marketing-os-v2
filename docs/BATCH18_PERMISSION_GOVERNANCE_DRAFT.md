@@ -80,13 +80,13 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 
 | 資料範圍 | 總經理 | 行銷總監 / Admin | 業務 |
 |---|---|---|---|
-| 行銷案主檔與任務 / 預算 / 文件 / 風險 / 成效 | 讀取 | 讀寫、取消、封存 | 讀取必要摘要，第一階段可先只讀 |
-| 公會管理 8 張表與關係標籤 | 讀取 | 讀寫、取消、封存 | 第一階段不寫，讀取可先維持或依頁面收斂 |
+| 行銷案主檔與任務 / 預算 / 文件 / 風險 / 成效 | 全站讀取；編輯權限另案討論 | 讀寫、取消、封存 | 讀取必要摘要，第一階段可先只讀 |
+| 公會管理 8 張表與關係標籤 | 全站讀取；編輯權限另案討論 | 讀寫、取消、封存 | 不讀、不寫 |
 | 廠商 / 交付物 | 讀取 | 讀寫、取消 | 不寫 |
 | 文宣資源 / 產品知識庫 | 讀取可用內容 | 讀寫、封存、管理連結 | 讀取可用內容，提出補充需求 |
 | 業務需求單 | 讀取摘要可選 | 讀取全部、更新處理狀態 | 新增自己的、讀取自己的、取消自己的 |
-| 名單 / 跟進 | 讀取彙總 | 讀取全部、分派 | 讀取 / 更新 assigned_sales = 自己 |
-| 待決策 approval_requests | 讀取、決策更新 | 建立、讀取、補資料 | 通常不寫；若未來要讓業務送審需另定 |
+| 名單 / 跟進 | 讀取全部 | 讀取全部、分派 | 讀取全部；只能更新 assigned_sales = 自己 |
+| 待決策 approval_requests | 讀取、決策更新 | 建立、讀取、補資料；不可代替總經理決策 | 不寫 |
 | 招標工具 | 暫緩 | 暫緩 | 暫緩 |
 | Storage：文宣資源檔案 | 依資料列規則 | 上傳 / 替換 / 簽出 | 只簽出可對外檔案 |
 | Storage：行銷案文件 | 讀取可選 | 上傳 / 簽出 | 不簽出 |
@@ -102,7 +102,7 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 - 角色矩陣是否符合實務。
 - 哪些表可以先收斂寫入。
 - 哪些表若收斂讀取會破壞總經理 / 週報 / V1 查詢。
-- Storage 是否應先獨立成 18F，而不是混在表 RLS 內。
+- Storage 本輪需一起收斂，但可獨立成 18G 實作，避免混在表 RLS 內造成驗收範圍過大。
 
 ### Batch 18B：建立權限 helper 與 app_user_access 自身政策
 
@@ -136,8 +136,8 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 建議政策：
 
 - marketing/admin：讀寫全部。
-- sales：`sales_requests.requested_by = auth email` 可讀 / 新增 / 更新取消；`leads.assigned_sales = auth email` 可讀 / 更新跟進。
-- executive：讀取摘要或全部，先不給寫入。
+- sales：`sales_requests.requested_by = auth email` 可讀 / 新增 / 更新取消；`leads` 可讀全部，但只能更新 `assigned_sales = auth email` 的資料與自己的跟進紀錄。
+- executive：讀取全部，先不給寫入。
 
 ### Batch 18D：待決策中心
 
@@ -148,8 +148,9 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 建議政策：
 
 - marketing/admin：可建立與更新自己建立的補充欄位。
-- executive/admin：可更新 `status`、`decided_by`、`decided_at`、`decision_note`。
-- sales：第一階段不寫。
+- executive：可更新 `status`、`decided_by`、`decided_at`、`decision_note`。
+- admin：可讀取與建立資料，但不可代替總經理決策；若未來需要 admin 代決策，需另案拍板。
+- sales：不寫。
 
 注意：目前 `approval_requests.entity_type/entity_id` 無 FK，是刻意保留歷史快照；RLS 不應假設來源表一定存在。
 
@@ -174,7 +175,7 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 建議政策：
 
 - marketing/admin：讀寫。
-- executive：讀取；只在 `approval_requests` 做決策寫入。
+- executive：全站讀取；是否開放編輯另案討論，本批先不開放行銷核心表直接編輯。
 - sales：讀取資源 / 知識庫可用內容；不寫行銷案核心表。
 
 這批不建議第一個做，因為表最多、風險最高。
@@ -200,7 +201,7 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 
 - marketing/admin：公會管理讀寫。
 - executive：讀取。
-- sales：第一階段可讀摘要或不讀，需依實際業務是否需要公會資訊決定。
+- sales：不讀、不寫；公會管理全由行銷總監管理。
 - `association_stage_options`：仍不開 delete。
 - views：保留 `security_invoker = true`，且只 grant select。
 
@@ -217,7 +218,7 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 - 內部文件是否應只允許 marketing/admin 簽出。
 - 行銷案文件是否總經理可下載、業務不可下載。
 
-如果 Storage policy 無法方便 join business table 欄位，需考慮改用 Edge Function / server-side signed URL 流程，避免單靠前端按鈕保護。
+Storage 必須納入 Batch 18 系列一起收斂，不延後到未定期程。若 Storage policy 無法方便 join business table 欄位，需考慮改用 Edge Function / server-side signed URL 流程，避免單靠前端按鈕保護。
 
 ## SQL 實作注意
 
@@ -252,16 +253,16 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 
 4. **V1 邊界測試**
    - V1 已凍結的模組維持可查詢。
-   - V1 仍在用的功能不因 V2 RLS 斷線。
+   - 若 RLS 收斂後造成 V1 部分查詢變慢、空白或需要提前停用，可接受；但必須在 smoke result 中明確記錄是哪個 V1 頁面受影響，避免被誤判為未知故障。
 
-## 需拍板問題
+## 已拍板決策
 
-1. 業務是否需要讀取公會資料，或只由行銷總監使用公會管理。
-2. 業務名單 `leads` 是否嚴格限制 `assigned_sales = 自己`，還是業務可看全部但只更新自己。
-3. 總經理是否只讀全站資料，還是也允許直接編輯某些欄位。
-4. `approval_requests` 是否只允許總經理決策，admin 是否也可代決策。
-5. Storage 是否接受 Phase 1 先維持前端限制，還是 Batch 18 必須一起收斂。
-6. 若 RLS 改完會讓 V1 某些查詢變慢或空白，是否可接受，或要先完整停用 V1 查詢。
+1. 業務不需要讀取公會資料；公會管理全由行銷總監管理，總經理保留全站讀取。
+2. 業務可以讀取全部名單，但只能更新 `assigned_sales = 自己` 的名單與自己的跟進。
+3. 總經理保留全站讀取權限；直接編輯權限需另案討論，本批先不開。
+4. `approval_requests` 的決策動作只能由總經理執行，admin 不代決策。
+5. Storage 權限治理需納入 Batch 18 系列一起收斂。
+6. 若 RLS 收斂後影響 V1 查詢，可以接受；需記錄並依需要提前停用 V1 對應查詢。
 
 ## 建議下一步
 
@@ -270,6 +271,6 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 1. 角色矩陣是否符合實務。
 2. Batch 18B helper / app_user_access 政策是否應先做。
 3. 18C 是否適合先從 `sales_requests` / `leads` 開始，而不是先動行銷案主表。
-4. Storage 是否應獨立延後。
+4. Storage 是否應獨立成 18G 實作，以及 Edge Function / server-side signed URL 是否比 Storage policy 更適合。
 
 複查通過後，再寫 18B SQL；SQL 審查通過、live Supabase 實際執行並 smoke test 後，才能開始下一批。
