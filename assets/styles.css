@@ -984,7 +984,7 @@ h1 {
 
 @media (max-width: 1120px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
