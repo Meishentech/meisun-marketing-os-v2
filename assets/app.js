@@ -2129,7 +2129,7 @@ function formatVendorRow(campaignVendor = {}) {
   return [
     vendor.name || "未命名廠商",
     campaignVendor.role_in_project || vendor.vendor_type || "未填",
-    formatDeliverableSummary(campaignVendor.id, deliverables),
+    trustedTableHtml(formatDeliverableSummary(campaignVendor.id, deliverables)),
     `${tag(campaignVendor.quote_status || "待報價", statusTone(campaignVendor.quote_status))} ${tag(campaignVendor.payment_status || "未請款", statusTone(campaignVendor.payment_status))}`,
     formatVendorAmount(campaignVendor),
     formatVendorDocuments(campaignVendor.id),
@@ -2170,8 +2170,8 @@ function formatDeliverableSummary(campaignVendorId, deliverables = []) {
     ]);
     return `
       <div class="deliverable-item">
-        <strong>${item.deliverable_name || "未命名"}</strong>
-        <span>${item.status || "未開始"}${dueDate}</span>
+        <strong>${escapeHtml(item.deliverable_name || "未命名")}</strong>
+        <span>${escapeHtml(item.status || "未開始")}${escapeHtml(dueDate)}</span>
         ${actions}
       </div>
     `;
@@ -8494,8 +8494,17 @@ function renderTable(section, tableClass) {
 
 function renderTableCell(cell) {
   if (cell == null) return "";
+  if (isTrustedHtmlCell(cell)) return cell.__tableHtml;
   const html = String(cell);
   return isTrustedTableMarkup(html) ? html : escapeHtml(html);
+}
+
+function trustedTableHtml(html = "") {
+  return { __tableHtml: String(html) };
+}
+
+function isTrustedHtmlCell(cell) {
+  return Boolean(cell && typeof cell === "object" && typeof cell.__tableHtml === "string");
 }
 
 function isTrustedTableMarkup(html = "") {
