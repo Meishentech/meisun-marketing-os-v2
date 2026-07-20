@@ -189,7 +189,8 @@
    - Batch 17F：v2 公會詳情頁新增 `association_fee_records` 年費 / 會費、`association_benefits` 會員權益、`association_notes` 備註 / 附件連結管理。年費與備註採新增 / 編輯 / 取消；會員權益採新增 / 編輯 / 封存。所有取消 / 封存資料都集中顯示在同一個歷史紀錄區塊，附件仍維持純文字連結。
    - Batch 17G：v1 公會管理新增 / 編輯入口全面停用，8 張公會資料表改由 v2 作為新增、編輯、取消、封存與歷史查詢的主操作介面。`MOBILE_ACCEPTANCE_CHECKLIST.md` 已補入公會管理手機總驗收範圍，涵蓋任務、費用、活動、期刊、年費、權益、備註 7 組進行中與歷史清單。
    - Batch 18 動工前草案：`BATCH18_PERMISSION_GOVERNANCE_DRAFT.md`。公會管理收尾後，下一階段先穩平台權限：17S 已處理未登入 anon/public，18 系列改處理 authenticated 內部角色權限。已拍板：業務不讀公會、業務可看全部名單但只能更新自己的、總經理全站可讀但直接編輯另案討論、待決策只能總經理決策、Storage 一起收斂、RLS 若影響 V1 查詢可接受但需記錄。草案建議先做權限 helper 與 `app_user_access` 自身政策，再從業務自有資料、待決策中心、行銷核心表、公會表與 Storage 分批收斂；每批 SQL 必須先複查、實際跑 live Supabase，再用真實角色帳號 smoke test。
-   - Batch 18B SQL 草案：`sql/phase1_batch18b_role_helpers.sql`。建立 `current_app_user_email()`、`current_app_user_role()`、`is_marketing_or_admin()`、`is_executive()` 四個 SECURITY INVOKER helper，收斂 `app_user_access` 為自列讀取 / 自列密碼旗標更新，並將 `kevin@mcttw.com.tw`、`kevin@tonsun.com.tw` 設為 `executive`。此 SQL 尚未執行 live Supabase，需 Claude 複查通過後再執行。
+   - Batch 18B SQL：`sql/phase1_batch18b_role_helpers.sql`。建立 `current_app_user_email()`、`current_app_user_role()`、`is_marketing_or_admin()`、`is_executive()` 四個 SECURITY INVOKER helper，收斂 `app_user_access` 為自列讀取 / 自列密碼旗標更新，並將 `kevin@mcttw.com.tw`、`kevin@tonsun.com.tw` 設為 `executive`。已執行到 live Supabase，smoke test 確認 helper 非 SECURITY DEFINER、`app_user_access` grants / policy 正確、Kevin 帳號角色判斷通過。
+   - Batch 18C SQL 草案：`sql/phase1_batch18c_sales_data_rls.sql`。目標是先收斂 `sales_requests`、`leads`、`lead_follow_ups` 三張業務資料表：行銷 / admin 讀寫全部；總經理讀取全部但不寫；業務需求單只讀 / 新增 / 更新自己的；名單可讀全部但只能新增 / 更新指派給自己的；跟進紀錄可讀全部但只能新增 / 更新自己且所屬名單指派給自己的紀錄。三張表撤掉 authenticated delete 權限，維持軟取消 / 歷史保留原則。此 SQL 尚未執行 live Supabase，需 Claude 複查通過後再執行並完成 live smoke test。
 
 ## 暫緩到 Phase 2
 

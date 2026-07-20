@@ -140,6 +140,16 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 - sales：`sales_requests.requested_by = auth email` 可讀 / 新增 / 更新取消；`leads` 可讀全部，但只能更新 `assigned_sales = auth email` 的資料與自己的跟進紀錄。
 - executive：讀取全部，先不給寫入。
 
+SQL 草案：`sql/phase1_batch18c_sales_data_rls.sql`。
+
+落地決策：
+
+- `sales_requests`：行銷 / admin 可讀寫全部；總經理唯讀全部；業務只讀 / 新增 / 更新自己 `requested_by = current_app_user_email()` 的需求單。
+- `leads`：所有 authenticated 可讀；行銷 / admin 可新增與更新全部；業務只能新增 / 更新 `assigned_sales = current_app_user_email()` 的名單；總經理唯讀。
+- `lead_follow_ups`：所有 authenticated 可讀；行銷 / admin 可新增與更新全部；業務只能新增 / 更新自己 `updated_by = current_app_user_email()`，且所屬 lead 也必須指派給自己的跟進紀錄；總經理唯讀。
+- 三張表都撤掉 authenticated `delete` 權限，沿用 Phase 1 軟取消 / 歷史保留原則。
+- 本批不處理招標工具、不處理 Storage、不處理 `approval_requests`。
+
 ### Batch 18D：待決策中心
 
 資料表：
