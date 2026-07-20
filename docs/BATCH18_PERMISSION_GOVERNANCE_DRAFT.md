@@ -239,6 +239,17 @@ SQL 草案：`sql/phase1_batch18e_marketing_core_rls.sql`。
 - `association_stage_options`：仍不開 delete。
 - views：保留 `security_invoker = true`，且只 grant select。
 
+SQL 草案：`sql/phase1_batch18f_association_rls.sql`。
+
+落地決策：
+
+- 公會 8 張主流程資料表（主檔、任務、任務費用、活動、期刊、年費、權益、備註）：行銷 / admin 與總經理可讀；只有行銷 / admin 可新增與更新；撤掉 authenticated `delete`。
+- `association_relationship_tags`：行銷 / admin 與總經理可讀；只有行銷 / admin 可新增、更新、刪除。此表保留 `delete` 是因為 V2 標籤 UI 以刪除 junction row 代表移除標籤。
+- `association_stage_options`：行銷 / admin 與總經理可讀；只有行銷 / admin 可新增與更新；不開 delete。
+- 業務 / member 不讀、不寫公會資料；這符合「公會資料全由行銷總監管理，業務不需要看公會資料」的拍板結論。
+- `association_cooperation_overview` / `all_expenses_overview` 不重建，只維持 authenticated select 與 anon/public 關閉。兩個 view 既有 `security_invoker = true`，公會資料可見性由底層 association table policy 控制。
+- 本批不處理 Storage；公會附件目前仍是純文字連結欄位，無 bucket policy 變更。
+
 ### Batch 18G：Storage 權限治理
 
 資料範圍：
