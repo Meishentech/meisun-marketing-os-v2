@@ -233,7 +233,7 @@ order by tablename, policyname;
 -- - no old "authenticated all" policies remain.
 
 -- Smoke test 3: non-destructive SQL Editor role simulation.
--- Replace test@mcttw.com.tw with a real sales account if needed.
+-- Uses the real sales test account: test@mcttw.com.tw.
 --
 -- begin;
 -- select set_config('request.jwt.claims', '{"email":"test@mcttw.com.tw"}', true);
@@ -251,6 +251,7 @@ order by tablename, policyname;
 -- - visible_other_sales_requests = 0, because RLS hides other users' requests.
 
 -- Smoke test 4: sales can read all leads, but cannot no-op update leads not assigned to them.
+-- Uses the real sales test account: test@mcttw.com.tw.
 -- This uses rollback, so it does not persist data.
 --
 -- begin;
