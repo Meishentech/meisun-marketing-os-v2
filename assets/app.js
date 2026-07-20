@@ -18,6 +18,10 @@ const state = {
     associationTags: [],
     associationCooperations: [],
     associationStages: [],
+    associationTasks: [],
+    cancelledAssociationTasks: [],
+    associationTaskExpenses: [],
+    cancelledAssociationTaskExpenses: [],
     campaignVendors: [],
     cancelledCampaignVendors: [],
     cancelledDeliverables: [],
@@ -2378,6 +2382,8 @@ function associationDetailSections() {
     associationDetailHeaderSection(association),
     associationProfileSection(association),
     associationTagManagerSection(association),
+    associationTasksSection(association),
+    associationTaskExpensesSection(association),
     associationDetailCooperationSection(association),
     associationHistorySection(association),
   ];
@@ -2437,6 +2443,80 @@ function associationTagManagerSection(association = {}) {
   };
 }
 
+function associationTasksSection(association = {}) {
+  const tasks = associationTasksFor(association.id);
+  const rows = tasks.map((task) => [
+    task.task_name || "未命名任務",
+    task.task_type || "其他",
+    tag(task.task_status || "待確認", statusTone(task.task_status || "待確認")),
+    tag(task.priority || "中", priorityTone(task.priority || "中")),
+    `${formatDate(task.start_date) || "未填"} - ${formatDate(task.due_date) || "未填"}`,
+    `${Number(task.progress_pct || 0)}%`,
+    task.owner || "未填",
+    campaignName(task.marketing_campaign_id),
+    association.archived_at
+      ? "已封存公會目前只讀。"
+      : actionGroup([
+        actionButton("編輯", "edit-association-task", task.id, "is-primary"),
+        actionButton("取消", "cancel-association-task", task.id, "is-danger"),
+      ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "公會任務",
+    wide: true,
+    headers: ["任務", "類型", "狀態", "優先", "期間", "進度", "負責人", "關聯行銷案", "操作"],
+    rows: rows.length ? rows : [[
+      "尚未建立公會任務",
+      "無",
+      tag("待建立", "amber"),
+      tag("中", "gray"),
+      "無",
+      "0%",
+      "無",
+      "無",
+      association.archived_at ? "已封存" : actionButton("新增任務", "create-association-task", association.id, "is-primary"),
+    ]],
+    footer: association.archived_at ? "" : actionGroup([actionButton("新增公會任務", "create-association-task", association.id, "is-primary")]),
+  };
+}
+
+function associationTaskExpensesSection(association = {}) {
+  const expenses = associationTaskExpensesFor(association.id);
+  const rows = expenses.map((expense) => [
+    expense.expense_type || "其他",
+    associationTaskName(expense.task_id),
+    formatAssociationExpenseAmount(expense),
+    tag(expense.payment_status || "未付款", statusTone(expense.payment_status || "未付款")),
+    formatDate(expense.payment_date) || "未排定",
+    expense.receipt_status || "未填",
+    association.archived_at
+      ? "已封存公會目前只讀。"
+      : actionGroup([
+        actionButton("編輯", "edit-association-task-expense", expense.id, "is-primary"),
+        actionButton("取消", "cancel-association-task-expense", expense.id, "is-danger"),
+      ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "公會任務費用",
+    wide: true,
+    headers: ["費用類型", "關聯任務", "金額", "付款", "付款日", "收據", "操作"],
+    rows: rows.length ? rows : [[
+      "尚未建立任務費用",
+      "無",
+      "未填",
+      tag("未付款", "gray"),
+      "無",
+      "無",
+      association.archived_at ? "已封存" : actionButton("新增費用", "create-association-task-expense", association.id, "is-primary"),
+    ]],
+    footer: association.archived_at ? "" : actionGroup([actionButton("新增公會任務費用", "create-association-task-expense", association.id, "is-primary")]),
+  };
+}
+
 function associationDetailCooperationSection(association = {}) {
   const rows = state.data.associationCooperations
     .filter((item) => String(item.association_id || "") === String(association.id || ""))
@@ -2470,6 +2550,28 @@ function associationHistorySection(association = {}) {
     ]);
   }
 
+  state.data.cancelledAssociationTasks
+    .filter((task) => String(task.association_id || "") === String(association.id || ""))
+    .forEach((task) => {
+      rows.push([
+        tag("任務取消", "gray"),
+        task.task_name || "未命名任務",
+        cancellationMeta(task),
+        task.cancel_reason || "未填寫原因",
+      ]);
+    });
+
+  state.data.cancelledAssociationTaskExpenses
+    .filter((expense) => String(expense.association_id || "") === String(association.id || ""))
+    .forEach((expense) => {
+      rows.push([
+        tag("費用取消", "gray"),
+        `${expense.expense_type || "其他"} / ${associationTaskName(expense.task_id)}`,
+        cancellationMeta(expense),
+        expense.cancel_reason || "未填寫原因",
+      ]);
+    });
+
   return {
     type: "details-table",
     title: `歷史紀錄（${rows.length}）`,
@@ -2478,6 +2580,82 @@ function associationHistorySection(association = {}) {
     headers: ["類型", "項目", "時間 / 操作者", "原因"],
     rows: rows.length ? rows : [[tag("無紀錄", "green"), "目前沒有已取消或已封存紀錄", "無", "無"]],
   };
+}
+
+function associationTasksFor(associationId) {
+  return state.data.associationTasks
+    .filter((task) => String(task.association_id || "") === String(associationId || ""))
+    .sort(compareAssociationTasks);
+}
+
+function allAssociationTasksFor(associationId) {
+  return [...state.data.associationTasks, ...state.data.cancelledAssociationTasks]
+    .filter((task) => String(task.association_id || "") === String(associationId || ""))
+    .sort(compareAssociationTasks);
+}
+
+function associationTaskExpensesFor(associationId) {
+  return state.data.associationTaskExpenses
+    .filter((expense) => String(expense.association_id || "") === String(associationId || ""))
+    .sort(compareAssociationTaskExpenses);
+}
+
+function findAssociationTask(id) {
+  return [...state.data.associationTasks, ...state.data.cancelledAssociationTasks]
+    .find((task) => String(task.id || "") === String(id || ""));
+}
+
+function findAssociationTaskExpense(id) {
+  return [...state.data.associationTaskExpenses, ...state.data.cancelledAssociationTaskExpenses]
+    .find((expense) => String(expense.id || "") === String(id || ""));
+}
+
+function compareAssociationTasks(a = {}, b = {}) {
+  const dateDiff = String(a.due_date || "9999-12-31").localeCompare(String(b.due_date || "9999-12-31"));
+  if (dateDiff) return dateDiff;
+
+  const priorityDiff = associationPriorityRank(a.priority) - associationPriorityRank(b.priority);
+  if (priorityDiff) return priorityDiff;
+
+  return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
+function compareAssociationTaskExpenses(a = {}, b = {}) {
+  const statusDiff = associationPaymentStatusRank(a.payment_status) - associationPaymentStatusRank(b.payment_status);
+  if (statusDiff) return statusDiff;
+
+  const dateDiff = String(a.payment_date || "9999-12-31").localeCompare(String(b.payment_date || "9999-12-31"));
+  if (dateDiff) return dateDiff;
+
+  const amountDiff = associationExpenseComparableAmount(b) - associationExpenseComparableAmount(a);
+  if (amountDiff) return amountDiff;
+
+  return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
+function associationPriorityRank(priority = "") {
+  return { 高: 0, 中: 1, 低: 2 }[priority] ?? 3;
+}
+
+function associationPaymentStatusRank(status = "") {
+  return { 未付款: 0, 待確認: 1, 已付款: 2, 不適用: 3 }[status] ?? 4;
+}
+
+function associationExpenseComparableAmount(expense = {}) {
+  return Number(expense.actual_amount || expense.budget_amount || 0);
+}
+
+function associationTaskName(taskId) {
+  if (!taskId) return "不關聯任務";
+  return findAssociationTask(taskId)?.task_name || "已取消或未載入任務";
+}
+
+function formatAssociationExpenseAmount(expense = {}) {
+  const budget = formatMoney(expense.budget_amount);
+  const actual = formatMoney(expense.actual_amount);
+  if (budget === "未填" && actual === "未填") return "未填";
+  if (actual !== "未填") return `${budget} / 實支 ${actual}`;
+  return budget;
 }
 
 function sortCooperations(a, b) {
@@ -2767,6 +2945,22 @@ function activeAssociations(associations = []) {
 
 function archivedAssociations(associations = []) {
   return associations.filter((association) => Boolean(association.archived_at));
+}
+
+function activeAssociationTasks(tasks = []) {
+  return tasks.filter((task) => !task.cancelled_at && task.task_status !== "取消");
+}
+
+function cancelledAssociationTasks(tasks = []) {
+  return tasks.filter((task) => Boolean(task.cancelled_at) || task.task_status === "取消");
+}
+
+function activeAssociationTaskExpenses(expenses = []) {
+  return expenses.filter((expense) => !expense.cancelled_at);
+}
+
+function cancelledAssociationTaskExpenses(expenses = []) {
+  return expenses.filter((expense) => Boolean(expense.cancelled_at));
 }
 
 function activeCampaignTasks(tasks = state.data.campaignTasks) {
@@ -3576,8 +3770,8 @@ function escapeAttr(value = "") {
 
 function statusTone(status = "") {
   if (["已追蹤", "已完成", "可對外", "已付款", "已簽約", "已報價", "已核准"].includes(status)) return "green";
-  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "待審核", "需修正"].includes(status)) return "amber";
-  if (["已排除", "逾期", "未請款", "未開始"].includes(status)) return "gray";
+  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "準備中", "已送審", "待審核", "需修正"].includes(status)) return "amber";
+  if (["已排除", "逾期", "未請款", "未付款", "未開始", "不適用"].includes(status)) return "gray";
   if (["追加待核"].includes(status)) return "red";
   return "";
 }
@@ -3658,6 +3852,75 @@ function associationActivitySuggestions(selected = "") {
     .filter(Boolean);
   const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
   return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
+function associationTaskTypeSuggestions(selected = "") {
+  const fixed = ["會員大會", "協辦活動", "技術講座", "期刊投稿", "期刊廣告", "年度贊助", "拜訪聯繫", "素材準備", "其他"];
+  const existing = [...state.data.associationTasks, ...state.data.cancelledAssociationTasks]
+    .map((task) => task.task_type)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
+function associationTaskStatusOptions() {
+  return [
+    ["待確認", "待確認"],
+    ["未開始", "未開始"],
+    ["準備中", "準備中"],
+    ["進行中", "進行中"],
+    ["已送審", "已送審"],
+    ["已完成", "已完成"],
+  ];
+}
+
+function associationExpenseTypeSuggestions(selected = "") {
+  const fixed = ["年費", "年度贊助", "活動贊助", "期刊費用", "設計製作", "印刷", "禮品", "交通餐費", "其他"];
+  const existing = [...state.data.associationTaskExpenses, ...state.data.cancelledAssociationTaskExpenses]
+    .map((expense) => expense.expense_type)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
+function associationExpensePaymentOptions() {
+  return [
+    ["未付款", "未付款"],
+    ["待確認", "待確認"],
+    ["已付款", "已付款"],
+    ["不適用", "不適用"],
+  ];
+}
+
+function associationTaskCampaignOptions(selected = "") {
+  const options = [["", "不關聯行銷案"]];
+  state.data.campaigns
+    .slice()
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant-TW"))
+    .forEach((campaign) => {
+      options.push([campaign.id, campaign.name || "未命名行銷案"]);
+    });
+
+  if (selected && !state.data.campaigns.some((campaign) => String(campaign.id || "") === String(selected))) {
+    const archived = state.data.archivedCampaigns.find((campaign) => String(campaign.id || "") === String(selected));
+    if (archived) options.push([archived.id, `${archived.name || "未命名行銷案"}（已封存）`]);
+  }
+
+  return selectOptions(options, selected);
+}
+
+function associationTaskOptions(associationId, selected = "") {
+  const options = [["", "不關聯任務"]];
+  associationTasksFor(associationId).forEach((task) => {
+    options.push([task.id, task.task_name || "未命名任務"]);
+  });
+
+  if (selected && !associationTasksFor(associationId).some((task) => String(task.id || "") === String(selected))) {
+    const cancelled = state.data.cancelledAssociationTasks.find((task) => String(task.id || "") === String(selected));
+    if (cancelled) options.push([cancelled.id, `${cancelled.task_name || "未命名任務"}（已取消）`]);
+  }
+
+  return selectOptions(options, selected);
 }
 
 function performanceChannelSuggestions(selected = "") {
@@ -5147,6 +5410,326 @@ function associationPayload(values = {}) {
   };
 }
 
+function associationTaskFormHtml(task = {}, associationId = "") {
+  const selectedAssociationId = task.association_id || associationId;
+  const materials = Array.isArray(task.required_materials) ? task.required_materials.join("、") : "";
+  return `
+    <input type="hidden" name="association_id" value="${escapeAttr(selectedAssociationId)}">
+    <div class="form-section">
+      <h3>任務基本資訊</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公會</span>
+          <input value="${escapeAttr(associationDisplayName(findAssociation(selectedAssociationId) || {}))}" readonly>
+        </label>
+        <label class="form-field is-wide">
+          <span>任務名稱 *</span>
+          <input name="task_name" value="${escapeAttr(task.task_name || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>任務類型</span>
+          <input name="task_type" list="associationTaskTypeOptions" value="${escapeAttr(task.task_type || "其他")}">
+          <datalist id="associationTaskTypeOptions">${associationTaskTypeSuggestions(task.task_type || "")}</datalist>
+        </label>
+        <label class="form-field">
+          <span>狀態</span>
+          <select name="task_status">${selectOptions(associationTaskStatusOptions(), task.task_status || "待確認")}</select>
+        </label>
+        <label class="form-field">
+          <span>優先級</span>
+          <select name="priority">${selectOptions([["高", "高"], ["中", "中"], ["低", "低"]], task.priority || "中")}</select>
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(task.owner || state.auth.email || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>關聯行銷案</span>
+          <select name="marketing_campaign_id">${associationTaskCampaignOptions(task.marketing_campaign_id || "")}</select>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>日期與進度</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>開始日</span>
+          <input name="start_date" type="date" value="${escapeAttr(formatDate(task.start_date))}">
+        </label>
+        <label class="form-field">
+          <span>到期日</span>
+          <input name="due_date" type="date" value="${escapeAttr(formatDate(task.due_date))}">
+        </label>
+        <label class="form-field">
+          <span>完成日</span>
+          <input name="completed_date" type="date" value="${escapeAttr(formatDate(task.completed_date))}">
+        </label>
+        <label class="form-field">
+          <span>進度 %</span>
+          <input name="progress_pct" type="number" min="0" max="100" step="1" value="${escapeAttr(task.progress_pct ?? 0)}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>內容與附件</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>說明</span>
+          <textarea name="description">${escapeHtml(task.description || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>下一步</span>
+          <textarea name="next_step">${escapeHtml(task.next_step || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>所需素材</span>
+          <input name="required_materials" value="${escapeAttr(materials)}" placeholder="用逗號或頓號分隔，例如：公司介紹、DM、Logo">
+        </label>
+        <label class="form-field is-wide">
+          <span>附件 / 連結</span>
+          <input name="attachment" value="${escapeAttr(task.attachment || "")}" placeholder="貼上連結或檔名">
+        </label>
+        <label class="form-field is-wide">
+          <span>備註</span>
+          <textarea name="notes">${escapeHtml(task.notes || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function associationTaskPayload(values = {}) {
+  return {
+    association_id: values.association_id,
+    marketing_campaign_id: values.marketing_campaign_id || null,
+    task_name: values.task_name?.trim(),
+    task_type: values.task_type?.trim() || "其他",
+    task_status: values.task_status || "待確認",
+    priority: values.priority || "中",
+    start_date: values.start_date || null,
+    due_date: values.due_date || null,
+    completed_date: values.completed_date || null,
+    progress_pct: Math.max(0, Math.min(100, numericOrNull(values.progress_pct) ?? 0)),
+    owner: values.owner?.trim() || null,
+    description: values.description?.trim() || null,
+    next_step: values.next_step?.trim() || null,
+    required_materials: splitDelimitedText(values.required_materials),
+    attachment: values.attachment?.trim() || null,
+    notes: values.notes?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateAssociationTaskModal(associationId) {
+  const association = findAssociation(associationId);
+  if (!association || association.archived_at) return;
+  openAssociationTaskModal({ association_id: association.id, owner: state.auth.email });
+}
+
+function openEditAssociationTaskModal(id) {
+  const task = findAssociationTask(id);
+  const association = findAssociation(task?.association_id);
+  if (!task || task.cancelled_at || association?.archived_at) return;
+  openAssociationTaskModal(task);
+}
+
+function openAssociationTaskModal(task = {}) {
+  const isEdit = Boolean(task.id);
+  openModal(isEdit ? "編輯公會任務" : "新增公會任務", associationTaskFormHtml(task, task.association_id), {
+    submitLabel: isEdit ? "儲存變更" : "建立任務",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = associationTaskPayload(values);
+      if (!payload.association_id) throw new Error("缺少所屬公會。");
+      if (!payload.task_name) throw new Error("請輸入任務名稱。");
+
+      if (isEdit) {
+        await api("PATCH", `association_tasks?id=eq.${encodeURIComponent(task.id)}`, payload);
+      } else {
+        await api("POST", "association_tasks", payload);
+      }
+
+      state.associationDetailId = payload.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelAssociationTaskModal(id) {
+  const task = findAssociationTask(id);
+  const association = findAssociation(task?.association_id);
+  if (!task || task.cancelled_at || association?.archived_at) return;
+
+  openModal("取消公會任務", `
+    <p class="empty-note">確定要取消「${escapeHtml(task.task_name || "未命名任務")}」嗎？取消後任務會移到歷史紀錄，既有任務費用不會被刪除。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `association_tasks?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.associationDetailId = task.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function associationTaskExpenseFormHtml(expense = {}, associationId = "") {
+  const selectedAssociationId = expense.association_id || associationId;
+  return `
+    <input type="hidden" name="association_id" value="${escapeAttr(selectedAssociationId)}">
+    <div class="form-section">
+      <h3>費用基本資訊</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公會</span>
+          <input value="${escapeAttr(associationDisplayName(findAssociation(selectedAssociationId) || {}))}" readonly>
+        </label>
+        <label class="form-field is-wide">
+          <span>關聯任務</span>
+          <select name="task_id">${associationTaskOptions(selectedAssociationId, expense.task_id || "")}</select>
+        </label>
+        <label class="form-field">
+          <span>費用類型</span>
+          <input name="expense_type" list="associationExpenseTypeOptions" value="${escapeAttr(expense.expense_type || "其他")}">
+          <datalist id="associationExpenseTypeOptions">${associationExpenseTypeSuggestions(expense.expense_type || "")}</datalist>
+        </label>
+        <label class="form-field">
+          <span>付款狀態</span>
+          <select name="payment_status">${selectOptions(associationExpensePaymentOptions(), expense.payment_status || "未付款")}</select>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>金額與憑證</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>預算金額</span>
+          <input name="budget_amount" type="number" min="0" step="1" value="${escapeAttr(expense.budget_amount ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>實際金額</span>
+          <input name="actual_amount" type="number" min="0" step="1" value="${escapeAttr(expense.actual_amount ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>付款日</span>
+          <input name="payment_date" type="date" value="${escapeAttr(formatDate(expense.payment_date))}">
+        </label>
+        <label class="form-field">
+          <span>收據狀態</span>
+          <input name="receipt_status" value="${escapeAttr(expense.receipt_status || "")}" placeholder="例如：未收到、已收到、待補">
+        </label>
+        <label class="form-field is-wide">
+          <span>收據附件 / 連結</span>
+          <input name="receipt_attachment" value="${escapeAttr(expense.receipt_attachment || "")}" placeholder="貼上連結或檔名">
+        </label>
+        <label class="form-field is-wide">
+          <span>備註</span>
+          <textarea name="notes">${escapeHtml(expense.notes || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function associationTaskExpensePayload(values = {}) {
+  return {
+    association_id: values.association_id,
+    task_id: values.task_id || null,
+    expense_type: values.expense_type?.trim() || "其他",
+    budget_amount: numericOrNull(values.budget_amount),
+    actual_amount: numericOrNull(values.actual_amount),
+    payment_status: values.payment_status || "未付款",
+    payment_date: values.payment_date || null,
+    receipt_status: values.receipt_status?.trim() || null,
+    receipt_attachment: values.receipt_attachment?.trim() || null,
+    notes: values.notes?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateAssociationTaskExpenseModal(associationId) {
+  const association = findAssociation(associationId);
+  if (!association || association.archived_at) return;
+  openAssociationTaskExpenseModal({ association_id: association.id });
+}
+
+function openEditAssociationTaskExpenseModal(id) {
+  const expense = findAssociationTaskExpense(id);
+  const association = findAssociation(expense?.association_id);
+  if (!expense || expense.cancelled_at || association?.archived_at) return;
+  openAssociationTaskExpenseModal(expense);
+}
+
+function openAssociationTaskExpenseModal(expense = {}) {
+  const isEdit = Boolean(expense.id);
+  openModal(isEdit ? "編輯公會任務費用" : "新增公會任務費用", associationTaskExpenseFormHtml(expense, expense.association_id), {
+    submitLabel: isEdit ? "儲存變更" : "建立費用",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = associationTaskExpensePayload(values);
+      if (!payload.association_id) throw new Error("缺少所屬公會。");
+
+      if (isEdit) {
+        await api("PATCH", `association_task_expenses?id=eq.${encodeURIComponent(expense.id)}`, payload);
+      } else {
+        await api("POST", "association_task_expenses", payload);
+      }
+
+      state.associationDetailId = payload.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelAssociationTaskExpenseModal(id) {
+  const expense = findAssociationTaskExpense(id);
+  const association = findAssociation(expense?.association_id);
+  if (!expense || expense.cancelled_at || association?.archived_at) return;
+
+  openModal("取消公會任務費用", `
+    <p class="empty-note">確定要取消「${escapeHtml(expense.expense_type || "未命名費用")}」嗎？取消後不會納入總支出彙總，但會保留在歷史紀錄。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `association_task_expenses?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.associationDetailId = expense.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
 function campaignFormHtml(campaign = {}) {
   const vendorsText = Array.isArray(campaign.vendors) ? campaign.vendors.join("\n") : "";
   return `
@@ -5272,6 +5855,13 @@ function campaignFormHtml(campaign = {}) {
 function parseCampaignVendors(value = "") {
   return String(value)
     .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function splitDelimitedText(value = "") {
+  return String(value)
+    .split(/[、,\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -6394,7 +6984,7 @@ function channelKpis() {
 }
 
 function associationKpis() {
-  if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length) {
+  if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length && !state.data.associationTasks.length && !state.data.associationTaskExpenses.length) {
     if (state.dataStatus === "live") {
       return [
         ["公會 / 單位", "0", "尚未建立公會資料"],
@@ -6409,13 +6999,17 @@ function associationKpis() {
 
   const totalAssociations = state.data.associations.length;
   const openCooperations = state.data.associationCooperations.filter((item) => !["已結束", "已完成", "已取消"].includes(item.stage)).length;
-  const pending = state.data.associationCooperations.filter((item) => String(item.stage || "").includes("待") || !item.due_date).length;
+  const openTasks = state.data.associationTasks.filter((task) => !["已完成"].includes(task.task_status)).length;
+  const pendingExpenses = state.data.associationTaskExpenses.filter((expense) => !["已付款", "不適用"].includes(expense.payment_status)).length;
+  const pending = state.data.associationCooperations.filter((item) => String(item.stage || "").includes("待") || !item.due_date).length
+    + state.data.associationTasks.filter((task) => String(task.task_status || "").includes("待") || !task.due_date).length
+    + pendingExpenses;
 
   return [
     ["公會 / 單位", String(totalAssociations), "既有公會資料"],
-    ["合作紀錄", String(state.data.associationCooperations.length), `${openCooperations} 個仍在進行或待確認`],
-    ["關係標籤", String(state.data.associationTags.length), "支援未入會但講座、期刊或贊助合作"],
-    ["待確認", String(pending), "階段或日期仍需補齊"],
+    ["公會任務", String(state.data.associationTasks.length), `${openTasks} 個仍在進行或待確認`],
+    ["任務費用", String(state.data.associationTaskExpenses.length), `${pendingExpenses} 筆未結清或待確認`],
+    ["待確認", String(pending), `合作概覽 ${openCooperations} 筆仍需追蹤`],
   ];
 }
 
@@ -6840,6 +7434,12 @@ document.addEventListener("click", (event) => {
   if (action === "archive-association") openArchiveAssociationModal(id);
   if (action === "add-association-tag") openAddAssociationTagModal(id);
   if (action === "remove-association-tag") openRemoveAssociationTagModal(id);
+  if (action === "create-association-task") openCreateAssociationTaskModal(id);
+  if (action === "edit-association-task") openEditAssociationTaskModal(id);
+  if (action === "cancel-association-task") openCancelAssociationTaskModal(id);
+  if (action === "create-association-task-expense") openCreateAssociationTaskExpenseModal(id);
+  if (action === "edit-association-task-expense") openEditAssociationTaskExpenseModal(id);
+  if (action === "cancel-association-task-expense") openCancelAssociationTaskExpenseModal(id);
   if (action === "view-campaign-detail") {
     state.page = "campaigns";
     state.campaignInspectionMode = "";
@@ -7002,6 +7602,8 @@ async function loadExistingData() {
       knowledgeItems,
       knowledgeResourceLinks,
       expenses,
+      associationTasks,
+      associationTaskExpenses,
     ] = await Promise.all([
       loadMarketingCampaigns(),
       loadMarketingResources(),
@@ -7025,6 +7627,8 @@ async function loadExistingData() {
       safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,detail,recommended_pitch,prohibited_pitch,related_competitor,evidence_level,visibility_status,owner,version,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=100"),
       safeGET("product_knowledge_resource_links?select=id,knowledge_item_id,resource_id,created_at&order=created_at.desc&limit=500"),
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
+      loadAssociationTasks(),
+      loadAssociationTaskExpenses(),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? activeCampaigns(campaigns) : [];
@@ -7037,6 +7641,10 @@ async function loadExistingData() {
     state.data.associationTags = Array.isArray(associationTags) ? associationTags : [];
     state.data.associationCooperations = Array.isArray(associationCooperations) ? associationCooperations : [];
     state.data.associationStages = Array.isArray(associationStages) ? associationStages : [];
+    state.data.associationTasks = Array.isArray(associationTasks) ? activeAssociationTasks(associationTasks) : [];
+    state.data.cancelledAssociationTasks = Array.isArray(associationTasks) ? cancelledAssociationTasks(associationTasks) : [];
+    state.data.associationTaskExpenses = Array.isArray(associationTaskExpenses) ? activeAssociationTaskExpenses(associationTaskExpenses) : [];
+    state.data.cancelledAssociationTaskExpenses = Array.isArray(associationTaskExpenses) ? cancelledAssociationTaskExpenses(associationTaskExpenses) : [];
     state.data.campaignVendors = Array.isArray(campaignVendors) ? activeCampaignVendors(campaignVendors) : [];
     state.data.cancelledCampaignVendors = Array.isArray(campaignVendors) ? cancelledCampaignVendors(campaignVendors) : [];
     state.data.cancelledDeliverables = Array.isArray(campaignVendors) ? cancelledDeliverablesFromAll(campaignVendors) : [];
@@ -7070,6 +7678,10 @@ async function loadExistingData() {
       + state.data.associationTags.length
       + state.data.associationCooperations.length
       + state.data.associationStages.length
+      + state.data.associationTasks.length
+      + state.data.cancelledAssociationTasks.length
+      + state.data.associationTaskExpenses.length
+      + state.data.cancelledAssociationTaskExpenses.length
       + state.data.campaignVendors.length
       + state.data.cancelledCampaignVendors.length
       + state.data.cancelledDeliverables.length
@@ -7114,6 +7726,20 @@ async function loadCampaignTasks() {
   if (Array.isArray(withLifecycle)) return withLifecycle;
 
   return safeGET("marketing_campaign_tasks?select=id,campaign_id,seq,task_name,owner,planned_start,planned_end,status,completion_pct,expected_output,notes,created_at&order=planned_end.asc.nullslast,seq.asc,created_at.asc&limit=300");
+}
+
+async function loadAssociationTasks() {
+  const withLifecycle = await safeGET("association_tasks?select=id,association_id,marketing_campaign_id,task_name,task_type,task_status,priority,start_date,due_date,completed_date,progress_pct,owner,description,next_step,required_materials,notes,attachment,cancelled_at,cancelled_by,cancel_reason,created_at,updated_at&order=due_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("association_tasks?select=id,association_id,marketing_campaign_id,task_name,task_type,task_status,priority,start_date,due_date,completed_date,progress_pct,owner,description,next_step,required_materials,notes,attachment,created_at,updated_at&order=due_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
+}
+
+async function loadAssociationTaskExpenses() {
+  const withLifecycle = await safeGET("association_task_expenses?select=id,association_id,task_id,expense_type,budget_amount,actual_amount,payment_status,payment_date,receipt_status,receipt_attachment,notes,cancelled_at,cancelled_by,cancel_reason,created_at,updated_at&order=payment_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("association_task_expenses?select=id,association_id,task_id,expense_type,budget_amount,actual_amount,payment_status,payment_date,receipt_status,receipt_attachment,notes,created_at,updated_at&order=payment_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
 }
 
 async function loadCampaignBudgetItems() {
