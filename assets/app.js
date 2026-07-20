@@ -6313,6 +6313,7 @@ function primaryActionLabel(meta) {
   if (state.role === "marketing" && state.page === "campaigns") return "新增行銷案";
   if (state.role === "marketing" && state.page === "requests") return "新增需求單";
   if (state.role === "marketing" && state.page === "vendors") return "新增廠商合作";
+  if (state.role === "marketing" && state.page === "associations") return "新增公會";
   if (state.role === "marketing" && state.page === "knowledge") return "新增知識條目";
   return meta.primaryAction;
 }
