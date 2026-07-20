@@ -202,6 +202,18 @@ SQL 草案：`sql/phase1_batch18d_approval_requests_rls.sql`。
 
 這批不建議第一個做，因為表最多、風險最高。
 
+SQL 草案：`sql/phase1_batch18e_marketing_core_rls.sql`。
+
+落地決策：
+
+- 第一版以「收斂寫入」為主：行銷案核心資料表保留 authenticated 讀取，避免目前前端登入後一次載入資料時，業務視角因 SELECT 被擋而出現空白或初始化失敗。
+- 行銷案核心表、廠商與交付物：行銷 / admin 可新增與更新；總經理與業務 / member 只讀；除知識資源連結表外，一律撤掉 authenticated `delete`。
+- `marketing_resources`：行銷 / admin 與總經理可讀全部；業務 / member 只讀 `deleted_at is null` 的有效資源；只有行銷 / admin 可寫。
+- `product_knowledge_items`：行銷 / admin 與總經理可讀全部；業務 / member 只讀 `visibility_status in ('可對外', '僅內部')`；只有行銷 / admin 可寫。
+- `product_knowledge_resource_links`：業務 / member 只能讀到「知識條目可見且資源未封存」的連結；行銷 / admin 可新增、更新、刪除連結。此表保留 `delete` 是因為 V2 知識庫連結 UI 目前以刪除 junction row 代表移除關聯。
+- `product_knowledge_sources` / `product_knowledge_item_sources` 雖非目前前端主流程，仍納入本批，避免留下 authenticated 全開寫入缺口。
+- 本批不處理 Storage bucket policy；行銷資源檔案與行銷案文件簽出權限留到 18G。
+
 ### Batch 18F：公會資料表
 
 資料範圍：

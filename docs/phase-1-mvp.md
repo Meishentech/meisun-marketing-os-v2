@@ -192,6 +192,7 @@
    - Batch 18B SQL：`sql/phase1_batch18b_role_helpers.sql`。建立 `current_app_user_email()`、`current_app_user_role()`、`is_marketing_or_admin()`、`is_executive()` 四個 SECURITY INVOKER helper，收斂 `app_user_access` 為自列讀取 / 自列密碼旗標更新，並將 `kevin@mcttw.com.tw`、`kevin@tonsun.com.tw` 設為 `executive`。已執行到 live Supabase，smoke test 確認 helper 非 SECURITY DEFINER、`app_user_access` grants / policy 正確、Kevin 帳號角色判斷通過。
    - Batch 18C SQL：`sql/phase1_batch18c_sales_data_rls.sql`。已執行到 live Supabase，smoke test 通過：三張表 `sales_requests`、`leads`、`lead_follow_ups` 對 anon 無讀取權限；authenticated 保留 select / insert / update、撤掉 delete；9 條新 policy 正確；`vincent@mcttw.com.tw` 作為 member 可讀全部名單但無法更新非自己名單，且只能看到自己的需求單；`kevin@mcttw.com.tw` 作為 executive 可讀但不能更新名單。
    - Batch 18D SQL 草案：`sql/phase1_batch18d_approval_requests_rls.sql`。目標是收斂 `approval_requests`：行銷 / admin 可建立送審與補非決策快照欄位；總經理可決策；業務 / member 不讀不寫；撤掉 delete。因欄位層決策限制無法只靠 RLS 表達，草案新增普通 trigger 阻擋非總經理更新決策欄位。前端取消廠商合作時，待審核單改標 `status = '已撤回'` 並不寫 `decided_by` / `decided_at` / `decision_note`，保留「只有總經理決策」原則。此 SQL 尚未執行 live Supabase，需 Claude 複查通過後再執行。
+   - Batch 18E SQL 草案：`sql/phase1_batch18e_marketing_core_rls.sql`。目標是收斂行銷核心資料表寫入權限：行銷案、任務、預算、文件、風險、追蹤、成效、廠商、交付物與資源 / 知識庫只允許行銷 / admin 寫入；總經理維持讀取；業務 / member 可讀必要行銷核心資料、有效資源與可用知識，但不可寫。第一版保守保留行銷案核心表 authenticated 讀取，以免目前前端一次載入資料造成業務視角初始化失敗；資源與知識庫讀取則依 `deleted_at` / `visibility_status` 收斂。本批尚未執行 live Supabase，需 Claude 複查通過後再執行。
 
 ## 暫緩到 Phase 2
 
