@@ -165,6 +165,17 @@ SQL 草案：`sql/phase1_batch18c_sales_data_rls.sql`。
 
 注意：目前 `approval_requests.entity_type/entity_id` 無 FK，是刻意保留歷史快照；RLS 不應假設來源表一定存在。
 
+SQL 草案：`sql/phase1_batch18d_approval_requests_rls.sql`。
+
+落地決策：
+
+- 行銷 / admin 可讀取與建立送審單，且只能建立 `approver_role = 'executive'`、`status = '待審核'`、決策欄位為空的資料。
+- 總經理可讀取與更新決策欄位。
+- 業務 / member 不讀、不寫 `approval_requests`。
+- 撤掉 authenticated `delete` 權限，保留審核歷史。
+- 因 RLS 只能限制列、不能限制欄位，本批 SQL 草案加入 `approval_requests_update_scope_guard` trigger，防止非總經理更新 `status`、`decided_by`、`decided_at`、`decision_note`。
+- 前端相容提醒：目前 `closePendingVendorApprovals()` 會在取消廠商合作時由行銷 / admin 把待審核單改為 `需修正` 並寫入決策欄位。若採用 18D 嚴格規則，該流程會被資料庫擋下；18D 前端需改成不由行銷代決策，或另行拍板「撤回 / 取消送審」狀態。
+
 ### Batch 18E：行銷管理核心資料表
 
 資料範圍：

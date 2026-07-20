@@ -232,13 +232,16 @@ order by tablename, policyname;
 -- - lead_follow_ups: 3 policies.
 -- - no old "authenticated all" policies remain.
 
--- Smoke test 3: non-destructive SQL Editor role simulation.
+-- Smoke test 3: non-destructive SQL Editor role simulation for sales_requests.
 -- Uses a real non-admin member account as the sales-role equivalent: vincent@mcttw.com.tw.
+-- Keep this as one statement block before rollback so Supabase SQL Editor shows one result.
 --
 -- begin;
 -- select set_config('request.jwt.claims', '{"email":"vincent@mcttw.com.tw"}', true);
 -- set local role authenticated;
 -- select
+--   current_user as db_user,
+--   current_setting('role', true) as active_role,
 --   public.current_app_user_email() as email,
 --   public.current_app_user_role() as role,
 --   count(*) filter (where requested_by = public.current_app_user_email()) as visible_own_sales_requests,
@@ -247,39 +250,64 @@ order by tablename, policyname;
 -- rollback;
 --
 -- Expected for a normal sales account:
+-- - db_user = authenticated.
 -- - role is the account's app_user_access role.
 -- - visible_other_sales_requests = 0, because RLS hides other users' requests.
 
 -- Smoke test 4: sales can read all leads, but cannot no-op update leads not assigned to them.
 -- Uses a real non-admin member account as the sales-role equivalent: vincent@mcttw.com.tw.
--- This uses rollback, so it does not persist data.
+-- This uses rollback and returns one result table, so it does not persist data.
 --
 -- begin;
 -- select set_config('request.jwt.claims', '{"email":"vincent@mcttw.com.tw"}', true);
 -- set local role authenticated;
--- select count(*) as visible_leads from public.leads;
--- update public.leads
--- set updated_at = updated_at
--- where assigned_sales is distinct from public.current_app_user_email()
--- returning id, company_name, assigned_sales;
+-- with current_user_context as (
+--   select public.current_app_user_email() as email
+-- ),
+-- attempted_update as (
+--   update public.leads
+--   set updated_at = updated_at
+--   from current_user_context
+--   where public.leads.assigned_sales is distinct from current_user_context.email
+--   returning public.leads.id
+-- )
+-- select
+--   current_user as db_user,
+--   current_setting('role', true) as active_role,
+--   public.current_app_user_email() as email,
+--   public.current_app_user_role() as app_role,
+--   (select count(*) from public.leads) as visible_leads,
+--   (select count(*) from attempted_update) as updated_other_leads;
 -- rollback;
 --
 -- Expected for a normal sales account:
+-- - db_user = authenticated.
 -- - visible_leads returns a count, not a permission error.
--- - update returns 0 rows.
+-- - updated_other_leads = 0.
 
 -- Smoke test 5: executive can read but cannot write these tables.
+-- This uses rollback and returns one result table, so it does not persist data.
 --
 -- begin;
 -- select set_config('request.jwt.claims', '{"email":"kevin@mcttw.com.tw"}', true);
 -- set local role authenticated;
--- select public.is_executive() as is_executive, count(*) as visible_leads from public.leads;
--- update public.leads
--- set updated_at = updated_at
--- returning id, company_name;
+-- with attempted_update as (
+--   update public.leads
+--   set updated_at = updated_at
+--   returning public.leads.id
+-- )
+-- select
+--   current_user as db_user,
+--   current_setting('role', true) as active_role,
+--   public.current_app_user_email() as email,
+--   public.current_app_user_role() as app_role,
+--   public.is_executive() as is_executive,
+--   (select count(*) from public.leads) as visible_leads,
+--   (select count(*) from attempted_update) as updated_leads;
 -- rollback;
 --
 -- Expected:
+-- - db_user = authenticated.
 -- - is_executive = true.
 -- - visible_leads returns a count.
--- - update returns 0 rows.
+-- - updated_leads = 0.
