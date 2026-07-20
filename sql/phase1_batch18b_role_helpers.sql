@@ -12,6 +12,11 @@
 -- - This file does not create, drop, or alter business data columns.
 -- - This file intentionally keeps admin separate from executive: admin is not allowed to
 --   pass is_executive(), because approval decisions are reserved for the real executive.
+-- - Recursion warning: current_app_user_role() queries app_user_access. This is safe only
+--   while app_user_access keeps a simple self-row SELECT policy that does not call
+--   current_app_user_role(), is_marketing_or_admin(), or is_executive(). Do not later add
+--   role-helper-based policies on app_user_access itself, or RLS can recurse and break
+--   every downstream policy that depends on these helpers.
 
 create or replace function public.current_app_user_email()
 returns citext
