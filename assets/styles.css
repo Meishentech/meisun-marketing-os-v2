@@ -383,6 +383,30 @@ h1 {
   gap: 8px;
 }
 
+.section-footer {
+  margin-top: 14px;
+}
+
+.relationship-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.relationship-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #cfe0ee;
+  border-radius: 999px;
+  background: #f7fbff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
 .deliverable-stack {
   display: grid;
   gap: 8px;

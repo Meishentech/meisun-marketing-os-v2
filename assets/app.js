@@ -14,6 +14,7 @@ const state = {
     tenders: [],
     leads: [],
     associations: [],
+    archivedAssociations: [],
     associationTags: [],
     associationCooperations: [],
     associationStages: [],
@@ -43,6 +44,7 @@ const state = {
   dataStatus: "loading",
   campaignDetailId: "",
   campaignInspectionMode: "",
+  associationDetailId: "",
 };
 
 let modalSubmitHandler = null;
@@ -2192,6 +2194,11 @@ function vendorFormPreviewSection() {
 }
 
 function associationSection() {
+  if (state.associationDetailId) {
+    const association = findAssociation(state.associationDetailId);
+    return associationDetailCooperationSection(association);
+  }
+
   if (state.data.associationCooperations.length) {
     const rows = state.data.associationCooperations
       .slice()
@@ -2239,6 +2246,49 @@ function associationSection() {
       ["Q4 期刊刊登", "否", tag("稿件中", "amber"), "8萬", "無"],
       ["年度會費評估", "是", tag("待確認", "gray"), "12萬", "會員名錄"],
     ],
+  };
+}
+
+function associationPageSections() {
+  if (state.associationDetailId) return associationDetailSections();
+  return [
+    associationListSection(),
+    associationSection(),
+    associationTagsSection(),
+    archivedAssociationsSection(),
+  ];
+}
+
+function associationListSection() {
+  const rows = state.data.associations
+    .slice()
+    .sort((a, b) => String(associationDisplayName(a)).localeCompare(String(associationDisplayName(b)), "zh-Hant-TW"))
+    .map((association) => [
+      associationDisplayName(association),
+      association.association_type || "未分類",
+      tag(association.join_status || "未填", associationRelationshipTone(association.join_status)),
+      associationTagText(association.id) || "尚未建立",
+      association.internal_owner || "未填",
+      actionGroup([
+        actionButton("詳情", "view-association-detail", association.id, "is-primary"),
+        actionButton("編輯", "edit-association", association.id, "is-primary"),
+        actionButton("封存", "archive-association", association.id, "is-danger"),
+      ]),
+    ]);
+
+  return {
+    type: "table",
+    title: "公會主檔",
+    wide: true,
+    headers: ["公會", "類型", "正式關係", "合作標籤", "負責人", "操作"],
+    rows: rows.length ? rows : [[
+      state.dataStatus === "live" ? "目前尚未建立公會資料" : "台灣省冷凍空調技師公會",
+      "公會",
+      tag(state.dataStatus === "live" ? "無資料" : "已加入", state.dataStatus === "live" ? "amber" : "green"),
+      state.dataStatus === "live" ? "請新增公會主檔" : "期刊合作、講座協辦",
+      state.dataStatus === "live" ? "無" : "Eric",
+      state.dataStatus === "live" ? actionButton("新增公會", "create-association", "", "is-primary") : "示範資料",
+    ]],
   };
 }
 
@@ -2295,6 +2345,138 @@ function associationTagsSection() {
       ["可關聯名單", "活動或會員名錄可回到商機 / 名單管理。"],
       ["可關聯費用", "會費、年費、贊助、期刊、活動費分開記錄。"],
     ],
+  };
+}
+
+function archivedAssociationsSection() {
+  const rows = state.data.archivedAssociations.slice(0, 30).map((association) => [
+    associationDisplayName(association),
+    tag(association.join_status || "未填", "gray"),
+    archiveAssociationMeta(association),
+    association.archive_reason || "未填寫原因",
+    actionButton("查看詳情", "view-association-detail", association.id, "is-primary"),
+  ]);
+
+  return {
+    type: "details-table",
+    title: `已封存公會（${rows.length}）`,
+    summary: "封存後不出現在進行中公會列表，歷史資料保留。",
+    wide: true,
+    headers: ["公會", "正式關係", "封存資訊", "原因", "操作"],
+    rows: rows.length ? rows : [["目前沒有已封存公會", tag("無紀錄", "green"), "無", "無", "無"]],
+  };
+}
+
+function associationDetailSections() {
+  const association = findAssociation(state.associationDetailId);
+  if (!association) {
+    state.associationDetailId = "";
+    return associationPageSections();
+  }
+
+  return [
+    associationDetailHeaderSection(association),
+    associationProfileSection(association),
+    associationTagManagerSection(association),
+    associationDetailCooperationSection(association),
+    associationHistorySection(association),
+  ];
+}
+
+function associationDetailHeaderSection(association = {}) {
+  const isArchived = Boolean(association.archived_at);
+  return {
+    type: "cards",
+    title: `公會詳情：${associationDisplayName(association)}`,
+    wide: true,
+    cards: [
+      ["返回", actionGroup([actionButton("返回公會列表", "back-association-list", "", "is-primary")])],
+      ["正式關係", `${tag(association.join_status || "未填", isArchived ? "gray" : associationRelationshipTone(association.join_status))} ${isArchived ? tag("已封存", "gray") : ""}`],
+      ["合作標籤", relationshipChipList(association.id)],
+      ["內部負責人", association.internal_owner || "未填"],
+    ],
+  };
+}
+
+function associationProfileSection(association = {}) {
+  return {
+    type: "cards",
+    title: "公會基本資料",
+    wide: true,
+    cards: [
+      ["類型", escapeHtml(association.association_type || "未分類")],
+      ["聯絡人", escapeHtml(association.contact_person || "未填")],
+      ["電話 / Email", `${escapeHtml(association.phone || "未填")}<br>${escapeHtml(association.email || "未填")}`],
+      ["網站 / LINE", `${escapeHtml(association.website || "未填")}<br>${escapeHtml(association.line_url || "未填")}`],
+      ["地址", escapeHtml(association.address || "未填")],
+      ["備註", escapeHtml(association.notes || "未填")],
+      ["操作", association.archived_at
+        ? "已封存公會目前只讀。"
+        : actionGroup([
+          actionButton("編輯主檔", "edit-association", association.id, "is-primary"),
+          actionButton("封存公會", "archive-association", association.id, "is-danger"),
+        ])],
+    ],
+  };
+}
+
+function associationTagManagerSection(association = {}) {
+  const rows = associationTagsFor(association.id).map((tagRow) => [
+    tagRow.tag || "未命名標籤",
+    formatDate(tagRow.created_at) || "未記錄",
+    association.archived_at ? "已封存公會不再調整標籤" : actionButton("移除", "remove-association-tag", tagRow.id, "is-danger"),
+  ]);
+
+  return {
+    type: "table",
+    title: "關係標籤管理",
+    wide: true,
+    headers: ["標籤", "建立時間", "操作"],
+    rows: rows.length ? rows : [["尚未建立標籤", "無", association.archived_at ? "已封存" : actionButton("新增標籤", "add-association-tag", association.id, "is-primary")]],
+    footer: association.archived_at ? "" : actionGroup([actionButton("新增關係標籤", "add-association-tag", association.id, "is-primary")]),
+  };
+}
+
+function associationDetailCooperationSection(association = {}) {
+  const rows = state.data.associationCooperations
+    .filter((item) => String(item.association_id || "") === String(association.id || ""))
+    .slice()
+    .sort(sortCooperations)
+    .map((item) => [
+      item.item_name || "未命名合作項目",
+      item.item_type || sourceTableLabel(item.source_table),
+      associationStageCell(item),
+      formatDate(item.due_date) || "未排定",
+      associationNextStep(item),
+    ]);
+
+  return {
+    type: "table",
+    title: "合作概覽",
+    wide: true,
+    headers: ["項目", "類型", "階段", "日期", "負責 / 下一步"],
+    rows: rows.length ? rows : [["尚未建立合作紀錄", "無", tag("待建立", "amber"), "無", "後續在 17D/17E/17F 建立任務、費用、活動、期刊、年費與備註 CRUD"]],
+  };
+}
+
+function associationHistorySection(association = {}) {
+  const rows = [];
+  if (association.archived_at) {
+    rows.push([
+      tag("公會封存", "gray"),
+      associationDisplayName(association),
+      archiveAssociationMeta(association),
+      association.archive_reason || "未填寫原因",
+    ]);
+  }
+
+  return {
+    type: "details-table",
+    title: `歷史紀錄（${rows.length}）`,
+    summary: "公會主檔、標籤與後續子項目取消 / 封存紀錄會集中在這裡。",
+    wide: true,
+    headers: ["類型", "項目", "時間 / 操作者", "原因"],
+    rows: rows.length ? rows : [[tag("無紀錄", "green"), "目前沒有已取消或已封存紀錄", "無", "無"]],
   };
 }
 
@@ -2565,12 +2747,26 @@ function findCampaign(campaignId) {
     .find((item) => String(item.id || "") === id);
 }
 
+function findAssociation(associationId) {
+  const id = String(associationId || "");
+  return [...state.data.associations, ...state.data.archivedAssociations]
+    .find((item) => String(item.id || "") === id);
+}
+
 function activeCampaigns(campaigns = []) {
   return campaigns.filter((campaign) => !campaign.archived_at);
 }
 
 function archivedCampaigns(campaigns = []) {
   return campaigns.filter((campaign) => Boolean(campaign.archived_at));
+}
+
+function activeAssociations(associations = []) {
+  return associations.filter((association) => !association.archived_at);
+}
+
+function archivedAssociations(associations = []) {
+  return associations.filter((association) => Boolean(association.archived_at));
 }
 
 function activeCampaignTasks(tasks = state.data.campaignTasks) {
@@ -2971,6 +3167,7 @@ function findCampaignRiskUpdate(id) {
 function clearCampaignDrilldown() {
   state.campaignDetailId = "";
   state.campaignInspectionMode = "";
+  state.associationDetailId = "";
 }
 
 function archiveCampaignMeta(campaign = {}) {
@@ -2978,6 +3175,61 @@ function archiveCampaignMeta(campaign = {}) {
   const by = campaign.archived_by || "未記錄";
   const reason = campaign.archive_reason ? ` / ${campaign.archive_reason}` : "";
   return date ? `${date} / ${by}${reason}` : `${by}${reason}`;
+}
+
+function archiveAssociationMeta(association = {}) {
+  const date = formatDate(association.archived_at);
+  const by = association.archived_by || "未記錄";
+  const reason = association.archive_reason ? ` / ${association.archive_reason}` : "";
+  return date ? `${date} / ${by}${reason}` : `${by}${reason}`;
+}
+
+function associationTagsFor(associationId) {
+  const id = String(associationId || "");
+  return state.data.associationTags.filter((tagRow) => String(tagRow.association_id || "") === id);
+}
+
+function associationTagText(associationId) {
+  return associationTagsFor(associationId).map((tagRow) => tagRow.tag).filter(Boolean).join("、");
+}
+
+function relationshipChipList(associationId) {
+  const chips = associationTagsFor(associationId)
+    .map((tagRow) => `<span class="relationship-chip">${escapeHtml(tagRow.tag || "未命名標籤")}</span>`);
+  return chips.length ? `<div class="relationship-chip-list">${chips.join("")}</div>` : "尚未建立合作標籤";
+}
+
+function associationRelationshipTone(status = "") {
+  if (["已加入", "已入會", "合作中"].includes(status)) return "green";
+  if (["洽談中", "評估中", "暫停合作"].includes(status)) return "amber";
+  if (["未加入", "未入會", "已封存"].includes(status)) return "gray";
+  return statusTone(status);
+}
+
+function associationStatusOptions(selected = "") {
+  const fixed = ["已入會", "未入會", "洽談中", "暫停合作", "合作中", "評估中"];
+  const existing = [...state.data.associations, ...state.data.archivedAssociations]
+    .map((association) => association.join_status)
+    .filter(Boolean);
+  return selectOptions([...new Set([...fixed, ...existing, selected].filter(Boolean))].map((value) => [value, value]), selected || "未入會");
+}
+
+function associationTypeSuggestions(selected = "") {
+  const fixed = ["公會", "協會", "學會", "商會", "產業組織", "其他"];
+  const existing = [...state.data.associations, ...state.data.archivedAssociations]
+    .map((association) => association.association_type)
+    .filter(Boolean);
+  return [...new Set([...fixed, ...existing, selected].filter(Boolean))]
+    .map((value) => `<option value="${escapeAttr(value)}"></option>`)
+    .join("");
+}
+
+function associationTagSuggestions(selected = "") {
+  const fixed = ["已入會", "未入會", "講座協辦", "期刊合作", "活動贊助", "會員大會", "年度贊助", "名單權益", "曝光合作", "技術交流"];
+  const existing = state.data.associationTags.map((tagRow) => tagRow.tag).filter(Boolean);
+  return [...new Set([...fixed, ...existing, selected].filter(Boolean))]
+    .map((value) => `<option value="${escapeAttr(value)}"></option>`)
+    .join("");
 }
 
 function priorityTone(priority = "") {
@@ -4701,6 +4953,200 @@ function openCreateKnowledgeItemModal() {
   });
 }
 
+function openCreateAssociationModal() {
+  openAssociationModal();
+}
+
+function openEditAssociationModal(id) {
+  const association = findAssociation(id);
+  if (!association || association.archived_at) return;
+  openAssociationModal(association);
+}
+
+function openAssociationModal(association = {}) {
+  const isEdit = Boolean(association.id);
+  openModal(isEdit ? "編輯公會主檔" : "新增公會主檔", associationFormHtml(association), {
+    submitLabel: isEdit ? "儲存變更" : "建立公會",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = associationPayload(values);
+      if (!payload.name) throw new Error("請輸入公會名稱。");
+
+      if (isEdit) {
+        await api("PATCH", `associations?id=eq.${encodeURIComponent(association.id)}`, payload);
+      } else {
+        await api("POST", "associations", payload);
+      }
+
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openArchiveAssociationModal(id) {
+  const association = state.data.associations.find((item) => String(item.id) === String(id));
+  if (!association) return;
+
+  openModal("封存公會", `
+    <p class="empty-note">
+      確定要封存「${escapeHtml(associationDisplayName(association))}」嗎？封存後會從公會主檔列表移除，但既有合作、費用、標籤與歷史資料會保留。
+    </p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>封存原因</span>
+        <textarea name="archive_reason" placeholder="例如：合作暫停、資料併入其他公會、年度整理"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認封存",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `associations?id=eq.${encodeURIComponent(id)}`, {
+        archived_at: nowIso(),
+        archived_by: state.auth.email,
+        archive_reason: values.archive_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.associationDetailId = "";
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openAddAssociationTagModal(associationId) {
+  const association = findAssociation(associationId);
+  if (!association || association.archived_at) return;
+
+  openModal("新增公會關係標籤", `
+    <p class="empty-note">同一公會可同時有多個合作標籤，例如未入會但有講座協辦、期刊合作或活動贊助。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>標籤 *</span>
+        <input name="tag" list="associationTagOptions" required placeholder="例如：講座協辦">
+        <datalist id="associationTagOptions">${associationTagSuggestions()}</datalist>
+      </label>
+    </div>
+  `, {
+    submitLabel: "新增標籤",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const label = values.tag?.trim();
+      if (!label) throw new Error("請輸入標籤。");
+      if (associationTagsFor(association.id).some((tagRow) => tagRow.tag === label)) {
+        throw new Error("這個公會已經有相同標籤。");
+      }
+      await api("POST", "association_relationship_tags", {
+        association_id: association.id,
+        tag: label,
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openRemoveAssociationTagModal(id) {
+  const tagRow = state.data.associationTags.find((item) => String(item.id || "") === String(id || ""));
+  if (!tagRow) return;
+  const association = findAssociation(tagRow.association_id);
+  if (association?.archived_at) return;
+
+  openModal("移除公會關係標籤", `
+    <p class="empty-note">
+      確定要從「${escapeHtml(associationDisplayName(association || {}))}」移除「${escapeHtml(tagRow.tag || "未命名標籤")}」嗎？這只會移除標籤，不會刪除公會或合作紀錄。
+    </p>
+  `, {
+    submitLabel: "確認移除",
+    submitTone: "danger",
+    onSubmit: async () => {
+      await api("DELETE", `association_relationship_tags?id=eq.${encodeURIComponent(id)}`);
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function associationFormHtml(association = {}) {
+  return `
+    <div class="form-section">
+      <h3>基本資料</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>公會名稱 *</span>
+          <input name="name" value="${escapeAttr(association.name || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>公會類型</span>
+          <input name="association_type" list="associationTypeOptions" value="${escapeAttr(association.association_type || "")}" placeholder="例如：公會、協會、學會">
+          <datalist id="associationTypeOptions">${associationTypeSuggestions(association.association_type || "")}</datalist>
+        </label>
+        <label class="form-field">
+          <span>正式關係</span>
+          <select name="join_status">${associationStatusOptions(association.join_status || "未入會")}</select>
+        </label>
+        <label class="form-field">
+          <span>內部負責人</span>
+          <input name="internal_owner" value="${escapeAttr(association.internal_owner || state.auth.email || "")}">
+        </label>
+        <label class="form-field">
+          <span>聯絡人</span>
+          <input name="contact_person" value="${escapeAttr(association.contact_person || "")}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>聯絡資訊</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>電話</span>
+          <input name="phone" value="${escapeAttr(association.phone || "")}">
+        </label>
+        <label class="form-field">
+          <span>Email</span>
+          <input name="email" type="email" value="${escapeAttr(association.email || "")}">
+        </label>
+        <label class="form-field">
+          <span>網站</span>
+          <input name="website" value="${escapeAttr(association.website || "")}">
+        </label>
+        <label class="form-field">
+          <span>LINE / 社群</span>
+          <input name="line_url" value="${escapeAttr(association.line_url || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>地址</span>
+          <input name="address" value="${escapeAttr(association.address || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>備註</span>
+          <textarea name="notes">${escapeHtml(association.notes || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function associationPayload(values = {}) {
+  return {
+    name: values.name?.trim(),
+    association_type: values.association_type?.trim() || null,
+    join_status: values.join_status || "未入會",
+    contact_person: values.contact_person?.trim() || null,
+    phone: values.phone?.trim() || null,
+    email: values.email?.trim() || null,
+    address: values.address?.trim() || null,
+    website: values.website?.trim() || null,
+    line_url: values.line_url?.trim() || null,
+    internal_owner: values.internal_owner?.trim() || null,
+    notes: values.notes?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
 function campaignFormHtml(campaign = {}) {
   const vendorsText = Array.isArray(campaign.vendors) ? campaign.vendors.join("\n") : "";
   return `
@@ -6109,7 +6555,7 @@ function buildCurrentSections(page) {
     "marketing:channels": [channelSummarySection(false), channelDecisionSection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
-    "marketing:associations": [associationSection(), associationTagsSection()],
+    "marketing:associations": associationPageSections(),
     "marketing:knowledge": [knowledgeSection(true), marketingResourceManagerSection(), archivedMarketingResourcesSection(), knowledgeGovernanceSection()],
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "marketing:weekly": weeklySummarySections(),
@@ -6170,9 +6616,10 @@ function renderSection(section) {
   if (section.type === "table") {
     return `
       <article class="panel${wideClass}">
-        <div class="panel-header"><h2>${section.title}</h2></div>
+        <div class="panel-header"><h2>${escapeHtml(section.title)}</h2></div>
         <div class="panel-body">
           ${renderTable(section, tableClass)}
+          ${section.footer ? `<div class="section-footer">${section.footer}</div>` : ""}
         </div>
       </article>
     `;
@@ -6182,8 +6629,8 @@ function renderSection(section) {
     return `
       <details class="panel details-panel${wideClass}">
         <summary class="panel-header details-summary">
-          <h2>${section.title}</h2>
-          <span>${section.summary || "查看紀錄"}</span>
+          <h2>${escapeHtml(section.title)}</h2>
+          <span>${escapeHtml(section.summary || "查看紀錄")}</span>
         </summary>
         <div class="panel-body">
           ${renderTable(section, tableClass)}
@@ -6195,7 +6642,7 @@ function renderSection(section) {
   if (section.type === "list") {
     return `
       <article class="panel${wideClass}">
-        <div class="panel-header"><h2>${section.title}</h2></div>
+        <div class="panel-header"><h2>${escapeHtml(section.title)}</h2></div>
         <div class="panel-body list">
           ${section.items.map(([title, body, status, priority]) => `
             <div class="list-item priority-${priority}">
@@ -6214,11 +6661,11 @@ function renderSection(section) {
   if (section.type === "cards") {
     return `
       <article class="panel${wideClass}">
-        <div class="panel-header"><h2>${section.title}</h2></div>
+        <div class="panel-header"><h2>${escapeHtml(section.title)}</h2></div>
         <div class="panel-body mini-grid">
           ${section.cards.map(([title, body]) => `
             <div class="mini-card">
-              <h3>${title}</h3>
+              <h3>${escapeHtml(title)}</h3>
               <div class="mini-card-body">${body}</div>
             </div>
           `).join("")}
@@ -6231,7 +6678,7 @@ function renderSection(section) {
     return `
       <article class="panel${wideClass}">
         <div class="panel-header">
-          <h2>${section.title}</h2>
+          <h2>${escapeHtml(section.title)}</h2>
           <div class="action-group">
             ${actionButton("複製週報", "copy-weekly-report", "", "is-primary")}
             ${actionButton("匯出 .txt", "export-weekly-report")}
@@ -6332,6 +6779,11 @@ document.getElementById("primaryAction").addEventListener("click", () => {
     return;
   }
 
+  if (state.role === "marketing" && state.page === "associations") {
+    openCreateAssociationModal();
+    return;
+  }
+
   if (state.role === "marketing" && state.page === "knowledge") {
     openCreateKnowledgeItemModal();
     return;
@@ -6373,6 +6825,20 @@ document.addEventListener("click", (event) => {
   if (action === "create-marketing-resource") openCreateMarketingResourceModal();
   if (action === "edit-marketing-resource") openEditMarketingResourceModal(id);
   if (action === "archive-marketing-resource") openArchiveMarketingResourceModal(id);
+  if (action === "create-association") openCreateAssociationModal();
+  if (action === "view-association-detail") {
+    state.page = "associations";
+    state.associationDetailId = id;
+    render();
+  }
+  if (action === "back-association-list") {
+    state.associationDetailId = "";
+    render();
+  }
+  if (action === "edit-association") openEditAssociationModal(id);
+  if (action === "archive-association") openArchiveAssociationModal(id);
+  if (action === "add-association-tag") openAddAssociationTagModal(id);
+  if (action === "remove-association-tag") openRemoveAssociationTagModal(id);
   if (action === "view-campaign-detail") {
     state.page = "campaigns";
     state.campaignInspectionMode = "";
@@ -6565,7 +7031,8 @@ async function loadExistingData() {
     state.data.resources = Array.isArray(resources) ? resources : [];
     state.data.tenders = Array.isArray(tenders) ? tenders : [];
     state.data.leads = Array.isArray(leads) ? leads : [];
-    state.data.associations = Array.isArray(associations) ? associations : [];
+    state.data.associations = Array.isArray(associations) ? activeAssociations(associations) : [];
+    state.data.archivedAssociations = Array.isArray(associations) ? archivedAssociations(associations) : [];
     state.data.associationTags = Array.isArray(associationTags) ? associationTags : [];
     state.data.associationCooperations = Array.isArray(associationCooperations) ? associationCooperations : [];
     state.data.associationStages = Array.isArray(associationStages) ? associationStages : [];
@@ -6598,6 +7065,7 @@ async function loadExistingData() {
       + state.data.tenders.length
       + state.data.leads.length
       + state.data.associations.length
+      + state.data.archivedAssociations.length
       + state.data.associationTags.length
       + state.data.associationCooperations.length
       + state.data.associationStages.length
