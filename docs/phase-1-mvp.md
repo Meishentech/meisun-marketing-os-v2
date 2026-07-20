@@ -181,6 +181,7 @@
    - Batch 15D：已建立 `V2_LIVE_SCHEMA_DEPENDENCIES.md`，列出 V2 前端依賴的 live Supabase 欄位、資料表、view、對應 SQL 檔與必跑 smoke test，避免再把「SQL 檔存在」誤認為「live 已套用」。
    - Batch 15E：已更新 `MOBILE_ACCEPTANCE_CHECKLIST.md`，把總經理、行銷總監、業務三種角色的核心頁面與 modal 都納入手機版阻塞驗收。
    - Batch 17 動工前草案：`BATCH17_ASSOCIATION_MIGRATION_DRAFT.md`。目標是把公會管理 8 張表（主檔、年費、權益、期刊排程、活動、備註、任務、任務費用）完整搬到 V2，公會管理列為目前最高優先。V1 `associations` 真刪除會 cascade 清空全部 7 張子表，是目前 cascade 半徑最大的刪除操作，建議立即凍結（17A），不用等 V2 進度。`association_relationship_tags`（Batch2 已建）就是多標籤機制，資料模型不用重做。拆成 17A 凍結 V1 刪除、17B SQL（含重建 `association_cooperation_overview` 與更新 `all_expenses_overview` 過濾）、17C 主檔+標籤、17D 任務+任務費用、17E 活動+期刊排程、17F 年費+權益+備註、17G 手機驗收與 V1 全面停用。已拍板：`join_status` 保留並與多標籤並存；公會詳情頁只保留一個合併歷史紀錄區塊；`association_stage_options` 在 17E 活動 / 期刊排程時接上 UI；公會附件本批先維持文字欄位，不升級 Storage 上傳。
+   - Batch 17B SQL 草案已建立：`sql/phase1_batch17b_association_lifecycle.sql`。目前僅提交檔案，尚未執行 live Supabase；需經複查通過後再由 SQL Editor 套用並跑檔尾 smoke test。
 
 ## 暫緩到 Phase 2
 
