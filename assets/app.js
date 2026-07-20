@@ -2647,7 +2647,10 @@ function associationExpenseComparableAmount(expense = {}) {
 
 function associationTaskName(taskId) {
   if (!taskId) return "不關聯任務";
-  return findAssociationTask(taskId)?.task_name || "已取消或未載入任務";
+  const task = findAssociationTask(taskId);
+  if (!task) return "已取消或未載入任務";
+  const suffix = isCancelledAssociationTask(task) ? "（已取消）" : "";
+  return `${task.task_name || "未命名任務"}${suffix}`;
 }
 
 function formatAssociationExpenseAmount(expense = {}) {
@@ -2947,12 +2950,16 @@ function archivedAssociations(associations = []) {
   return associations.filter((association) => Boolean(association.archived_at));
 }
 
+function isCancelledAssociationTask(task = {}) {
+  return Boolean(task.cancelled_at) || task.task_status === "取消";
+}
+
 function activeAssociationTasks(tasks = []) {
-  return tasks.filter((task) => !task.cancelled_at && task.task_status !== "取消");
+  return tasks.filter((task) => !isCancelledAssociationTask(task));
 }
 
 function cancelledAssociationTasks(tasks = []) {
-  return tasks.filter((task) => Boolean(task.cancelled_at) || task.task_status === "取消");
+  return tasks.filter(isCancelledAssociationTask);
 }
 
 function activeAssociationTaskExpenses(expenses = []) {
@@ -5531,7 +5538,7 @@ function openCreateAssociationTaskModal(associationId) {
 function openEditAssociationTaskModal(id) {
   const task = findAssociationTask(id);
   const association = findAssociation(task?.association_id);
-  if (!task || task.cancelled_at || association?.archived_at) return;
+  if (!task || isCancelledAssociationTask(task) || association?.archived_at) return;
   openAssociationTaskModal(task);
 }
 
