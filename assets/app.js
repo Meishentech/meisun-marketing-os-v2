@@ -6019,7 +6019,7 @@ function associationEventFormHtml(event = {}, associationId = "") {
       <div class="form-grid">
         <label class="form-field is-wide">
           <span>所需素材</span>
-          <input name="required_materials" value="${escapeAttr(materials || "DM、簡報、名片、禮品、產品資料、展示品")}" placeholder="用逗號或頓號分隔">
+          <input name="required_materials" value="${escapeAttr(materials)}" placeholder="例如：DM、簡報、名片、禮品、產品資料、展示品">
         </label>
         <label class="form-field is-wide">
           <span>結果 / 下一步</span>
@@ -6178,7 +6178,7 @@ function associationPublicationFormHtml(publication = {}, associationId = "") {
         </label>
         <label class="form-field is-wide">
           <span>所需素材</span>
-          <input name="required_materials" value="${escapeAttr(materials || "公司介紹、產品圖片、文案、Logo、案例、廣告圖")}" placeholder="用逗號或頓號分隔">
+          <input name="required_materials" value="${escapeAttr(materials)}" placeholder="例如：公司介紹、產品圖片、文案、Logo、案例、廣告圖">
         </label>
         <label class="form-field is-wide">
           <span>結果 / 下一步</span>
