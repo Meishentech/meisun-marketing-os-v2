@@ -22,6 +22,10 @@ const state = {
     cancelledAssociationTasks: [],
     associationTaskExpenses: [],
     cancelledAssociationTaskExpenses: [],
+    associationEvents: [],
+    cancelledAssociationEvents: [],
+    associationPublications: [],
+    cancelledAssociationPublications: [],
     campaignVendors: [],
     cancelledCampaignVendors: [],
     cancelledDeliverables: [],
@@ -2203,8 +2207,9 @@ function associationSection() {
     return associationDetailCooperationSection(association);
   }
 
-  if (state.data.associationCooperations.length) {
-    const rows = state.data.associationCooperations
+  const activeCooperations = state.data.associationCooperations.filter((item) => !isCancelledAssociationCooperation(item));
+  if (activeCooperations.length) {
+    const rows = activeCooperations
       .slice()
       .sort(sortCooperations)
       .slice(0, 8)
@@ -2383,6 +2388,8 @@ function associationDetailSections() {
     associationProfileSection(association),
     associationTagManagerSection(association),
     associationTasksSection(association),
+    associationEventsSection(association),
+    associationPublicationsSection(association),
     associationTaskExpensesSection(association),
     associationDetailCooperationSection(association),
     associationHistorySection(association),
@@ -2517,9 +2524,86 @@ function associationTaskExpensesSection(association = {}) {
   };
 }
 
+function associationEventsSection(association = {}) {
+  const events = associationEventsFor(association.id);
+  const rows = events.map((event) => [
+    escapeHtml(event.event_name || "未命名活動"),
+    escapeHtml(event.event_type || "其他"),
+    associationStageCell({ source_table: "event", stage: event.event_status || "待確認" }),
+    formatDate(event.event_date) || "未排定",
+    escapeHtml(event.location || "未填"),
+    formatAssociationEventAmount(event),
+    escapeHtml(event.owner || "未填"),
+    associationTaskName(event.task_id),
+    association.archived_at
+      ? "已封存公會目前只讀。"
+      : actionGroup([
+        actionButton("編輯", "edit-association-event", event.id, "is-primary"),
+        actionButton("取消", "cancel-association-event", event.id, "is-danger"),
+      ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "公會活動 / 講座 / 贊助",
+    wide: true,
+    headers: ["活動", "類型", "階段", "日期", "地點", "費用", "負責人", "關聯任務", "操作"],
+    rows: rows.length ? rows : [[
+      "尚未建立公會活動",
+      "無",
+      tag("待建立", "amber"),
+      "無",
+      "無",
+      "未填",
+      "無",
+      "無",
+      association.archived_at ? "已封存" : actionButton("新增活動", "create-association-event", association.id, "is-primary"),
+    ]],
+    footer: association.archived_at ? "" : actionGroup([actionButton("新增公會活動", "create-association-event", association.id, "is-primary")]),
+  };
+}
+
+function associationPublicationsSection(association = {}) {
+  const publications = associationPublicationsFor(association.id);
+  const rows = publications.map((publication) => [
+    escapeHtml(publication.publication_name || "未命名期刊"),
+    associationStageCell({ source_table: "publication", stage: publication.material_status || "待確認主題" }),
+    `${formatDate(publication.deadline_date) || "未填"} / ${formatDate(publication.publish_date) || "未填"}`,
+    escapeHtml(publication.topic || "未填"),
+    escapeHtml(publication.ad_spec || "未填"),
+    escapeHtml(publication.owner || "未填"),
+    associationTaskName(publication.task_id),
+    association.archived_at
+      ? "已封存公會目前只讀。"
+      : actionGroup([
+        actionButton("編輯", "edit-association-publication", publication.id, "is-primary"),
+        actionButton("取消", "cancel-association-publication", publication.id, "is-danger"),
+      ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "公會期刊排程",
+    wide: true,
+    headers: ["期刊", "素材階段", "截稿 / 刊出", "主題", "規格", "負責人", "關聯任務", "操作"],
+    rows: rows.length ? rows : [[
+      "尚未建立期刊排程",
+      tag("待建立", "amber"),
+      "無",
+      "無",
+      "無",
+      "無",
+      "無",
+      association.archived_at ? "已封存" : actionButton("新增期刊排程", "create-association-publication", association.id, "is-primary"),
+    ]],
+    footer: association.archived_at ? "" : actionGroup([actionButton("新增期刊排程", "create-association-publication", association.id, "is-primary")]),
+  };
+}
+
 function associationDetailCooperationSection(association = {}) {
   const rows = state.data.associationCooperations
     .filter((item) => String(item.association_id || "") === String(association.id || ""))
+    .filter((item) => !isCancelledAssociationCooperation(item))
     .slice()
     .sort(sortCooperations)
     .map((item) => [
@@ -2572,6 +2656,28 @@ function associationHistorySection(association = {}) {
       ]);
     });
 
+  state.data.cancelledAssociationEvents
+    .filter((event) => String(event.association_id || "") === String(association.id || ""))
+    .forEach((event) => {
+      rows.push([
+        tag("活動取消", "gray"),
+        event.event_name || "未命名活動",
+        cancellationMeta(event),
+        event.cancel_reason || "未填寫原因",
+      ]);
+    });
+
+  state.data.cancelledAssociationPublications
+    .filter((publication) => String(publication.association_id || "") === String(association.id || ""))
+    .forEach((publication) => {
+      rows.push([
+        tag("期刊取消", "gray"),
+        publication.publication_name || "未命名期刊",
+        cancellationMeta(publication),
+        publication.cancel_reason || "未填寫原因",
+      ]);
+    });
+
   return {
     type: "details-table",
     title: `歷史紀錄（${rows.length}）`,
@@ -2600,6 +2706,18 @@ function associationTaskExpensesFor(associationId) {
     .sort(compareAssociationTaskExpenses);
 }
 
+function associationEventsFor(associationId) {
+  return state.data.associationEvents
+    .filter((event) => String(event.association_id || "") === String(associationId || ""))
+    .sort(compareAssociationEvents);
+}
+
+function associationPublicationsFor(associationId) {
+  return state.data.associationPublications
+    .filter((publication) => String(publication.association_id || "") === String(associationId || ""))
+    .sort(compareAssociationPublications);
+}
+
 function findAssociationTask(id) {
   return [...state.data.associationTasks, ...state.data.cancelledAssociationTasks]
     .find((task) => String(task.id || "") === String(id || ""));
@@ -2608,6 +2726,16 @@ function findAssociationTask(id) {
 function findAssociationTaskExpense(id) {
   return [...state.data.associationTaskExpenses, ...state.data.cancelledAssociationTaskExpenses]
     .find((expense) => String(expense.id || "") === String(id || ""));
+}
+
+function findAssociationEvent(id) {
+  return [...state.data.associationEvents, ...state.data.cancelledAssociationEvents]
+    .find((event) => String(event.id || "") === String(id || ""));
+}
+
+function findAssociationPublication(id) {
+  return [...state.data.associationPublications, ...state.data.cancelledAssociationPublications]
+    .find((publication) => String(publication.id || "") === String(id || ""));
 }
 
 function compareAssociationTasks(a = {}, b = {}) {
@@ -2633,6 +2761,23 @@ function compareAssociationTaskExpenses(a = {}, b = {}) {
   return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
 }
 
+function compareAssociationEvents(a = {}, b = {}) {
+  const dateDiff = String(a.event_date || "9999-12-31").localeCompare(String(b.event_date || "9999-12-31"));
+  if (dateDiff) return dateDiff;
+
+  return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
+function compareAssociationPublications(a = {}, b = {}) {
+  const deadlineDiff = String(a.deadline_date || "9999-12-31").localeCompare(String(b.deadline_date || "9999-12-31"));
+  if (deadlineDiff) return deadlineDiff;
+
+  const publishDiff = String(a.publish_date || "9999-12-31").localeCompare(String(b.publish_date || "9999-12-31"));
+  if (publishDiff) return publishDiff;
+
+  return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
 function associationPriorityRank(priority = "") {
   return { 高: 0, 中: 1, 低: 2 }[priority] ?? 3;
 }
@@ -2643,6 +2788,14 @@ function associationPaymentStatusRank(status = "") {
 
 function associationExpenseComparableAmount(expense = {}) {
   return Number(expense.actual_amount || expense.budget_amount || 0);
+}
+
+function formatAssociationEventAmount(event = {}) {
+  const budget = formatMoney(event.budget);
+  const actual = formatMoney(event.actual_spend);
+  if (budget === "未填" && actual === "未填") return "未填";
+  if (actual !== "未填") return `${budget} / 實支 ${actual}`;
+  return budget;
 }
 
 function associationTaskName(taskId) {
@@ -2673,6 +2826,10 @@ function sourceTableLabel(source = "") {
   if (source === "event") return "活動 / 講座 / 贊助";
   if (source === "publication") return "期刊刊登";
   return "合作紀錄";
+}
+
+function isCancelledAssociationCooperation(item = {}) {
+  return ["取消", "已取消"].includes(item.stage);
 }
 
 function associationDisplayName(association = {}) {
@@ -2968,6 +3125,30 @@ function activeAssociationTaskExpenses(expenses = []) {
 
 function cancelledAssociationTaskExpenses(expenses = []) {
   return expenses.filter((expense) => Boolean(expense.cancelled_at));
+}
+
+function isCancelledAssociationEvent(event = {}) {
+  return Boolean(event.cancelled_at) || event.event_status === "取消";
+}
+
+function activeAssociationEvents(events = []) {
+  return events.filter((event) => !isCancelledAssociationEvent(event));
+}
+
+function cancelledAssociationEvents(events = []) {
+  return events.filter(isCancelledAssociationEvent);
+}
+
+function isCancelledAssociationPublication(publication = {}) {
+  return Boolean(publication.cancelled_at) || ["取消", "已取消"].includes(publication.material_status);
+}
+
+function activeAssociationPublications(publications = []) {
+  return publications.filter((publication) => !isCancelledAssociationPublication(publication));
+}
+
+function cancelledAssociationPublications(publications = []) {
+  return publications.filter(isCancelledAssociationPublication);
 }
 
 function activeCampaignTasks(tasks = state.data.campaignTasks) {
@@ -3928,6 +4109,35 @@ function associationTaskOptions(associationId, selected = "") {
   }
 
   return selectOptions(options, selected);
+}
+
+function associationStageSelectOptions(entityType, selected = "") {
+  const fallback = entityType === "publication"
+    ? [["待確認主題", "待確認主題"], ["素材製作中", "素材製作中"], ["已投稿/截稿", "已投稿/截稿"], ["已確認刊出", "已確認刊出"]]
+    : [["待確認", "待確認"], ["已確認合作/排期", "已確認合作/排期"], ["素材準備中", "素材準備中"], ["執行中", "執行中"], ["已結束", "已結束"]];
+  const stageRows = state.data.associationStages
+    .filter((option) => option.entity_type === entityType)
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+    .map((option) => [option.stage_name, `${option.stage_name}（${Number(option.pct_value || 0)}%）`]);
+  return selectOptions(stageRows.length ? stageRows : fallback, selected);
+}
+
+function associationEventTypeSuggestions(selected = "") {
+  const fixed = ["會員大會", "協辦活動", "技術講座", "展覽", "餐會", "活動贊助", "其他"];
+  const existing = [...state.data.associationEvents, ...state.data.cancelledAssociationEvents]
+    .map((event) => event.event_type)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
+function associationRoleSuggestions(selected = "") {
+  const fixed = ["會員參與", "協辦", "贊助", "講師", "展示"];
+  const existing = [...state.data.associationEvents, ...state.data.cancelledAssociationEvents]
+    .map((event) => event.meisun_role)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
 }
 
 function performanceChannelSuggestions(selected = "") {
@@ -5737,6 +5947,338 @@ function openCancelAssociationTaskExpenseModal(id) {
   });
 }
 
+function associationEventFormHtml(event = {}, associationId = "") {
+  const selectedAssociationId = event.association_id || associationId;
+  const materials = Array.isArray(event.required_materials) ? event.required_materials.join("、") : "";
+  return `
+    <input type="hidden" name="association_id" value="${escapeAttr(selectedAssociationId)}">
+    <div class="form-section">
+      <h3>活動基本資訊</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公會</span>
+          <input value="${escapeAttr(associationDisplayName(findAssociation(selectedAssociationId) || {}))}" readonly>
+        </label>
+        <label class="form-field is-wide">
+          <span>活動名稱 *</span>
+          <input name="event_name" value="${escapeAttr(event.event_name || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>活動類型</span>
+          <input name="event_type" list="associationEventTypeOptions" value="${escapeAttr(event.event_type || "其他")}">
+          <datalist id="associationEventTypeOptions">${associationEventTypeSuggestions(event.event_type || "")}</datalist>
+        </label>
+        <label class="form-field">
+          <span>階段</span>
+          <select name="event_status">${associationStageSelectOptions("event", event.event_status || "待確認")}</select>
+        </label>
+        <label class="form-field">
+          <span>活動日期</span>
+          <input name="event_date" type="date" value="${escapeAttr(formatDate(event.event_date))}">
+        </label>
+        <label class="form-field">
+          <span>關聯任務</span>
+          <select name="task_id">${associationTaskOptions(selectedAssociationId, event.task_id || "")}</select>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>合作內容</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>地點</span>
+          <input name="location" value="${escapeAttr(event.location || "")}">
+        </label>
+        <label class="form-field">
+          <span>主辦 / 協辦單位</span>
+          <input name="organizer" value="${escapeAttr(event.organizer || "")}">
+        </label>
+        <label class="form-field">
+          <span>美昇角色</span>
+          <input name="meisun_role" list="associationRoleOptions" value="${escapeAttr(event.meisun_role || "")}" placeholder="例如：協辦、贊助、講師">
+          <datalist id="associationRoleOptions">${associationRoleSuggestions(event.meisun_role || "")}</datalist>
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(event.owner || state.auth.email || "")}">
+        </label>
+        <label class="form-field">
+          <span>預算金額</span>
+          <input name="budget" type="number" min="0" step="1" value="${escapeAttr(event.budget ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>實際支出</span>
+          <input name="actual_spend" type="number" min="0" step="1" value="${escapeAttr(event.actual_spend ?? "")}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>素材與結果</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所需素材</span>
+          <input name="required_materials" value="${escapeAttr(materials || "DM、簡報、名片、禮品、產品資料、展示品")}" placeholder="用逗號或頓號分隔">
+        </label>
+        <label class="form-field is-wide">
+          <span>結果 / 下一步</span>
+          <textarea name="result_notes">${escapeHtml(event.result_notes || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>附件 / 連結</span>
+          <input name="attachment" value="${escapeAttr(event.attachment || "")}" placeholder="貼上連結或檔名">
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function associationEventPayload(values = {}) {
+  return {
+    association_id: values.association_id,
+    task_id: values.task_id || null,
+    event_name: values.event_name?.trim(),
+    event_type: values.event_type?.trim() || "其他",
+    event_date: values.event_date || null,
+    location: values.location?.trim() || null,
+    organizer: values.organizer?.trim() || null,
+    meisun_role: values.meisun_role?.trim() || null,
+    budget: numericOrNull(values.budget),
+    actual_spend: numericOrNull(values.actual_spend),
+    required_materials: splitDelimitedText(values.required_materials),
+    event_status: values.event_status || "待確認",
+    owner: values.owner?.trim() || null,
+    result_notes: values.result_notes?.trim() || null,
+    attachment: values.attachment?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateAssociationEventModal(associationId) {
+  const association = findAssociation(associationId);
+  if (!association || association.archived_at) return;
+  openAssociationEventModal({ association_id: association.id, owner: state.auth.email });
+}
+
+function openEditAssociationEventModal(id) {
+  const event = findAssociationEvent(id);
+  const association = findAssociation(event?.association_id);
+  if (!event || isCancelledAssociationEvent(event) || association?.archived_at) return;
+  openAssociationEventModal(event);
+}
+
+function openAssociationEventModal(event = {}) {
+  const isEdit = Boolean(event.id);
+  openModal(isEdit ? "編輯公會活動" : "新增公會活動", associationEventFormHtml(event, event.association_id), {
+    submitLabel: isEdit ? "儲存變更" : "建立活動",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = associationEventPayload(values);
+      if (!payload.association_id) throw new Error("缺少所屬公會。");
+      if (!payload.event_name) throw new Error("請輸入活動名稱。");
+
+      if (isEdit) {
+        await api("PATCH", `association_events?id=eq.${encodeURIComponent(event.id)}`, payload);
+      } else {
+        await api("POST", "association_events", payload);
+      }
+
+      state.associationDetailId = payload.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelAssociationEventModal(id) {
+  const event = findAssociationEvent(id);
+  const association = findAssociation(event?.association_id);
+  if (!event || isCancelledAssociationEvent(event) || association?.archived_at) return;
+
+  openModal("取消公會活動", `
+    <p class="empty-note">確定要取消「${escapeHtml(event.event_name || "未命名活動")}」嗎？取消後活動會移到歷史紀錄，合作概覽也會排除這筆。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `association_events?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.associationDetailId = event.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function associationPublicationFormHtml(publication = {}, associationId = "") {
+  const selectedAssociationId = publication.association_id || associationId;
+  const materials = Array.isArray(publication.required_materials) ? publication.required_materials.join("、") : "";
+  return `
+    <input type="hidden" name="association_id" value="${escapeAttr(selectedAssociationId)}">
+    <div class="form-section">
+      <h3>期刊基本資訊</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公會</span>
+          <input value="${escapeAttr(associationDisplayName(findAssociation(selectedAssociationId) || {}))}" readonly>
+        </label>
+        <label class="form-field is-wide">
+          <span>期刊名稱 *</span>
+          <input name="publication_name" value="${escapeAttr(publication.publication_name || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>素材階段</span>
+          <select name="material_status">${associationStageSelectOptions("publication", publication.material_status || "待確認主題")}</select>
+        </label>
+        <label class="form-field">
+          <span>關聯任務</span>
+          <select name="task_id">${associationTaskOptions(selectedAssociationId, publication.task_id || "")}</select>
+        </label>
+        <label class="form-field">
+          <span>截稿日</span>
+          <input name="deadline_date" type="date" value="${escapeAttr(formatDate(publication.deadline_date))}">
+        </label>
+        <label class="form-field">
+          <span>刊出日</span>
+          <input name="publish_date" type="date" value="${escapeAttr(formatDate(publication.publish_date))}">
+        </label>
+        <label class="form-field">
+          <span>送件日</span>
+          <input name="submission_date" type="date" value="${escapeAttr(formatDate(publication.submission_date))}">
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(publication.owner || state.auth.email || "")}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>內容與素材</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>刊登規格</span>
+          <input name="ad_spec" value="${escapeAttr(publication.ad_spec || "")}" placeholder="例如：半版、全版、專訪">
+        </label>
+        <label class="form-field">
+          <span>主題</span>
+          <input name="topic" value="${escapeAttr(publication.topic || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>所需素材</span>
+          <input name="required_materials" value="${escapeAttr(materials || "公司介紹、產品圖片、文案、Logo、案例、廣告圖")}" placeholder="用逗號或頓號分隔">
+        </label>
+        <label class="form-field is-wide">
+          <span>結果 / 下一步</span>
+          <textarea name="result_notes">${escapeHtml(publication.result_notes || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>附件 / 連結</span>
+          <input name="attachment" value="${escapeAttr(publication.attachment || "")}" placeholder="貼上連結或檔名">
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function associationPublicationPayload(values = {}) {
+  return {
+    association_id: values.association_id,
+    task_id: values.task_id || null,
+    publication_name: values.publication_name?.trim(),
+    publish_date: values.publish_date || null,
+    deadline_date: values.deadline_date || null,
+    ad_spec: values.ad_spec?.trim() || null,
+    topic: values.topic?.trim() || null,
+    required_materials: splitDelimitedText(values.required_materials),
+    material_status: values.material_status || "待確認主題",
+    owner: values.owner?.trim() || null,
+    submission_date: values.submission_date || null,
+    result_notes: values.result_notes?.trim() || null,
+    attachment: values.attachment?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateAssociationPublicationModal(associationId) {
+  const association = findAssociation(associationId);
+  if (!association || association.archived_at) return;
+  openAssociationPublicationModal({ association_id: association.id, owner: state.auth.email });
+}
+
+function openEditAssociationPublicationModal(id) {
+  const publication = findAssociationPublication(id);
+  const association = findAssociation(publication?.association_id);
+  if (!publication || isCancelledAssociationPublication(publication) || association?.archived_at) return;
+  openAssociationPublicationModal(publication);
+}
+
+function openAssociationPublicationModal(publication = {}) {
+  const isEdit = Boolean(publication.id);
+  openModal(isEdit ? "編輯期刊排程" : "新增期刊排程", associationPublicationFormHtml(publication, publication.association_id), {
+    submitLabel: isEdit ? "儲存變更" : "建立期刊排程",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = associationPublicationPayload(values);
+      if (!payload.association_id) throw new Error("缺少所屬公會。");
+      if (!payload.publication_name) throw new Error("請輸入期刊名稱。");
+
+      if (isEdit) {
+        await api("PATCH", `association_publication_schedules?id=eq.${encodeURIComponent(publication.id)}`, payload);
+      } else {
+        await api("POST", "association_publication_schedules", payload);
+      }
+
+      state.associationDetailId = payload.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelAssociationPublicationModal(id) {
+  const publication = findAssociationPublication(id);
+  const association = findAssociation(publication?.association_id);
+  if (!publication || isCancelledAssociationPublication(publication) || association?.archived_at) return;
+
+  openModal("取消期刊排程", `
+    <p class="empty-note">確定要取消「${escapeHtml(publication.publication_name || "未命名期刊")}」嗎？取消後期刊排程會移到歷史紀錄，合作概覽也會排除這筆。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `association_publication_schedules?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.associationDetailId = publication.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
 function campaignFormHtml(campaign = {}) {
   const vendorsText = Array.isArray(campaign.vendors) ? campaign.vendors.join("\n") : "";
   return `
@@ -6991,7 +7533,7 @@ function channelKpis() {
 }
 
 function associationKpis() {
-  if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length && !state.data.associationTasks.length && !state.data.associationTaskExpenses.length) {
+  if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length && !state.data.associationTasks.length && !state.data.associationTaskExpenses.length && !state.data.associationEvents.length && !state.data.associationPublications.length) {
     if (state.dataStatus === "live") {
       return [
         ["公會 / 單位", "0", "尚未建立公會資料"],
@@ -7005,17 +7547,22 @@ function associationKpis() {
   }
 
   const totalAssociations = state.data.associations.length;
-  const openCooperations = state.data.associationCooperations.filter((item) => !["已結束", "已完成", "已取消"].includes(item.stage)).length;
+  const activeCooperations = state.data.associationCooperations.filter((item) => !isCancelledAssociationCooperation(item));
+  const openCooperations = activeCooperations.filter((item) => !["已結束", "已完成"].includes(item.stage)).length;
   const openTasks = state.data.associationTasks.filter((task) => !["已完成"].includes(task.task_status)).length;
+  const openEvents = state.data.associationEvents.filter((event) => !["已結束", "已完成"].includes(event.event_status)).length;
+  const openPublications = state.data.associationPublications.filter((publication) => !["已確認刊出", "已刊登"].includes(publication.material_status)).length;
   const pendingExpenses = state.data.associationTaskExpenses.filter((expense) => !["已付款", "不適用"].includes(expense.payment_status)).length;
-  const pending = state.data.associationCooperations.filter((item) => String(item.stage || "").includes("待") || !item.due_date).length
+  const pending = activeCooperations.filter((item) => String(item.stage || "").includes("待") || !item.due_date).length
     + state.data.associationTasks.filter((task) => String(task.task_status || "").includes("待") || !task.due_date).length
+    + state.data.associationEvents.filter((event) => String(event.event_status || "").includes("待") || !event.event_date).length
+    + state.data.associationPublications.filter((publication) => String(publication.material_status || "").includes("待") || !publication.deadline_date).length
     + pendingExpenses;
 
   return [
     ["公會 / 單位", String(totalAssociations), "既有公會資料"],
     ["公會任務", String(state.data.associationTasks.length), `${openTasks} 個仍在進行或待確認`],
-    ["任務費用", String(state.data.associationTaskExpenses.length), `${pendingExpenses} 筆未結清或待確認`],
+    ["活動 / 期刊", String(state.data.associationEvents.length + state.data.associationPublications.length), `活動 ${openEvents}、期刊 ${openPublications} 筆待追蹤`],
     ["待確認", String(pending), `合作概覽 ${openCooperations} 筆仍需追蹤`],
   ];
 }
@@ -7447,6 +7994,12 @@ document.addEventListener("click", (event) => {
   if (action === "create-association-task-expense") openCreateAssociationTaskExpenseModal(id);
   if (action === "edit-association-task-expense") openEditAssociationTaskExpenseModal(id);
   if (action === "cancel-association-task-expense") openCancelAssociationTaskExpenseModal(id);
+  if (action === "create-association-event") openCreateAssociationEventModal(id);
+  if (action === "edit-association-event") openEditAssociationEventModal(id);
+  if (action === "cancel-association-event") openCancelAssociationEventModal(id);
+  if (action === "create-association-publication") openCreateAssociationPublicationModal(id);
+  if (action === "edit-association-publication") openEditAssociationPublicationModal(id);
+  if (action === "cancel-association-publication") openCancelAssociationPublicationModal(id);
   if (action === "view-campaign-detail") {
     state.page = "campaigns";
     state.campaignInspectionMode = "";
@@ -7611,6 +8164,8 @@ async function loadExistingData() {
       expenses,
       associationTasks,
       associationTaskExpenses,
+      associationEvents,
+      associationPublications,
     ] = await Promise.all([
       loadMarketingCampaigns(),
       loadMarketingResources(),
@@ -7636,6 +8191,8 @@ async function loadExistingData() {
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
       loadAssociationTasks(),
       loadAssociationTaskExpenses(),
+      loadAssociationEvents(),
+      loadAssociationPublications(),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? activeCampaigns(campaigns) : [];
@@ -7652,6 +8209,10 @@ async function loadExistingData() {
     state.data.cancelledAssociationTasks = Array.isArray(associationTasks) ? cancelledAssociationTasks(associationTasks) : [];
     state.data.associationTaskExpenses = Array.isArray(associationTaskExpenses) ? activeAssociationTaskExpenses(associationTaskExpenses) : [];
     state.data.cancelledAssociationTaskExpenses = Array.isArray(associationTaskExpenses) ? cancelledAssociationTaskExpenses(associationTaskExpenses) : [];
+    state.data.associationEvents = Array.isArray(associationEvents) ? activeAssociationEvents(associationEvents) : [];
+    state.data.cancelledAssociationEvents = Array.isArray(associationEvents) ? cancelledAssociationEvents(associationEvents) : [];
+    state.data.associationPublications = Array.isArray(associationPublications) ? activeAssociationPublications(associationPublications) : [];
+    state.data.cancelledAssociationPublications = Array.isArray(associationPublications) ? cancelledAssociationPublications(associationPublications) : [];
     state.data.campaignVendors = Array.isArray(campaignVendors) ? activeCampaignVendors(campaignVendors) : [];
     state.data.cancelledCampaignVendors = Array.isArray(campaignVendors) ? cancelledCampaignVendors(campaignVendors) : [];
     state.data.cancelledDeliverables = Array.isArray(campaignVendors) ? cancelledDeliverablesFromAll(campaignVendors) : [];
@@ -7689,6 +8250,10 @@ async function loadExistingData() {
       + state.data.cancelledAssociationTasks.length
       + state.data.associationTaskExpenses.length
       + state.data.cancelledAssociationTaskExpenses.length
+      + state.data.associationEvents.length
+      + state.data.cancelledAssociationEvents.length
+      + state.data.associationPublications.length
+      + state.data.cancelledAssociationPublications.length
       + state.data.campaignVendors.length
       + state.data.cancelledCampaignVendors.length
       + state.data.cancelledDeliverables.length
@@ -7747,6 +8312,20 @@ async function loadAssociationTaskExpenses() {
   if (Array.isArray(withLifecycle)) return withLifecycle;
 
   return safeGET("association_task_expenses?select=id,association_id,task_id,expense_type,budget_amount,actual_amount,payment_status,payment_date,receipt_status,receipt_attachment,notes,created_at,updated_at&order=payment_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
+}
+
+async function loadAssociationEvents() {
+  const withLifecycle = await safeGET("association_events?select=id,association_id,task_id,event_name,event_type,event_date,location,organizer,meisun_role,budget,actual_spend,required_materials,event_status,owner,result_notes,attachment,cancelled_at,cancelled_by,cancel_reason,created_at,updated_at&order=event_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("association_events?select=id,association_id,task_id,event_name,event_type,event_date,location,organizer,meisun_role,budget,actual_spend,required_materials,event_status,owner,result_notes,attachment,created_at,updated_at&order=event_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
+}
+
+async function loadAssociationPublications() {
+  const withLifecycle = await safeGET("association_publication_schedules?select=id,association_id,task_id,publication_name,publish_date,deadline_date,ad_spec,topic,required_materials,material_status,owner,submission_date,result_notes,attachment,cancelled_at,cancelled_by,cancel_reason,created_at,updated_at&order=deadline_date.asc.nullslast,publish_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("association_publication_schedules?select=id,association_id,task_id,publication_name,publish_date,deadline_date,ad_spec,topic,required_materials,material_status,owner,submission_date,result_notes,attachment,created_at,updated_at&order=deadline_date.asc.nullslast,publish_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
 }
 
 async function loadCampaignBudgetItems() {
