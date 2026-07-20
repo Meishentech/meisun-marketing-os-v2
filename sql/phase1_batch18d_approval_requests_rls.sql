@@ -5,6 +5,7 @@
 -- - Let marketing/admin create approval requests for executive review.
 -- - Let executives read and decide approval requests.
 -- - Prevent admin/marketing from directly writing decision fields.
+-- - Allow marketing/admin to withdraw their own open requests with status = '已撤回'.
 -- - Keep sales users out of approval_requests.
 --
 -- Review before running live:
@@ -56,6 +57,18 @@ set search_path = public
 as $$
 begin
   if public.is_executive() then
+    if old.entity_type is distinct from new.entity_type
+       or old.entity_id is distinct from new.entity_id
+       or old.title is distinct from new.title
+       or old.summary is distinct from new.summary
+       or old.amount is distinct from new.amount
+       or old.due_date is distinct from new.due_date
+       or old.requested_by is distinct from new.requested_by
+       or old.approver_role is distinct from new.approver_role
+       or old.created_at is distinct from new.created_at then
+      raise exception 'Executive users can only update approval decision fields';
+    end if;
+
     if old.status is distinct from new.status
        or old.decided_by is distinct from new.decided_by
        or old.decided_at is distinct from new.decided_at
@@ -77,6 +90,15 @@ begin
        or old.decided_at is distinct from new.decided_at
        or old.decision_note is distinct from new.decision_note then
       raise exception 'Only executive users can update approval decision fields';
+    end if;
+
+    if old.status is distinct from new.status then
+      if not (
+        old.status in ('待審核', '需修正')
+        and new.status = '已撤回'
+      ) then
+        raise exception 'Marketing/admin users can only withdraw open approval requests';
+      end if;
     end if;
 
     if new.requested_by is distinct from old.requested_by then
@@ -128,7 +150,8 @@ create policy approval_requests_insert_marketing_scope
   );
 
 -- Marketing/admin can correct non-decision snapshot fields only on their own
--- still-pending or revision-requested rows. The trigger blocks decision fields.
+-- still-pending or revision-requested rows. They can also withdraw those rows
+-- with status = '已撤回'. The trigger blocks decision fields.
 create policy approval_requests_update_marketing_snapshot_scope
   on public.approval_requests
   for update
@@ -141,7 +164,7 @@ create policy approval_requests_update_marketing_snapshot_scope
   with check (
     public.is_marketing_or_admin()
     and requested_by = public.current_app_user_email()
-    and status in ('待審核', '需修正')
+    and status in ('待審核', '需修正', '已撤回')
   );
 
 -- Executive users are the only users allowed to make decisions.
@@ -149,7 +172,10 @@ create policy approval_requests_update_executive_decision_scope
   on public.approval_requests
   for update
   to authenticated
-  using (public.is_executive())
+  using (
+    public.is_executive()
+    and status in ('待審核', '需修正')
+  )
   with check (public.is_executive());
 
 notify pgrst, 'reload schema';
@@ -239,7 +265,62 @@ where tgrelid = 'public.approval_requests'::regclass
 -- - update raises: Only executive users can update approval decision fields.
 -- - then run: rollback;
 
--- Smoke test 4: executive can read and decide a request.
+-- Smoke test 4: marketing/admin can withdraw an open request without decision fields.
+-- This uses rollback and returns one result table, so it does not persist data.
+--
+-- begin;
+-- select set_config('request.jwt.claims', '{"email":"eric@mcttw.com.tw"}', true);
+-- set local role authenticated;
+-- with inserted as (
+--   insert into public.approval_requests (
+--     entity_type,
+--     entity_id,
+--     title,
+--     summary,
+--     amount,
+--     due_date,
+--     requested_by,
+--     approver_role,
+--     status
+--   )
+--   values (
+--     'rls_smoke',
+--     gen_random_uuid(),
+--     '18D withdraw smoke',
+--     'Marketing/admin withdraw test',
+--     1,
+--     current_date,
+--     public.current_app_user_email(),
+--     'executive',
+--     '待審核'
+--   )
+--   returning id
+-- ),
+-- withdrawn as (
+--   update public.approval_requests ar
+--   set status = '已撤回',
+--       summary = 'Marketing/admin withdraw test / Vendor cooperation was cancelled',
+--       updated_at = now()
+--   from inserted
+--   where ar.id = inserted.id
+--   returning ar.id, ar.status, ar.decided_by, ar.decided_at, ar.decision_note
+-- )
+-- select
+--   current_user as db_user,
+--   current_setting('role', true) as active_role,
+--   public.current_app_user_email() as email,
+--   public.current_app_user_role() as app_role,
+--   (select count(*) from withdrawn) as withdrawn_rows,
+--   (select bool_and(status = '已撤回' and decided_by is null and decided_at is null and decision_note is null) from withdrawn) as no_decision_fields_written;
+-- rollback;
+--
+-- Expected:
+-- - db_user = authenticated.
+-- - app_role is marketing/admin.
+-- - withdrawn_rows = 1.
+-- - no_decision_fields_written = true.
+
+-- Smoke test 5: executive can read and decide a request.
 -- This uses rollback and returns one result table, so it does not persist data.
 --
 -- begin;
@@ -300,7 +381,7 @@ where tgrelid = 'public.approval_requests'::regclass
 -- - is_executive = true.
 -- - decided_rows = 1.
 
--- Smoke test 5: sales/member cannot read approval_requests.
+-- Smoke test 6: sales/member cannot read approval_requests.
 --
 -- begin;
 -- select set_config('request.jwt.claims', '{"email":"vincent@mcttw.com.tw"}', true);

@@ -191,7 +191,7 @@
    - Batch 18 動工前草案：`BATCH18_PERMISSION_GOVERNANCE_DRAFT.md`。公會管理收尾後，下一階段先穩平台權限：17S 已處理未登入 anon/public，18 系列改處理 authenticated 內部角色權限。已拍板：業務不讀公會、業務可看全部名單但只能更新自己的、總經理全站可讀但直接編輯另案討論、待決策只能總經理決策、Storage 一起收斂、RLS 若影響 V1 查詢可接受但需記錄。草案建議先做權限 helper 與 `app_user_access` 自身政策，再從業務自有資料、待決策中心、行銷核心表、公會表與 Storage 分批收斂；每批 SQL 必須先複查、實際跑 live Supabase，再用真實角色帳號 smoke test。
    - Batch 18B SQL：`sql/phase1_batch18b_role_helpers.sql`。建立 `current_app_user_email()`、`current_app_user_role()`、`is_marketing_or_admin()`、`is_executive()` 四個 SECURITY INVOKER helper，收斂 `app_user_access` 為自列讀取 / 自列密碼旗標更新，並將 `kevin@mcttw.com.tw`、`kevin@tonsun.com.tw` 設為 `executive`。已執行到 live Supabase，smoke test 確認 helper 非 SECURITY DEFINER、`app_user_access` grants / policy 正確、Kevin 帳號角色判斷通過。
    - Batch 18C SQL：`sql/phase1_batch18c_sales_data_rls.sql`。已執行到 live Supabase，smoke test 通過：三張表 `sales_requests`、`leads`、`lead_follow_ups` 對 anon 無讀取權限；authenticated 保留 select / insert / update、撤掉 delete；9 條新 policy 正確；`vincent@mcttw.com.tw` 作為 member 可讀全部名單但無法更新非自己名單，且只能看到自己的需求單；`kevin@mcttw.com.tw` 作為 executive 可讀但不能更新名單。
-   - Batch 18D SQL 草案：`sql/phase1_batch18d_approval_requests_rls.sql`。目標是收斂 `approval_requests`：行銷 / admin 可建立送審與補非決策快照欄位；總經理可決策；業務 / member 不讀不寫；撤掉 delete。因欄位層決策限制無法只靠 RLS 表達，草案新增普通 trigger 阻擋非總經理更新 `status`、`decided_by`、`decided_at`、`decision_note`。此 SQL 尚未執行 live Supabase，需 Claude 複查前端相容點後再決定是否調整並執行。
+   - Batch 18D SQL 草案：`sql/phase1_batch18d_approval_requests_rls.sql`。目標是收斂 `approval_requests`：行銷 / admin 可建立送審與補非決策快照欄位；總經理可決策；業務 / member 不讀不寫；撤掉 delete。因欄位層決策限制無法只靠 RLS 表達，草案新增普通 trigger 阻擋非總經理更新決策欄位。前端取消廠商合作時，待審核單改標 `status = '已撤回'` 並不寫 `decided_by` / `decided_at` / `decision_note`，保留「只有總經理決策」原則。此 SQL 尚未執行 live Supabase，需 Claude 複查通過後再執行。
 
 ## 暫緩到 Phase 2
 

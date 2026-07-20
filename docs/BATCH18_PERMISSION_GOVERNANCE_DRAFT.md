@@ -174,7 +174,7 @@ SQL 草案：`sql/phase1_batch18d_approval_requests_rls.sql`。
 - 業務 / member 不讀、不寫 `approval_requests`。
 - 撤掉 authenticated `delete` 權限，保留審核歷史。
 - 因 RLS 只能限制列、不能限制欄位，本批 SQL 草案加入 `approval_requests_update_scope_guard` trigger，防止非總經理更新 `status`、`decided_by`、`decided_at`、`decision_note`。
-- 前端相容提醒：目前 `closePendingVendorApprovals()` 會在取消廠商合作時由行銷 / admin 把待審核單改為 `需修正` 並寫入決策欄位。若採用 18D 嚴格規則，該流程會被資料庫擋下；18D 前端需改成不由行銷代決策，或另行拍板「撤回 / 取消送審」狀態。
+- 前端相容決策：取消廠商合作時，行銷 / admin 不再把待審核單改為 `需修正`、也不寫 `decided_by` / `decided_at` / `decision_note`；改為將自己建立且仍開啟中的送審單標記 `status = '已撤回'`，並把撤回原因補進 `summary`。`已撤回` 是送審生命週期狀態，不是總經理決策。
 
 ### Batch 18E：行銷管理核心資料表
 

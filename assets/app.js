@@ -1123,7 +1123,7 @@ function weeklySummaryData() {
   const overdue = overdueRisks();
   const executiveRisks = executiveConfirmRisks();
   const pendingApprovals = state.data.approvalRequests
-    .filter((request) => request.status !== "已核准")
+    .filter(isOpenApprovalRequest)
     .sort((a, b) => approvalPriorityScore(b) - approvalPriorityScore(a) || String(a.due_date || "9999-12-31").localeCompare(String(b.due_date || "9999-12-31")));
   const bestChannel = channelPerformanceRows()[0] || null;
 
@@ -1587,7 +1587,7 @@ function isPastDate(value) {
 function decisionListSection() {
   if (state.data.approvalRequests.length) {
     const pendingRequests = state.data.approvalRequests
-      .filter((request) => request.status !== "已核准")
+      .filter(isOpenApprovalRequest)
       .slice(0, 8);
 
     if (!pendingRequests.length) {
@@ -2155,8 +2155,12 @@ function hasPendingVendorApproval(campaignVendorId) {
   return state.data.approvalRequests.some((request) => (
     request.entity_type === "vendor_quote"
     && String(request.entity_id || "") === String(campaignVendorId || "")
-    && request.status !== "已核准"
+    && isOpenApprovalRequest(request)
   ));
+}
+
+function isOpenApprovalRequest(request = {}) {
+  return !["已核准", "已撤回", "已取消"].includes(request.status);
 }
 
 function formatDeliverableSummary(campaignVendorId, deliverables = []) {
@@ -4934,14 +4938,14 @@ function openCancelCampaignVendorModal(id) {
         cancel_reason: values.cancel_reason?.trim() || null,
         updated_at: nowIso(),
       });
-      await closePendingVendorApprovals(id, decisionNote);
+      await withdrawPendingVendorApprovals(id, decisionNote);
       closeModal();
       await loadExistingData();
     },
   });
 }
 
-async function closePendingVendorApprovals(campaignVendorId, decisionNote) {
+async function withdrawPendingVendorApprovals(campaignVendorId, decisionNote) {
   const pendingRequests = state.data.approvalRequests.filter((request) => (
     request.entity_type === "vendor_quote"
     && String(request.entity_id || "") === String(campaignVendorId || "")
@@ -4949,10 +4953,9 @@ async function closePendingVendorApprovals(campaignVendorId, decisionNote) {
   ));
 
   await Promise.all(pendingRequests.map((request) => api("PATCH", `approval_requests?id=eq.${encodeURIComponent(request.id)}`, {
-    status: "需修正",
-    decided_by: state.auth.email,
-    decided_at: nowIso(),
-    decision_note: decisionNote,
+    status: "已撤回",
+    summary: [request.summary, decisionNote].filter(Boolean).join(" / "),
+    updated_at: nowIso(),
   })));
 }
 
@@ -8253,7 +8256,7 @@ function approvalKpis() {
   const overdue = state.data.approvalRequests.filter((request) => (
     request.due_date
     && request.due_date < new Date().toISOString().slice(0, 10)
-    && request.status !== "已核准"
+    && isOpenApprovalRequest(request)
   )).length;
   const approved = state.data.approvalRequests.filter((request) => request.status === "已核准").length;
 
@@ -8550,7 +8553,7 @@ document.getElementById("primaryAction").addEventListener("click", () => {
   if (state.role === "executive") {
     state.page = "decisions";
     render();
-    const firstPending = state.data.approvalRequests.find((request) => request.status !== "已核准");
+    const firstPending = state.data.approvalRequests.find(isOpenApprovalRequest);
     if (firstPending) openApprovalReviewModal(firstPending.id);
     return;
   }
