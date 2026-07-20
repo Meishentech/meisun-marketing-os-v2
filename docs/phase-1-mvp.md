@@ -186,6 +186,7 @@
    - Batch 17S：因 17C 審查發現未登入 anon key 可直接讀取 production 公會資料，插隊建立權限收斂草案 `BATCH17S_ANON_LOCKDOWN_DRAFT.md` 與 SQL `phase1_batch17s_anon_lockdown.sql`。已執行 live Supabase 並通過三段 smoke test：anon/public 無核心資料權限、authenticated 權限保留、`app_user_access` 維持欄位級最小授權。
    - Batch 17D：v2 公會詳情頁新增 `association_tasks` 公會任務與 `association_task_expenses` 任務費用管理。任務與費用皆採新增 / 編輯 / 取消，不做真刪除；取消資料集中顯示在同一個歷史紀錄區塊。`association_tasks.task_status` 下拉不包含「取消」，取消狀態一律由 `cancelled_at` 生命週期欄位表達；舊資料若仍為 `task_status = '取消'`，前端視為歷史紀錄而非進行中任務。
    - Batch 17E：v2 公會詳情頁新增 `association_events` 公會活動 / 講座 / 贊助管理，以及 `association_publication_schedules` 期刊排程管理。兩者皆採新增 / 編輯 / 取消，不做真刪除；取消資料集中顯示在同一個歷史紀錄區塊。活動與期刊的階段下拉正式接上 `association_stage_options`，附件維持純文字連結，不升級 Storage 上傳。
+   - Batch 17F：v2 公會詳情頁新增 `association_fee_records` 年費 / 會費、`association_benefits` 會員權益、`association_notes` 備註 / 附件連結管理。年費與備註採新增 / 編輯 / 取消；會員權益採新增 / 編輯 / 封存。所有取消 / 封存資料都集中顯示在同一個歷史紀錄區塊，附件仍維持純文字連結。
 
 ## 暫緩到 Phase 2
 

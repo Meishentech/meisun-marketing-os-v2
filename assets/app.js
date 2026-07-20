@@ -26,6 +26,12 @@ const state = {
     cancelledAssociationEvents: [],
     associationPublications: [],
     cancelledAssociationPublications: [],
+    associationFees: [],
+    cancelledAssociationFees: [],
+    associationBenefits: [],
+    archivedAssociationBenefits: [],
+    associationNotes: [],
+    cancelledAssociationNotes: [],
     campaignVendors: [],
     cancelledCampaignVendors: [],
     cancelledDeliverables: [],
@@ -2387,6 +2393,9 @@ function associationDetailSections() {
     associationDetailHeaderSection(association),
     associationProfileSection(association),
     associationTagManagerSection(association),
+    associationFeesSection(association),
+    associationBenefitsSection(association),
+    associationNotesSection(association),
     associationTasksSection(association),
     associationEventsSection(association),
     associationPublicationsSection(association),
@@ -2447,6 +2456,109 @@ function associationTagManagerSection(association = {}) {
     headers: ["標籤", "建立時間", "操作"],
     rows: rows.length ? rows : [["尚未建立標籤", "無", association.archived_at ? "已封存" : actionButton("新增標籤", "add-association-tag", association.id, "is-primary")]],
     footer: association.archived_at ? "" : actionGroup([actionButton("新增關係標籤", "add-association-tag", association.id, "is-primary")]),
+  };
+}
+
+function associationFeesSection(association = {}) {
+  const fees = associationFeesFor(association.id);
+  const rows = fees.map((fee) => [
+    String(fee.year || "未填"),
+    formatMoney(fee.fee_amount),
+    tag(fee.payment_status || "未繳", statusTone(fee.payment_status || "未繳")),
+    `${formatDate(fee.due_date) || "未填"} / ${formatDate(fee.renewal_reminder_date) || "未填"}`,
+    `${formatDate(fee.payment_date) || "未填"} / ${escapeHtml(fee.receipt_status || "未填")}`,
+    escapeHtml(fee.receipt_attachment || "未填"),
+    association.archived_at
+      ? "已封存公會目前只讀。"
+      : actionGroup([
+        actionButton("編輯", "edit-association-fee", fee.id, "is-primary"),
+        actionButton("取消", "cancel-association-fee", fee.id, "is-danger"),
+      ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "年費 / 會費",
+    wide: true,
+    headers: ["年度", "金額", "繳費狀態", "到期 / 提醒", "繳費 / 收據", "附件", "操作"],
+    rows: rows.length ? rows : [[
+      String(new Date().getFullYear()),
+      "未填",
+      tag("未繳", "gray"),
+      "無",
+      "無",
+      "無",
+      association.archived_at ? "已封存" : actionButton("新增年費", "create-association-fee", association.id, "is-primary"),
+    ]],
+    footer: association.archived_at ? "" : actionGroup([actionButton("新增年費 / 會費", "create-association-fee", association.id, "is-primary")]),
+  };
+}
+
+function associationBenefitsSection(association = {}) {
+  const benefits = associationBenefitsFor(association.id);
+  const rows = benefits.map((benefit) => [
+    escapeHtml(benefit.benefit_name || "未命名權益"),
+    escapeHtml(benefit.benefit_type || "其他"),
+    tag(benefit.usage_status || "未使用", statusTone(benefit.usage_status || "未使用")),
+    formatDate(benefit.valid_until) || "未填",
+    escapeHtml(benefit.owner || "未填"),
+    escapeHtml(benefit.description || benefit.notes || "未填"),
+    association.archived_at
+      ? "已封存公會目前只讀。"
+      : actionGroup([
+        actionButton("編輯", "edit-association-benefit", benefit.id, "is-primary"),
+        actionButton("封存", "archive-association-benefit", benefit.id, "is-danger"),
+      ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "會員權益",
+    wide: true,
+    headers: ["權益", "類型", "使用狀態", "有效期限", "負責人", "說明 / 備註", "操作"],
+    rows: rows.length ? rows : [[
+      "尚未建立會員權益",
+      "無",
+      tag("未使用", "gray"),
+      "無",
+      "無",
+      "無",
+      association.archived_at ? "已封存" : actionButton("新增權益", "create-association-benefit", association.id, "is-primary"),
+    ]],
+    footer: association.archived_at ? "" : actionGroup([actionButton("新增會員權益", "create-association-benefit", association.id, "is-primary")]),
+  };
+}
+
+function associationNotesSection(association = {}) {
+  const notes = associationNotesFor(association.id);
+  const rows = notes.map((note) => [
+    escapeHtml(note.note_title || "未命名備註"),
+    escapeHtml(note.owner || "未填"),
+    escapeHtml(note.attachment || "未填"),
+    escapeHtml(note.note || "未填"),
+    formatDate(note.updated_at || note.created_at) || "未記錄",
+    association.archived_at
+      ? "已封存公會目前只讀。"
+      : actionGroup([
+        actionButton("編輯", "edit-association-note", note.id, "is-primary"),
+        actionButton("取消", "cancel-association-note", note.id, "is-danger"),
+      ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "備註 / 附件連結",
+    wide: true,
+    headers: ["標題", "負責人", "附件", "內容", "最後更新", "操作"],
+    rows: rows.length ? rows : [[
+      "尚未建立備註",
+      "無",
+      "無",
+      "無",
+      "無",
+      association.archived_at ? "已封存" : actionButton("新增備註", "create-association-note", association.id, "is-primary"),
+    ]],
+    footer: association.archived_at ? "" : actionGroup([actionButton("新增備註 / 附件連結", "create-association-note", association.id, "is-primary")]),
   };
 }
 
@@ -2678,6 +2790,39 @@ function associationHistorySection(association = {}) {
       ]);
     });
 
+  state.data.cancelledAssociationFees
+    .filter((fee) => String(fee.association_id || "") === String(association.id || ""))
+    .forEach((fee) => {
+      rows.push([
+        tag("年費取消", "gray"),
+        `${fee.year || "未填年度"} / ${formatMoney(fee.fee_amount)}`,
+        cancellationMeta(fee),
+        fee.cancel_reason || "未填寫原因",
+      ]);
+    });
+
+  state.data.archivedAssociationBenefits
+    .filter((benefit) => String(benefit.association_id || "") === String(association.id || ""))
+    .forEach((benefit) => {
+      rows.push([
+        tag("權益封存", "gray"),
+        benefit.benefit_name || "未命名權益",
+        archiveAssociationMeta(benefit),
+        benefit.archive_reason || "未填寫原因",
+      ]);
+    });
+
+  state.data.cancelledAssociationNotes
+    .filter((note) => String(note.association_id || "") === String(association.id || ""))
+    .forEach((note) => {
+      rows.push([
+        tag("備註取消", "gray"),
+        note.note_title || "未命名備註",
+        cancellationMeta(note),
+        note.cancel_reason || "未填寫原因",
+      ]);
+    });
+
   return {
     type: "details-table",
     title: `歷史紀錄（${rows.length}）`,
@@ -2718,6 +2863,24 @@ function associationPublicationsFor(associationId) {
     .sort(compareAssociationPublications);
 }
 
+function associationFeesFor(associationId) {
+  return state.data.associationFees
+    .filter((fee) => String(fee.association_id || "") === String(associationId || ""))
+    .sort(compareAssociationFees);
+}
+
+function associationBenefitsFor(associationId) {
+  return state.data.associationBenefits
+    .filter((benefit) => String(benefit.association_id || "") === String(associationId || ""))
+    .sort(compareAssociationBenefits);
+}
+
+function associationNotesFor(associationId) {
+  return state.data.associationNotes
+    .filter((note) => String(note.association_id || "") === String(associationId || ""))
+    .sort(compareAssociationNotes);
+}
+
 function findAssociationTask(id) {
   return [...state.data.associationTasks, ...state.data.cancelledAssociationTasks]
     .find((task) => String(task.id || "") === String(id || ""));
@@ -2736,6 +2899,21 @@ function findAssociationEvent(id) {
 function findAssociationPublication(id) {
   return [...state.data.associationPublications, ...state.data.cancelledAssociationPublications]
     .find((publication) => String(publication.id || "") === String(id || ""));
+}
+
+function findAssociationFee(id) {
+  return [...state.data.associationFees, ...state.data.cancelledAssociationFees]
+    .find((fee) => String(fee.id || "") === String(id || ""));
+}
+
+function findAssociationBenefit(id) {
+  return [...state.data.associationBenefits, ...state.data.archivedAssociationBenefits]
+    .find((benefit) => String(benefit.id || "") === String(id || ""));
+}
+
+function findAssociationNote(id) {
+  return [...state.data.associationNotes, ...state.data.cancelledAssociationNotes]
+    .find((note) => String(note.id || "") === String(id || ""));
 }
 
 function compareAssociationTasks(a = {}, b = {}) {
@@ -2775,6 +2953,27 @@ function compareAssociationPublications(a = {}, b = {}) {
   const publishDiff = String(a.publish_date || "9999-12-31").localeCompare(String(b.publish_date || "9999-12-31"));
   if (publishDiff) return publishDiff;
 
+  return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
+function compareAssociationFees(a = {}, b = {}) {
+  const yearDiff = Number(b.year || 0) - Number(a.year || 0);
+  if (yearDiff) return yearDiff;
+
+  const dueDiff = String(a.due_date || "9999-12-31").localeCompare(String(b.due_date || "9999-12-31"));
+  if (dueDiff) return dueDiff;
+
+  return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
+}
+
+function compareAssociationBenefits(a = {}, b = {}) {
+  const dateDiff = String(a.valid_until || "9999-12-31").localeCompare(String(b.valid_until || "9999-12-31"));
+  if (dateDiff) return dateDiff;
+
+  return String(a.benefit_name || "").localeCompare(String(b.benefit_name || ""), "zh-Hant-TW");
+}
+
+function compareAssociationNotes(a = {}, b = {}) {
   return String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""));
 }
 
@@ -3149,6 +3348,30 @@ function activeAssociationPublications(publications = []) {
 
 function cancelledAssociationPublications(publications = []) {
   return publications.filter(isCancelledAssociationPublication);
+}
+
+function activeAssociationFees(fees = []) {
+  return fees.filter((fee) => !fee.cancelled_at);
+}
+
+function cancelledAssociationFees(fees = []) {
+  return fees.filter((fee) => Boolean(fee.cancelled_at));
+}
+
+function activeAssociationBenefits(benefits = []) {
+  return benefits.filter((benefit) => !benefit.archived_at);
+}
+
+function archivedAssociationBenefits(benefits = []) {
+  return benefits.filter((benefit) => Boolean(benefit.archived_at));
+}
+
+function activeAssociationNotes(notes = []) {
+  return notes.filter((note) => !note.cancelled_at);
+}
+
+function cancelledAssociationNotes(notes = []) {
+  return notes.filter((note) => Boolean(note.cancelled_at));
 }
 
 function activeCampaignTasks(tasks = state.data.campaignTasks) {
@@ -3957,9 +4180,9 @@ function escapeAttr(value = "") {
 }
 
 function statusTone(status = "") {
-  if (["已追蹤", "已完成", "可對外", "已付款", "已簽約", "已報價", "已核准"].includes(status)) return "green";
+  if (["已追蹤", "已完成", "可對外", "已付款", "已繳", "已簽約", "已報價", "已核准", "已使用"].includes(status)) return "green";
   if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "準備中", "已送審", "待審核", "需修正"].includes(status)) return "amber";
-  if (["已排除", "逾期", "未請款", "未付款", "未開始", "不適用"].includes(status)) return "gray";
+  if (["已排除", "逾期", "未請款", "未付款", "未繳", "未開始", "未使用", "不適用"].includes(status)) return "gray";
   if (["追加待核"].includes(status)) return "red";
   return "";
 }
@@ -4078,6 +4301,33 @@ function associationExpensePaymentOptions() {
     ["已付款", "已付款"],
     ["不適用", "不適用"],
   ];
+}
+
+function associationFeePaymentOptions(selected = "") {
+  const fixed = ["未繳", "已繳", "待確認", "不適用"];
+  const existing = [...state.data.associationFees, ...state.data.cancelledAssociationFees]
+    .map((fee) => fee.payment_status)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return selectOptions(values.map((value) => [value, value]), selected);
+}
+
+function associationBenefitTypeSuggestions(selected = "") {
+  const fixed = ["期刊曝光", "活動參與", "協辦活動", "會員名錄", "課程講座", "其他"];
+  const existing = [...state.data.associationBenefits, ...state.data.archivedAssociationBenefits]
+    .map((benefit) => benefit.benefit_type)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
+function associationBenefitUsageOptions(selected = "") {
+  const fixed = ["未使用", "準備中", "已使用", "不適用"];
+  const existing = [...state.data.associationBenefits, ...state.data.archivedAssociationBenefits]
+    .map((benefit) => benefit.usage_status)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return selectOptions(values.map((value) => [value, value]), selected);
 }
 
 function associationTaskCampaignOptions(selected = "") {
@@ -6279,6 +6529,388 @@ function openCancelAssociationPublicationModal(id) {
   });
 }
 
+function associationFeeFormHtml(fee = {}, associationId = "") {
+  const selectedAssociationId = fee.association_id || associationId;
+  return `
+    <input type="hidden" name="association_id" value="${escapeAttr(selectedAssociationId)}">
+    <div class="form-section">
+      <h3>年費 / 會費資訊</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公會</span>
+          <input value="${escapeAttr(associationDisplayName(findAssociation(selectedAssociationId) || {}))}" readonly>
+        </label>
+        <label class="form-field">
+          <span>年度</span>
+          <input name="year" type="number" min="2000" step="1" value="${escapeAttr(fee.year || new Date().getFullYear())}">
+        </label>
+        <label class="form-field">
+          <span>金額</span>
+          <input name="fee_amount" type="number" min="0" step="1" value="${escapeAttr(fee.fee_amount ?? "")}">
+        </label>
+        <label class="form-field">
+          <span>繳費狀態</span>
+          <select name="payment_status">${associationFeePaymentOptions(fee.payment_status || "未繳")}</select>
+        </label>
+        <label class="form-field">
+          <span>繳費日</span>
+          <input name="payment_date" type="date" value="${escapeAttr(formatDate(fee.payment_date))}">
+        </label>
+        <label class="form-field">
+          <span>到期日</span>
+          <input name="due_date" type="date" value="${escapeAttr(formatDate(fee.due_date))}">
+        </label>
+        <label class="form-field">
+          <span>續會提醒日</span>
+          <input name="renewal_reminder_date" type="date" value="${escapeAttr(formatDate(fee.renewal_reminder_date))}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>收據與備註</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>收據狀態</span>
+          <input name="receipt_status" value="${escapeAttr(fee.receipt_status || "")}" placeholder="例如：未收到、已收到、待補">
+        </label>
+        <label class="form-field is-wide">
+          <span>收據附件 / 連結</span>
+          <input name="receipt_attachment" value="${escapeAttr(fee.receipt_attachment || "")}" placeholder="貼上連結或檔名">
+        </label>
+        <label class="form-field is-wide">
+          <span>備註</span>
+          <textarea name="notes">${escapeHtml(fee.notes || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function associationFeePayload(values = {}) {
+  return {
+    association_id: values.association_id,
+    year: Number(values.year) || new Date().getFullYear(),
+    fee_amount: numericOrNull(values.fee_amount),
+    payment_status: values.payment_status || "未繳",
+    payment_date: values.payment_date || null,
+    due_date: values.due_date || null,
+    receipt_status: values.receipt_status?.trim() || null,
+    receipt_attachment: values.receipt_attachment?.trim() || null,
+    renewal_reminder_date: values.renewal_reminder_date || null,
+    notes: values.notes?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateAssociationFeeModal(associationId) {
+  const association = findAssociation(associationId);
+  if (!association || association.archived_at) return;
+  openAssociationFeeModal({ association_id: association.id });
+}
+
+function openEditAssociationFeeModal(id) {
+  const fee = findAssociationFee(id);
+  const association = findAssociation(fee?.association_id);
+  if (!fee || fee.cancelled_at || association?.archived_at) return;
+  openAssociationFeeModal(fee);
+}
+
+function openAssociationFeeModal(fee = {}) {
+  const isEdit = Boolean(fee.id);
+  openModal(isEdit ? "編輯年費 / 會費" : "新增年費 / 會費", associationFeeFormHtml(fee, fee.association_id), {
+    submitLabel: isEdit ? "儲存變更" : "建立年費",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = associationFeePayload(values);
+      if (!payload.association_id) throw new Error("缺少所屬公會。");
+
+      if (isEdit) {
+        await api("PATCH", `association_fee_records?id=eq.${encodeURIComponent(fee.id)}`, payload);
+      } else {
+        await api("POST", "association_fee_records", payload);
+      }
+
+      state.associationDetailId = payload.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelAssociationFeeModal(id) {
+  const fee = findAssociationFee(id);
+  const association = findAssociation(fee?.association_id);
+  if (!fee || fee.cancelled_at || association?.archived_at) return;
+
+  openModal("取消年費 / 會費", `
+    <p class="empty-note">確定要取消「${escapeHtml(String(fee.year || "未填年度"))} 年費 / 會費」嗎？取消後會從費用清單與總支出彙總排除，但歷史紀錄會保留。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `association_fee_records?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.associationDetailId = fee.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function associationBenefitFormHtml(benefit = {}, associationId = "") {
+  const selectedAssociationId = benefit.association_id || associationId;
+  return `
+    <input type="hidden" name="association_id" value="${escapeAttr(selectedAssociationId)}">
+    <div class="form-section">
+      <h3>權益基本資訊</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公會</span>
+          <input value="${escapeAttr(associationDisplayName(findAssociation(selectedAssociationId) || {}))}" readonly>
+        </label>
+        <label class="form-field is-wide">
+          <span>權益名稱 *</span>
+          <input name="benefit_name" value="${escapeAttr(benefit.benefit_name || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>權益類型</span>
+          <input name="benefit_type" list="associationBenefitTypeOptions" value="${escapeAttr(benefit.benefit_type || "其他")}">
+          <datalist id="associationBenefitTypeOptions">${associationBenefitTypeSuggestions(benefit.benefit_type || "")}</datalist>
+        </label>
+        <label class="form-field">
+          <span>使用狀態</span>
+          <select name="usage_status">${associationBenefitUsageOptions(benefit.usage_status || "未使用")}</select>
+        </label>
+        <label class="form-field">
+          <span>有效期限</span>
+          <input name="valid_until" type="date" value="${escapeAttr(formatDate(benefit.valid_until))}">
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(benefit.owner || state.auth.email || "")}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>說明與備註</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>權益說明</span>
+          <textarea name="description">${escapeHtml(benefit.description || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>備註</span>
+          <textarea name="notes">${escapeHtml(benefit.notes || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function associationBenefitPayload(values = {}) {
+  return {
+    association_id: values.association_id,
+    benefit_name: values.benefit_name?.trim(),
+    benefit_type: values.benefit_type?.trim() || "其他",
+    description: values.description?.trim() || null,
+    usage_status: values.usage_status || "未使用",
+    valid_until: values.valid_until || null,
+    owner: values.owner?.trim() || null,
+    notes: values.notes?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateAssociationBenefitModal(associationId) {
+  const association = findAssociation(associationId);
+  if (!association || association.archived_at) return;
+  openAssociationBenefitModal({ association_id: association.id, owner: state.auth.email });
+}
+
+function openEditAssociationBenefitModal(id) {
+  const benefit = findAssociationBenefit(id);
+  const association = findAssociation(benefit?.association_id);
+  if (!benefit || benefit.archived_at || association?.archived_at) return;
+  openAssociationBenefitModal(benefit);
+}
+
+function openAssociationBenefitModal(benefit = {}) {
+  const isEdit = Boolean(benefit.id);
+  openModal(isEdit ? "編輯會員權益" : "新增會員權益", associationBenefitFormHtml(benefit, benefit.association_id), {
+    submitLabel: isEdit ? "儲存變更" : "建立權益",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = associationBenefitPayload(values);
+      if (!payload.association_id) throw new Error("缺少所屬公會。");
+      if (!payload.benefit_name) throw new Error("請輸入權益名稱。");
+
+      if (isEdit) {
+        await api("PATCH", `association_benefits?id=eq.${encodeURIComponent(benefit.id)}`, payload);
+      } else {
+        await api("POST", "association_benefits", payload);
+      }
+
+      state.associationDetailId = payload.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openArchiveAssociationBenefitModal(id) {
+  const benefit = findAssociationBenefit(id);
+  const association = findAssociation(benefit?.association_id);
+  if (!benefit || benefit.archived_at || association?.archived_at) return;
+
+  openModal("封存會員權益", `
+    <p class="empty-note">確定要封存「${escapeHtml(benefit.benefit_name || "未命名權益")}」嗎？封存後會移到歷史紀錄，不會從資料庫刪除。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>封存原因（選填）</span>
+        <textarea name="archive_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認封存",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `association_benefits?id=eq.${encodeURIComponent(id)}`, {
+        archived_at: nowIso(),
+        archived_by: state.auth.email,
+        archive_reason: values.archive_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.associationDetailId = benefit.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function associationNoteFormHtml(note = {}, associationId = "") {
+  const selectedAssociationId = note.association_id || associationId;
+  return `
+    <input type="hidden" name="association_id" value="${escapeAttr(selectedAssociationId)}">
+    <div class="form-section">
+      <h3>備註 / 附件連結</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公會</span>
+          <input value="${escapeAttr(associationDisplayName(findAssociation(selectedAssociationId) || {}))}" readonly>
+        </label>
+        <label class="form-field is-wide">
+          <span>備註標題 *</span>
+          <input name="note_title" value="${escapeAttr(note.note_title || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(note.owner || state.auth.email || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>附件 / 連結</span>
+          <input name="attachment" value="${escapeAttr(note.attachment || "")}" placeholder="貼上連結或檔名">
+        </label>
+        <label class="form-field is-wide">
+          <span>備註內容</span>
+          <textarea name="note">${escapeHtml(note.note || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function associationNotePayload(values = {}) {
+  return {
+    association_id: values.association_id,
+    note_title: values.note_title?.trim(),
+    note: values.note?.trim() || null,
+    attachment: values.attachment?.trim() || null,
+    owner: values.owner?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateAssociationNoteModal(associationId) {
+  const association = findAssociation(associationId);
+  if (!association || association.archived_at) return;
+  openAssociationNoteModal({ association_id: association.id, owner: state.auth.email });
+}
+
+function openEditAssociationNoteModal(id) {
+  const note = findAssociationNote(id);
+  const association = findAssociation(note?.association_id);
+  if (!note || note.cancelled_at || association?.archived_at) return;
+  openAssociationNoteModal(note);
+}
+
+function openAssociationNoteModal(note = {}) {
+  const isEdit = Boolean(note.id);
+  openModal(isEdit ? "編輯備註 / 附件連結" : "新增備註 / 附件連結", associationNoteFormHtml(note, note.association_id), {
+    submitLabel: isEdit ? "儲存變更" : "建立備註",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = associationNotePayload(values);
+      if (!payload.association_id) throw new Error("缺少所屬公會。");
+      if (!payload.note_title) throw new Error("請輸入備註標題。");
+
+      if (isEdit) {
+        await api("PATCH", `association_notes?id=eq.${encodeURIComponent(note.id)}`, payload);
+      } else {
+        await api("POST", "association_notes", payload);
+      }
+
+      state.associationDetailId = payload.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelAssociationNoteModal(id) {
+  const note = findAssociationNote(id);
+  const association = findAssociation(note?.association_id);
+  if (!note || note.cancelled_at || association?.archived_at) return;
+
+  openModal("取消備註 / 附件連結", `
+    <p class="empty-note">確定要取消「${escapeHtml(note.note_title || "未命名備註")}」嗎？取消後會移到歷史紀錄，不會從資料庫刪除。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因（選填）</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `association_notes?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.associationDetailId = note.association_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
 function campaignFormHtml(campaign = {}) {
   const vendorsText = Array.isArray(campaign.vendors) ? campaign.vendors.join("\n") : "";
   return `
@@ -7533,7 +8165,7 @@ function channelKpis() {
 }
 
 function associationKpis() {
-  if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length && !state.data.associationTasks.length && !state.data.associationTaskExpenses.length && !state.data.associationEvents.length && !state.data.associationPublications.length) {
+  if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length && !state.data.associationTasks.length && !state.data.associationTaskExpenses.length && !state.data.associationEvents.length && !state.data.associationPublications.length && !state.data.associationFees.length && !state.data.associationBenefits.length && !state.data.associationNotes.length) {
     if (state.dataStatus === "live") {
       return [
         ["公會 / 單位", "0", "尚未建立公會資料"],
@@ -7552,18 +8184,20 @@ function associationKpis() {
   const openTasks = state.data.associationTasks.filter((task) => !["已完成"].includes(task.task_status)).length;
   const openEvents = state.data.associationEvents.filter((event) => !["已結束", "已完成"].includes(event.event_status)).length;
   const openPublications = state.data.associationPublications.filter((publication) => !["已確認刊出", "已刊登"].includes(publication.material_status)).length;
+  const pendingFees = state.data.associationFees.filter((fee) => !["已繳", "不適用"].includes(fee.payment_status)).length;
   const pendingExpenses = state.data.associationTaskExpenses.filter((expense) => !["已付款", "不適用"].includes(expense.payment_status)).length;
   const pending = activeCooperations.filter((item) => String(item.stage || "").includes("待") || !item.due_date).length
     + state.data.associationTasks.filter((task) => String(task.task_status || "").includes("待") || !task.due_date).length
     + state.data.associationEvents.filter((event) => String(event.event_status || "").includes("待") || !event.event_date).length
     + state.data.associationPublications.filter((publication) => String(publication.material_status || "").includes("待") || !publication.deadline_date).length
+    + pendingFees
     + pendingExpenses;
 
   return [
     ["公會 / 單位", String(totalAssociations), "既有公會資料"],
-    ["公會任務", String(state.data.associationTasks.length), `${openTasks} 個仍在進行或待確認`],
+    ["年費 / 權益", String(state.data.associationFees.length + state.data.associationBenefits.length), `年費 ${pendingFees} 筆待處理、權益 ${state.data.associationBenefits.length} 筆`],
     ["活動 / 期刊", String(state.data.associationEvents.length + state.data.associationPublications.length), `活動 ${openEvents}、期刊 ${openPublications} 筆待追蹤`],
-    ["待確認", String(pending), `合作概覽 ${openCooperations} 筆仍需追蹤`],
+    ["待確認", String(pending), `任務 ${openTasks}、合作概覽 ${openCooperations} 筆仍需追蹤`],
   ];
 }
 
@@ -8000,6 +8634,15 @@ document.addEventListener("click", (event) => {
   if (action === "create-association-publication") openCreateAssociationPublicationModal(id);
   if (action === "edit-association-publication") openEditAssociationPublicationModal(id);
   if (action === "cancel-association-publication") openCancelAssociationPublicationModal(id);
+  if (action === "create-association-fee") openCreateAssociationFeeModal(id);
+  if (action === "edit-association-fee") openEditAssociationFeeModal(id);
+  if (action === "cancel-association-fee") openCancelAssociationFeeModal(id);
+  if (action === "create-association-benefit") openCreateAssociationBenefitModal(id);
+  if (action === "edit-association-benefit") openEditAssociationBenefitModal(id);
+  if (action === "archive-association-benefit") openArchiveAssociationBenefitModal(id);
+  if (action === "create-association-note") openCreateAssociationNoteModal(id);
+  if (action === "edit-association-note") openEditAssociationNoteModal(id);
+  if (action === "cancel-association-note") openCancelAssociationNoteModal(id);
   if (action === "view-campaign-detail") {
     state.page = "campaigns";
     state.campaignInspectionMode = "";
@@ -8166,6 +8809,9 @@ async function loadExistingData() {
       associationTaskExpenses,
       associationEvents,
       associationPublications,
+      associationFees,
+      associationBenefits,
+      associationNotes,
     ] = await Promise.all([
       loadMarketingCampaigns(),
       loadMarketingResources(),
@@ -8193,6 +8839,9 @@ async function loadExistingData() {
       loadAssociationTaskExpenses(),
       loadAssociationEvents(),
       loadAssociationPublications(),
+      loadAssociationFees(),
+      loadAssociationBenefits(),
+      loadAssociationNotes(),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? activeCampaigns(campaigns) : [];
@@ -8213,6 +8862,12 @@ async function loadExistingData() {
     state.data.cancelledAssociationEvents = Array.isArray(associationEvents) ? cancelledAssociationEvents(associationEvents) : [];
     state.data.associationPublications = Array.isArray(associationPublications) ? activeAssociationPublications(associationPublications) : [];
     state.data.cancelledAssociationPublications = Array.isArray(associationPublications) ? cancelledAssociationPublications(associationPublications) : [];
+    state.data.associationFees = Array.isArray(associationFees) ? activeAssociationFees(associationFees) : [];
+    state.data.cancelledAssociationFees = Array.isArray(associationFees) ? cancelledAssociationFees(associationFees) : [];
+    state.data.associationBenefits = Array.isArray(associationBenefits) ? activeAssociationBenefits(associationBenefits) : [];
+    state.data.archivedAssociationBenefits = Array.isArray(associationBenefits) ? archivedAssociationBenefits(associationBenefits) : [];
+    state.data.associationNotes = Array.isArray(associationNotes) ? activeAssociationNotes(associationNotes) : [];
+    state.data.cancelledAssociationNotes = Array.isArray(associationNotes) ? cancelledAssociationNotes(associationNotes) : [];
     state.data.campaignVendors = Array.isArray(campaignVendors) ? activeCampaignVendors(campaignVendors) : [];
     state.data.cancelledCampaignVendors = Array.isArray(campaignVendors) ? cancelledCampaignVendors(campaignVendors) : [];
     state.data.cancelledDeliverables = Array.isArray(campaignVendors) ? cancelledDeliverablesFromAll(campaignVendors) : [];
@@ -8254,6 +8909,12 @@ async function loadExistingData() {
       + state.data.cancelledAssociationEvents.length
       + state.data.associationPublications.length
       + state.data.cancelledAssociationPublications.length
+      + state.data.associationFees.length
+      + state.data.cancelledAssociationFees.length
+      + state.data.associationBenefits.length
+      + state.data.archivedAssociationBenefits.length
+      + state.data.associationNotes.length
+      + state.data.cancelledAssociationNotes.length
       + state.data.campaignVendors.length
       + state.data.cancelledCampaignVendors.length
       + state.data.cancelledDeliverables.length
@@ -8326,6 +8987,27 @@ async function loadAssociationPublications() {
   if (Array.isArray(withLifecycle)) return withLifecycle;
 
   return safeGET("association_publication_schedules?select=id,association_id,task_id,publication_name,publish_date,deadline_date,ad_spec,topic,required_materials,material_status,owner,submission_date,result_notes,attachment,created_at,updated_at&order=deadline_date.asc.nullslast,publish_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
+}
+
+async function loadAssociationFees() {
+  const withLifecycle = await safeGET("association_fee_records?select=id,association_id,year,fee_amount,payment_status,payment_date,due_date,receipt_status,receipt_attachment,renewal_reminder_date,notes,cancelled_at,cancelled_by,cancel_reason,created_at,updated_at&order=year.desc,due_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("association_fee_records?select=id,association_id,year,fee_amount,payment_status,payment_date,due_date,receipt_status,receipt_attachment,renewal_reminder_date,notes,created_at,updated_at&order=year.desc,due_date.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
+}
+
+async function loadAssociationBenefits() {
+  const withLifecycle = await safeGET("association_benefits?select=id,association_id,benefit_name,benefit_type,description,usage_status,valid_until,owner,notes,archived_at,archived_by,archive_reason,created_at,updated_at&order=valid_until.asc.nullslast,updated_at.desc,created_at.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("association_benefits?select=id,association_id,benefit_name,benefit_type,description,usage_status,valid_until,owner,notes,created_at,updated_at&order=valid_until.asc.nullslast,updated_at.desc,created_at.desc&limit=300");
+}
+
+async function loadAssociationNotes() {
+  const withLifecycle = await safeGET("association_notes?select=id,association_id,note_title,note,attachment,owner,cancelled_at,cancelled_by,cancel_reason,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=300", null);
+  if (Array.isArray(withLifecycle)) return withLifecycle;
+
+  return safeGET("association_notes?select=id,association_id,note_title,note,attachment,owner,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=300");
 }
 
 async function loadCampaignBudgetItems() {
