@@ -187,6 +187,7 @@
    - Batch 17D：v2 公會詳情頁新增 `association_tasks` 公會任務與 `association_task_expenses` 任務費用管理。任務與費用皆採新增 / 編輯 / 取消，不做真刪除；取消資料集中顯示在同一個歷史紀錄區塊。`association_tasks.task_status` 下拉不包含「取消」，取消狀態一律由 `cancelled_at` 生命週期欄位表達；舊資料若仍為 `task_status = '取消'`，前端視為歷史紀錄而非進行中任務。
    - Batch 17E：v2 公會詳情頁新增 `association_events` 公會活動 / 講座 / 贊助管理，以及 `association_publication_schedules` 期刊排程管理。兩者皆採新增 / 編輯 / 取消，不做真刪除；取消資料集中顯示在同一個歷史紀錄區塊。活動與期刊的階段下拉正式接上 `association_stage_options`，附件維持純文字連結，不升級 Storage 上傳。
    - Batch 17F：v2 公會詳情頁新增 `association_fee_records` 年費 / 會費、`association_benefits` 會員權益、`association_notes` 備註 / 附件連結管理。年費與備註採新增 / 編輯 / 取消；會員權益採新增 / 編輯 / 封存。所有取消 / 封存資料都集中顯示在同一個歷史紀錄區塊，附件仍維持純文字連結。
+   - Batch 17G：v1 公會管理新增 / 編輯入口全面停用，8 張公會資料表改由 v2 作為新增、編輯、取消、封存與歷史查詢的主操作介面。`MOBILE_ACCEPTANCE_CHECKLIST.md` 已補入公會管理手機總驗收範圍，涵蓋任務、費用、活動、期刊、年費、權益、備註 7 組進行中與歷史清單。
 
 ## 暫緩到 Phase 2
 
