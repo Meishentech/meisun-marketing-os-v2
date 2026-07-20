@@ -46,6 +46,9 @@ const state = {
 };
 
 let modalSubmitHandler = null;
+let modalSubmitting = false;
+let modalPendingClose = false;
+let modalSessionId = 0;
 const RESOURCE_FILE_MAX_BYTES = 200 * 1024 * 1024;
 const CAMPAIGN_DOCUMENT_FILE_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -3426,25 +3429,42 @@ function openModal(title, content, options = {}) {
   const modal = document.getElementById("formModal");
   const submit = document.getElementById("modalSubmit");
   const cancel = document.getElementById("modalCancel");
+  const submitLabel = options.submitLabel || "送出";
 
   document.getElementById("modalTitle").textContent = title;
   document.getElementById("modalContent").innerHTML = content;
   document.getElementById("modalMessage").textContent = "";
-  submit.textContent = options.submitLabel || "送出";
+  submit.textContent = submitLabel;
+  submit.dataset.idleLabel = submitLabel;
+  submit.dataset.pendingLabel = options.pendingLabel || pendingLabelForSubmitLabel(submitLabel);
   submit.disabled = false;
   submit.classList.toggle("is-hidden", options.hideSubmit === true);
   submit.classList.toggle("is-danger", options.submitTone === "danger");
+  cancel.disabled = false;
+  document.getElementById("modalClose").disabled = false;
   cancel.classList.toggle("is-hidden", options.hideCancel === true);
   modalSubmitHandler = options.onSubmit || null;
+  modalSubmitting = false;
+  modalPendingClose = false;
+  modalSessionId += 1;
   modal.classList.remove("is-hidden");
   modal.setAttribute("aria-hidden", "false");
 }
 
 function closeModal() {
+  if (modalSubmitting) {
+    modalPendingClose = true;
+    return;
+  }
+  closeModalNow();
+}
+
+function closeModalNow() {
   const modal = document.getElementById("formModal");
   modal.classList.add("is-hidden");
   modal.setAttribute("aria-hidden", "true");
   modalSubmitHandler = null;
+  modalPendingClose = false;
 }
 
 function formValues(form) {
@@ -3455,6 +3475,21 @@ function setModalMessage(message, tone = "") {
   const element = document.getElementById("modalMessage");
   element.textContent = message;
   element.className = `form-message ${tone}`.trim();
+}
+
+function pendingLabelForSubmitLabel(label = "") {
+  if (label.includes("建立")) return "建立中...";
+  if (label.includes("新增")) return "新增中...";
+  if (label.includes("儲存")) return "儲存中...";
+  if (label.includes("更新")) return "更新中...";
+  if (label.includes("封存")) return "封存中...";
+  if (label.includes("取消")) return "取消中...";
+  if (label.includes("移除")) return "移除中...";
+  if (label.includes("審核") || label.includes("決策") || label.includes("確認")) return "處理中...";
+  if (label.includes("送")) return "送出中...";
+  if (label.includes("下一步")) return "處理中...";
+  if (label.includes("關閉")) return "關閉中...";
+  return "處理中...";
 }
 
 function requestFormHtml(request = {}, readOnly = false) {
@@ -6409,7 +6444,15 @@ document.getElementById("modalForm").addEventListener("submit", async (event) =>
   }
 
   const submit = document.getElementById("modalSubmit");
+  const cancel = document.getElementById("modalCancel");
+  const close = document.getElementById("modalClose");
+  const sessionId = modalSessionId;
   submit.disabled = true;
+  cancel.disabled = true;
+  close.disabled = true;
+  submit.textContent = submit.dataset.pendingLabel || pendingLabelForSubmitLabel(submit.textContent);
+  modalSubmitting = true;
+  modalPendingClose = false;
   setModalMessage("");
   try {
     await modalSubmitHandler(event.currentTarget);
@@ -6417,7 +6460,18 @@ document.getElementById("modalForm").addEventListener("submit", async (event) =>
     console.warn("operation failed", error);
     setModalMessage(error.message || "操作失敗，請稍後再試。");
   } finally {
+    if (sessionId !== modalSessionId) return;
+
+    modalSubmitting = false;
+    if (modalPendingClose) {
+      closeModalNow();
+      return;
+    }
+
     submit.disabled = false;
+    cancel.disabled = false;
+    close.disabled = false;
+    submit.textContent = submit.dataset.idleLabel || "送出";
   }
 });
 
