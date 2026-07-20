@@ -115,6 +115,7 @@ V2 目前依 `app_user_access.role` 正規化為三種畫面：
 建議 smoke test：
 
 - eric/admin 判斷為 admin。
+- executive 帳號 `kevin@mcttw.com.tw`、`kevin@tonsun.com.tw` 判斷為 executive。
 - marketing 帳號判斷為 marketing。
 - sales 帳號判斷為 sales。
 - 未登入 / anon 無法查 `app_user_access`。
