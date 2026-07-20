@@ -953,7 +953,7 @@ function weeklyOverviewSection(summary = weeklySummaryData()) {
       ["風險追蹤", `本週新增 ${summary.weeklyRiskUpdates.length} 筆追蹤，高風險未解決 ${summary.highRisks.length} 件。`],
       ["預算付款", `待付款 ${summary.pendingPayments.length} 筆，估計金額 ${formatCurrencyFull(summary.pendingPaymentTotal)}。`],
       ["成效資料", `本週更新 ${summary.weeklyPerformance.length} 筆，最佳 Channel：${summary.bestChannel?.channel || "尚未有資料"}。`],
-      ["待決策", `${summary.pendingApprovals.length} 筆 approval_requests 待處理；週報只讀，不自動新增審核單。`],
+      ["待決策", `${summary.pendingApprovals.length} 筆待處理事項；週報只讀，不會自動新增審核單。`],
     ],
   };
 }
@@ -1263,7 +1263,7 @@ function weeklyReportText(summary = weeklySummaryData()) {
     "",
     "三、風險 / 待決事項",
     ...(riskLines.length ? riskLines : ["- 目前沒有高風險、逾期追蹤或重要待決事項。"]),
-    summary.pendingApprovals.length ? `- 待決策中心：${summary.pendingApprovals.length} 筆 approval_requests 待處理。` : "- 待決策中心：目前沒有待處理審核。",
+    summary.pendingApprovals.length ? `- 待決策中心：${summary.pendingApprovals.length} 筆待處理事項。` : "- 待決策中心：目前沒有待處理審核。",
     "",
     "四、預算 / 付款",
     ...(paymentLines.length ? paymentLines : ["- 目前沒有待付款項目。"]),
@@ -1576,7 +1576,7 @@ function decisionListSection() {
         type: "list",
         title: "待決策 / 待討論",
         items: [
-          ["目前沒有待審核事項", "approval_requests 目前沒有待處理資料。", "無待辦", "ok"],
+          ["目前沒有待審核事項", "目前沒有需要總經理處理的審核資料。", "無待辦", "ok"],
         ],
       };
     }
@@ -1601,7 +1601,7 @@ function decisionListSection() {
       items: [
         [
           "目前沒有待審核事項",
-          "approval_requests 目前沒有回傳待處理資料，代表暫時沒有需要總經理決策的項目。",
+          "目前沒有待處理資料，代表暫時沒有需要總經理決策的項目。",
           "無待辦",
           "ok",
         ],
@@ -1666,9 +1666,9 @@ function channelSummarySection(wide) {
       wide,
       headers: ["狀態", "說明", "下一步"],
       rows: [[
-        tag("尚未回傳", "amber"),
-        "目前沒有從成效資料或名單來源讀到可彙總的 Channel。",
-        "請先在行銷案詳情頁填成效資料，或確認 leads.source_channel 是否有資料。",
+        tag("尚無資料", "amber"),
+        "目前沒有可彙總的 Channel 成效或名單來源。",
+        "請先在行銷案詳情頁填成效資料，或確認名單已建立來源 Channel。",
       ]],
     };
   }
@@ -1806,9 +1806,9 @@ function budgetSection() {
       headers: ["狀態", "說明", "下一步"],
       rows: [
         [
-          tag("尚未回傳", "amber"),
-          "目前沒有從 all_expenses_overview 讀到費用彙總資料。",
-          "請先執行 Batch 5 SQL，或確認來源費用表有資料。",
+          tag("尚無資料", "amber"),
+          "目前沒有可顯示的費用彙總資料。",
+          "請先建立預算、廠商費用或公會費用資料。",
         ],
       ],
     };
@@ -1984,7 +1984,7 @@ function approvalFlowSection() {
         ["待審核", "目前沒有待審核事項。"],
         ["需修正", "目前沒有退回補資料項目。"],
         ["廠商報價", "廠商報價待核准後，會進入這裡。"],
-        ["其他審核", "預算、知識與公會審核會共用 approval_requests。"],
+        ["其他審核", "預算、知識與公會審核會集中到待決策中心。"],
       ],
     };
   }
@@ -2219,9 +2219,9 @@ function associationSection() {
       headers: ["狀態", "說明", "下一步"],
       rows: [
         [
-          tag("尚未回傳", "amber"),
-          "目前沒有從公會任務、活動或期刊 view 讀到合作紀錄。",
-          "請確認 association_cooperation_overview 有資料，且已授權 authenticated 讀取。",
+          tag("尚無資料", "amber"),
+          "目前沒有可顯示的公會合作紀錄。",
+          "請先建立公會任務、活動、講座、贊助或期刊資料。",
         ],
       ],
     };
@@ -2275,10 +2275,10 @@ function associationTagsSection() {
       type: "cards",
       title: "公會資料狀態",
       cards: [
-        ["公會主檔", "尚未從 associations 回傳資料，需確認資料列或讀取權限。"],
-        ["關係標籤", "尚未從 association_relationship_tags 回傳資料，初期可先新增測試標籤驗收。"],
-        ["合作紀錄", "尚未從 association_cooperation_overview 回傳資料，可能是來源表尚無任務、活動或期刊資料。"],
-        ["畫面狀態", "目前不是功能錯誤，而是公會頁尚未取得可顯示的公會資料。"],
+        ["公會主檔", "目前尚未建立可顯示的公會資料。"],
+        ["關係標籤", "目前尚未建立公會關係標籤。"],
+        ["合作紀錄", "目前尚未建立公會任務、活動、講座、贊助或期刊資料。"],
+        ["畫面狀態", "目前不是功能錯誤，而是公會頁尚未取得可顯示資料。"],
       ],
     };
   }
@@ -2361,8 +2361,8 @@ function knowledgeSection(isMarketing) {
       headers: ["狀態", "說明", "下一步"],
       rows: [
         [
-          tag("尚未回傳", "amber"),
-          isMarketing ? "目前沒有從 product_knowledge_items 讀到知識條目。" : "目前沒有可供業務使用的知識條目。",
+          tag("尚無資料", "amber"),
+          isMarketing ? "目前尚未建立產品知識條目。" : "目前沒有可供業務使用的知識條目。",
           isMarketing ? "請新增產品差異化、技術比較或 FAQ 條目。" : "待行銷總監建立並標記可對外或僅內部後會顯示。",
         ],
       ],
@@ -2466,7 +2466,7 @@ function salesRequestSection(isMarketing) {
   if (state.dataStatus === "live") {
     const emptyMessage = !isMarketing && state.data.salesRequests.length
       ? "你目前沒有自己提出的需求單。"
-      : "目前沒有從 sales_requests 讀到業務需求單。";
+      : "目前尚未建立業務需求單。";
 
     return {
       type: "table",
@@ -2474,7 +2474,7 @@ function salesRequestSection(isMarketing) {
       headers: ["狀態", "說明", "下一步"],
       rows: [
         [
-          tag("尚未回傳", "amber"),
+          tag("尚無資料", "amber"),
           emptyMessage,
           isMarketing ? "請新增或匯入需求單資料。" : "新增需求後會只顯示你的需求單。",
         ],
@@ -5915,10 +5915,10 @@ function associationKpis() {
   if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length) {
     if (state.dataStatus === "live") {
       return [
-        ["公會 / 單位", "0", "尚未從 associations 回傳"],
-        ["合作紀錄", "0", "尚未從 overview view 回傳"],
-        ["關係標籤", "0", "尚未建立或尚未授權讀取"],
-        ["待確認", "檢查", "需確認公會資料與權限"],
+        ["公會 / 單位", "0", "尚未建立公會資料"],
+        ["合作紀錄", "0", "尚未建立合作紀錄"],
+        ["關係標籤", "0", "尚未建立關係標籤"],
+        ["待確認", "0", "目前沒有待確認公會資料"],
       ];
     }
 
@@ -5930,7 +5930,7 @@ function associationKpis() {
   const pending = state.data.associationCooperations.filter((item) => String(item.stage || "").includes("待") || !item.due_date).length;
 
   return [
-    ["公會 / 單位", String(totalAssociations), "已接既有 associations 主檔"],
+    ["公會 / 單位", String(totalAssociations), "既有公會資料"],
     ["合作紀錄", String(state.data.associationCooperations.length), `${openCooperations} 個仍在進行或待確認`],
     ["關係標籤", String(state.data.associationTags.length), "支援未入會但講座、期刊或贊助合作"],
     ["待確認", String(pending), "階段或日期仍需補齊"],
@@ -5963,7 +5963,7 @@ function vendorKpis() {
     : 0;
 
   return [
-    ["合作單位", String(state.data.campaignVendors.length), "已接專案廠商合作資料"],
+    ["合作單位", String(state.data.campaignVendors.length), "專案廠商合作資料"],
     ["交付物", String(deliverables.length), `${deliverables.filter((item) => item.status !== "已完成").length} 件未完成`],
     ["待核准報價", String(pendingQuotes), "待報價或待核准"],
     ["附件完整度", `${attachmentRate}%`, "以已連結廠商文件計算"],
@@ -5994,9 +5994,9 @@ function approvalKpis() {
   const approved = state.data.approvalRequests.filter((request) => request.status === "已核准").length;
 
   return [
-    ["待核准", String(pending), "來自 approval_requests"],
+    ["待核准", String(pending), "等待總經理審核"],
     ["需修正", String(revision), "已退回補資料"],
-    ["逾期提醒", String(overdue), "超過 due_date 尚未完成"],
+    ["逾期提醒", String(overdue), "超過期限尚未完成"],
     ["已處理", String(approved), "已核准項目"],
   ];
 }
@@ -6013,7 +6013,7 @@ function requestKpis() {
   const done = visibleSalesRequests(state.role === "marketing").filter((request) => request.status === "已完成").length;
 
   return [
-    ["需求總數", String(total), "已接 sales_requests"],
+    ["需求總數", String(total), "已建立需求單"],
     ["未完成", String(open), "待處理、處理中或待確認"],
     ["急件", String(urgent), "需優先排程"],
     ["已完成", String(done), "可回填資源或通知業務"],
@@ -6032,8 +6032,8 @@ function expenseKpis() {
   const vendorExpenses = state.data.expenses.filter((expense) => expense.source_table === "marketing_campaign_vendors").length;
 
   return [
-    ["總支出", formatMoney(total), "all_expenses_overview 彙總"],
-    ["未付款", String(unpaid), "付款狀態非已付款"],
+    ["總支出", formatMoney(total), "所有費用彙總"],
+    ["未付款", String(unpaid), "尚未標記為已付款"],
     ["已付款", String(paid), "已完成付款"],
     ["廠商費用", String(vendorExpenses), "已納入合作廠商費用"],
   ];
@@ -6052,7 +6052,7 @@ function knowledgeKpis() {
   const blocked = items.filter((item) => item.visibility_status === "禁止使用").length;
 
   return [
-    ["知識條目", String(items.length), "已接 product_knowledge_items"],
+    ["知識條目", String(items.length), "已建立產品知識"],
     ["可對外", String(usable), "業務可對外使用"],
     ["僅內部 / 待確認", String(internal + pending), "需注意使用範圍"],
     ["禁止使用", String(blocked), "不應出現在業務話術"],
