@@ -2,20 +2,26 @@ function getToken() {
   return sessionStorage.getItem("ms_token") || "";
 }
 
-function getHeaders() {
+function getHeaders(options = {}) {
+  const { requireAuth = false, contentType = "application/json", prefer = "return=representation" } = options;
   const token = getToken();
-  return {
+  if (requireAuth && !token) {
+    throw new Error("請先登入。");
+  }
+
+  const headers = {
     apikey: KEY,
-    Authorization: `Bearer ${token || KEY}`,
-    "Content-Type": "application/json",
-    Prefer: "return=representation",
   };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (contentType) headers["Content-Type"] = contentType;
+  if (prefer) headers.Prefer = prefer;
+  return headers;
 }
 
 async function api(method, path, body) {
   const response = await fetch(`${SB}/rest/v1/${path}`, {
     method,
-    headers: getHeaders(),
+    headers: getHeaders({ requireAuth: true }),
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -40,14 +46,9 @@ async function safeGET(path, fallback = []) {
 }
 
 async function getSignedUrl(bucket, path, expiresIn = 3600) {
-  const token = getToken();
   const response = await fetch(`${SB}/storage/v1/object/sign/${bucket}/${path}`, {
     method: "POST",
-    headers: {
-      apikey: KEY,
-      Authorization: `Bearer ${token || KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers: getHeaders({ requireAuth: true }),
     body: JSON.stringify({ expiresIn }),
   });
 
@@ -69,15 +70,10 @@ function storageSafeFileName(name) {
 }
 
 async function uploadStorageFile(bucket, file) {
-  const token = getToken();
   const path = storageSafeFileName(file.name);
   const response = await fetch(`${SB}/storage/v1/object/${bucket}/${path}`, {
     method: "POST",
-    headers: {
-      apikey: KEY,
-      Authorization: `Bearer ${token || KEY}`,
-      "Content-Type": file.type || "application/octet-stream",
-    },
+    headers: getHeaders({ requireAuth: true, contentType: file.type || "application/octet-stream", prefer: "" }),
     body: file,
   });
 
@@ -90,10 +86,9 @@ async function uploadStorageFile(bucket, file) {
 }
 
 async function deleteStorageFile(bucket, path) {
-  const token = getToken();
   const response = await fetch(`${SB}/storage/v1/object/${bucket}/${path}`, {
     method: "DELETE",
-    headers: { apikey: KEY, Authorization: `Bearer ${token || KEY}` },
+    headers: getHeaders({ requireAuth: true, contentType: "", prefer: "" }),
   });
 
   if (!response.ok) {
