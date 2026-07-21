@@ -121,7 +121,6 @@ const roleMeta = {
     nav: [
       ["dashboard", "業務資料中心"],
       ["resources", "文宣 / 產品知識"],
-      ["leads", "我的名單"],
       ["requests", "業務需求單"],
     ],
   },
@@ -8233,6 +8232,9 @@ function normalizeCurrentPage() {
   if (state.role === "sales" && state.page === "knowledge") {
     state.page = "resources";
   }
+  if (state.role === "sales" && state.page === "leads") {
+    state.page = "dashboard";
+  }
   if (!pages[state.role]?.[state.page]) {
     state.page = "dashboard";
     clearCampaignDrilldown();
@@ -8375,15 +8377,14 @@ function marketingDashboardKpis() {
 function salesDashboardKpis() {
   const resources = activeResources();
   const externalResources = resources.filter((resource) => resource.is_external_usable).length;
-  const leads = visibleSalesLeads();
   const knowledgeItems = visibleKnowledgeItems(false);
   const requests = visibleSalesRequests(false);
   const pendingRequests = requests.filter((request) => !["已完成", "已取消"].includes(request.status || ""));
   return [
     ["可下載資料", String(resources.length), `${externalResources} 份可對外`, "resources"],
-    ["我的名單", String(leads.length), "已指派給我的名單", "leads"],
     ["產品知識", String(knowledgeItems.length), "可查說法與比較", "knowledge"],
     ["待回報跟進", String(pendingRequests.length), "點擊查看需求單", "requests"],
+    ["業務需求", String(requests.length), "素材與資料需求紀錄", "requests"],
   ];
 }
 
@@ -8687,7 +8688,6 @@ function buildCurrentSections(page) {
     "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [knowledgeSection(false), resourceLibrarySection()],
-    "sales:leads": [salesLeadSection(), leadFollowUpSection()],
     "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false), requestFormPreviewSection()],
   };
 
