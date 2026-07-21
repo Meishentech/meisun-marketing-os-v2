@@ -93,8 +93,6 @@ const roleMeta = {
     nav: [
       ["dashboard", "總經理戰情室"],
       ["budget", "預算 / 補助 / 付款"],
-      ["leads", "商機轉換"],
-      ["channels", "Channel 成效"],
       ["decisions", "待決策中心"],
       ["weekly", "週報摘要"],
     ],
@@ -8329,8 +8327,7 @@ function primaryActionLabel(meta) {
 
 function secondaryActionLabel() {
   if (state.page === "weekly") return "匯出週報";
-  if (state.role === "sales") return "";
-  return "匯出摘要";
+  return "";
 }
 
 function buildCurrentKpis(page) {
@@ -8374,7 +8371,6 @@ function emptyPageKpis(pageTitle = "目前頁面") {
     ["正式資料", "0", `${pageTitle} 尚無資料`],
     ["展示內容", "0", "正式啟用後不顯示"],
     ["待建立", "0", "請由對應功能新增"],
-    ["狀態", "正式", "使用目前系統資料"],
   ];
 }
 
