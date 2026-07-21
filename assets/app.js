@@ -1490,8 +1490,6 @@ function formatCampaignRow(campaign, includeActions = false) {
   if (includeActions) {
     row.push(actionGroup([
       actionButton("詳情", "view-campaign-detail", campaign.id, "is-primary"),
-      actionButton("編輯", "edit-campaign", campaign.id, "is-primary"),
-      actionButton("封存", "archive-campaign", campaign.id, "is-danger"),
     ]));
   }
 
@@ -8381,6 +8379,7 @@ function primaryActionLabel(meta) {
 }
 
 function secondaryActionLabel() {
+  if (state.role === "marketing" && state.page === "campaigns" && state.campaignDetailId) return "編輯專案";
   if (state.page === "weekly") return "匯出週報";
   return "";
 }
@@ -9058,7 +9057,14 @@ document.getElementById("primaryAction").addEventListener("click", () => {
   render();
 });
 
-document.getElementById("secondaryAction").addEventListener("click", exportCurrentSummary);
+document.getElementById("secondaryAction").addEventListener("click", () => {
+  if (state.role === "marketing" && state.page === "campaigns" && state.campaignDetailId) {
+    openEditCampaignModal(state.campaignDetailId);
+    return;
+  }
+
+  exportCurrentSummary();
+});
 
 document.addEventListener("click", (event) => {
   const kpiCard = event.target.closest("[data-page-target]");
