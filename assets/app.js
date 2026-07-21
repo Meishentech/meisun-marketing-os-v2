@@ -1807,13 +1807,14 @@ function budgetSection() {
     return {
       type: "table",
       title: "費用狀態",
-      headers: ["項目", "類型", "金額", "狀態", "日期"],
+      headers: ["項目", "類型", "金額", "狀態", "日期", "操作"],
       rows: state.data.expenses.slice(0, 10).map((expense) => [
         expense.title || "未命名費用",
         expense.category || "未分類",
         formatMoney(expense.amount),
         tag(expense.payment_status || "未填", statusTone(expense.payment_status)),
         formatDate(expense.payment_date) || "未設定",
+        expenseActionGroup(expense),
       ]),
     };
   }
@@ -1844,6 +1845,92 @@ function budgetSection() {
       ["講座場地費", "活動費", "12萬", tag("已付款", "green"), "摘要"],
     ],
   };
+}
+
+function expenseActionGroup(expense = {}) {
+  const sourceKey = expenseSourceKey(expense);
+  if (!sourceKey) return "無";
+
+  if (state.role === "marketing") {
+    return actionGroup([
+      actionButton("編輯", "edit-expense-source", sourceKey, "is-primary"),
+      actionButton("取消", "cancel-expense-source", sourceKey, "is-danger"),
+    ]);
+  }
+
+  return actionGroup([actionButton("查看來源", "view-expense-source", sourceKey, "is-primary")]);
+}
+
+function expenseSourceKey(expense = {}) {
+  if (!expense.source_table || !expense.source_id) return "";
+  return `${expense.source_table}:${expense.source_id}`;
+}
+
+function parseExpenseSourceKey(sourceKey = "") {
+  const [sourceTable, ...idParts] = String(sourceKey || "").split(":");
+  return { sourceTable, sourceId: idParts.join(":") };
+}
+
+function openExpenseSource(sourceKey = "") {
+  const { sourceTable, sourceId } = parseExpenseSourceKey(sourceKey);
+  if (!sourceTable || !sourceId) return;
+
+  if (sourceTable === "marketing_campaign_budget_items") {
+    const item = findCampaignBudgetItem(sourceId);
+    if (item?.campaign_id) {
+      state.page = "campaigns";
+      state.campaignInspectionMode = "";
+      state.campaignDetailId = item.campaign_id;
+      render();
+    }
+    return;
+  }
+
+  if (sourceTable === "marketing_campaign_vendors") {
+    state.page = "vendors";
+    clearCampaignDrilldown();
+    render();
+    return;
+  }
+
+  if (sourceTable === "association_task_expenses") {
+    const expense = findAssociationTaskExpense(sourceId);
+    if (expense?.association_id) {
+      state.page = "associations";
+      state.associationDetailId = expense.association_id;
+      state.campaignDetailId = "";
+      state.campaignInspectionMode = "";
+      render();
+    }
+    return;
+  }
+
+  if (sourceTable === "association_fee_records") {
+    const fee = findAssociationFee(sourceId);
+    if (fee?.association_id) {
+      state.page = "associations";
+      state.associationDetailId = fee.association_id;
+      state.campaignDetailId = "";
+      state.campaignInspectionMode = "";
+      render();
+    }
+  }
+}
+
+function openEditExpenseSource(sourceKey = "") {
+  const { sourceTable, sourceId } = parseExpenseSourceKey(sourceKey);
+  if (sourceTable === "marketing_campaign_budget_items") return openEditCampaignBudgetItemModal(sourceId);
+  if (sourceTable === "marketing_campaign_vendors") return openEditCampaignVendorModal(sourceId);
+  if (sourceTable === "association_task_expenses") return openEditAssociationTaskExpenseModal(sourceId);
+  if (sourceTable === "association_fee_records") return openEditAssociationFeeModal(sourceId);
+}
+
+function openCancelExpenseSource(sourceKey = "") {
+  const { sourceTable, sourceId } = parseExpenseSourceKey(sourceKey);
+  if (sourceTable === "marketing_campaign_budget_items") return openCancelCampaignBudgetItemModal(sourceId);
+  if (sourceTable === "marketing_campaign_vendors") return openCancelCampaignVendorModal(sourceId);
+  if (sourceTable === "association_task_expenses") return openCancelAssociationTaskExpenseModal(sourceId);
+  if (sourceTable === "association_fee_records") return openCancelAssociationFeeModal(sourceId);
 }
 
 function subsidySection() {
@@ -8659,6 +8746,9 @@ document.addEventListener("click", (event) => {
   if (action === "create-association-note") openCreateAssociationNoteModal(id);
   if (action === "edit-association-note") openEditAssociationNoteModal(id);
   if (action === "cancel-association-note") openCancelAssociationNoteModal(id);
+  if (action === "view-expense-source") openExpenseSource(id);
+  if (action === "edit-expense-source") openEditExpenseSource(id);
+  if (action === "cancel-expense-source") openCancelExpenseSource(id);
   if (action === "view-campaign-detail") {
     state.page = "campaigns";
     state.campaignInspectionMode = "";
