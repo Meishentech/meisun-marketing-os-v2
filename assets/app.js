@@ -409,18 +409,7 @@ function projectOverviewSection() {
     };
   }
 
-  return {
-    type: "table",
-    title: "上下半年行銷專案總覽",
-    wide: true,
-    headers: ["專案", "重要性", "進度", "預算", "待處理"],
-    rows: [
-      ["10 月空調展", tag("高", "red"), progress("68%"), "180萬", "裝潢追加報價待核准"],
-      ["公會技術講座", tag("高", "red"), progress("52%", "amber"), "45萬", "講師與名單權益確認"],
-      ["產品比較白皮書", tag("中", "amber"), progress("35%", "amber"), "18萬", "技術資料與證據來源"],
-      ["LINE 客戶培育", tag("中", "green"), progress("74%", "green"), "12萬", "持續追蹤轉換"],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式行銷案資料。");
 }
 
 function archivedCampaignsSection() {
@@ -1628,15 +1617,7 @@ function decisionListSection() {
     };
   }
 
-  return {
-    type: "list",
-    title: "待決策 / 待討論",
-    items: [
-      ["空調展裝潢追加 28 萬", "關聯：10 月空調展 / 裝潢公司 / 7 日內需回覆", "核准?", "high"],
-      ["公會講座是否提高贊助級距", "可換取名單權益與期刊曝光，需要評估投入效益。", "討論", "medium"],
-      ["競品比較資料對外使用範圍", "證據等級 B，建議先限內部使用。", "確認", ""],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式待決策資料。");
 }
 
 function approvalEntityLabel(entityType = "") {
@@ -1692,18 +1673,7 @@ function channelSummarySection(wide) {
     };
   }
 
-  return {
-    type: "table",
-    title: "Channel 成效摘要",
-    wide,
-    headers: ["Channel", "詢問", "有效名單", "商機", "管理判斷"],
-    rows: [
-      ["公會", "64", "31", "9", tag("加碼", "green")],
-      ["標案工具", "38", "18", "6", tag("持續", "green")],
-      ["官網 / LINE", "52", "26", "4", tag("補分類", "amber")],
-      ["Facebook", "41", "9", "1", tag("調整", "amber")],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式 Channel 成效資料。");
 }
 
 function channelPerformanceRows() {
@@ -1834,17 +1804,7 @@ function budgetSection() {
     };
   }
 
-  return {
-    type: "table",
-    title: "費用狀態",
-    headers: ["項目", "類型", "金額", "狀態", "操作"],
-    rows: [
-      ["展場裝潢追加", "廠商交付物", "28萬", tag("待核准", "red"), "查看"],
-      ["公會年度贊助", "公會合作", "23萬", tag("待核准", "red"), "查看"],
-      ["期刊廣告設計", "外包美編", "6萬", tag("待付款", "amber"), "摘要"],
-      ["講座場地費", "活動費", "12萬", tag("已付款", "green"), "摘要"],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式費用資料。");
 }
 
 function expenseActionGroup(expense = {}) {
@@ -1935,13 +1895,10 @@ function openCancelExpenseSource(sourceKey = "") {
 
 function subsidySection() {
   return {
-    type: "list",
+    type: "table",
     title: "補助申請流程",
-    items: [
-      ["空調展補助", "已送件，等待主管機關回覆；預估可補助 30 萬。", "送件", "ok"],
-      ["公會講座補助", "活動成果與照片已補齊，待核銷文件確認。", "核銷", "medium"],
-      ["媒體曝光補助", "待確認是否符合申請資格。", "評估", ""],
-    ],
+    headers: ["狀態", "說明", "下一步"],
+    rows: [[tag("待建立", "amber"), "目前沒有獨立補助流程資料表，補助與付款狀態先由費用彙總和各專案 / 公會費用維護。", "需要細分補助流程時再建立專用模組。"]],
   };
 }
 
@@ -1961,18 +1918,7 @@ function leadFunnelSection() {
     };
   }
 
-  return {
-    type: "table",
-    title: "名單漏斗",
-    headers: ["階段", "數量", "說明"],
-    rows: [
-      ["詢問 / 接觸", "186", "來自活動、公會、官網、LINE、標案"],
-      ["有效名單", "92", "資料完整且可分派業務"],
-      ["業務跟進", "61", "已建立跟進紀錄"],
-      ["形成商機", "22", "具體需求與時程"],
-      ["需主管協助", "7", "需要高階拜訪或資源協調"],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式名單資料。");
 }
 
 function leadStageDescription(stage) {
@@ -2003,15 +1949,7 @@ function executiveLeadRiskSection() {
     };
   }
 
-  return {
-    type: "list",
-    title: "需主管協助商機",
-    items: [
-      ["南部醫療院所冰水主機汰換", "需要高階拜訪與節能效益說明。", "高", "high"],
-      ["科技廠資料中心冷卻案", "業務要求產品比較表與案例支援。", "中", "medium"],
-      ["商辦大樓年度節能改善", "來自標案工具，待判斷是否投入。", "評估", ""],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式商機資料。");
 }
 
 function channelDecisionSection() {
@@ -2051,16 +1989,7 @@ function channelDecisionSection() {
     };
   }
 
-  return {
-    type: "cards",
-    title: "管理判斷",
-    cards: [
-      ["應增加資源", "公會活動與標案工具帶來的有效商機比例較高，適合連到業務追蹤。"],
-      ["需調整內容", "Facebook 觸及尚可，但 B2B 有效名單低，應轉向技術議題或案例內容。"],
-      ["待補資料", "官網詢問來源需要補齊產品線與產業分類，才方便判斷轉換率。"],
-      ["下一步", "把商機來源統一回到 leads，避免只看彙總數字。"],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式 Channel 判斷資料。");
 }
 
 function approvalFlowSection() {
@@ -2095,41 +2024,55 @@ function approvalFlowSection() {
     };
   }
 
-  return {
-    type: "cards",
-    title: "決策中心來源",
-    cards: [
-      ["預算核准", "來自行銷專案費用、公會費用與廠商追加報價。"],
-      ["素材風險", "來自產品知識庫與文宣資料庫的對外使用審核。"],
-      ["商機協助", "來自業務名單追蹤，需要主管支援拜訪或資源。"],
-      ["公會合作", "來自公會活動、期刊刊登、贊助與會費評估。"],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式審核來源資料。");
 }
 
 function marketingWorklistSection() {
+  if (!state.data.campaigns.length) {
+    return {
+      type: "table",
+      title: "行銷案控管表",
+      headers: ["狀態", "說明", "下一步"],
+      rows: [[tag("尚無進行中", "green"), "目前沒有未封存的行銷案。", "請從行銷專案管理新增正式專案。"]],
+    };
+  }
+
   return {
     type: "table",
     title: "行銷案控管表",
     headers: ["專案", "階段", "預算", "下一步"],
-    rows: [
-      ["10 月空調展", tag("執行中", "amber"), "180萬 / 已用 96萬", "確認裝潢圖與追加報價"],
-      ["公會期刊", tag("稿件中"), "12萬 / 已用 3萬", "美編初稿審核"],
-      ["產品比較白皮書", tag("知識審核", "purple"), "18萬 / 已用 0", "補競品資料證據來源"],
-      ["招標工具優化", tag("規劃中", "gray"), "待估", "整理關鍵字與轉名單流程"],
-    ],
+    rows: sortedCampaignsForExecutive(state.data.campaigns).slice(0, 4).map((campaign) => [
+      campaign.name || "未命名專案",
+      tag(campaign.status || "未填", campaignStatusTone(campaign.status)),
+      formatMoney(campaign.budget),
+      campaign.next_action || campaign.notes || "請進入專案詳情維護下一步。",
+    ]),
   };
 }
 
 function marketingTodoSection() {
+  const openRequests = visibleSalesRequests(true)
+    .filter((request) => !["已完成", "已取消"].includes(request.status || ""))
+    .slice(0, 5);
+
+  if (openRequests.length) {
+    return {
+      type: "list",
+      title: "今天要處理",
+      items: openRequests.map((request) => [
+        request.request_name || "未命名需求",
+        request.description || request.request_type || "業務需求待補說明。",
+        request.priority || request.status || "待處理",
+        ["急件", "急", "高"].includes(request.priority) ? "high" : "medium",
+      ]),
+    };
+  }
+
   return {
-    type: "list",
+    type: "table",
     title: "今天要處理",
-    items: [
-      ["核對空調展裝潢報價", "需送總經理核准，關聯廠商：展場裝潢公司。", "急", "high"],
-      ["回覆業務：科技廠比較表", "需產品知識庫補資料。", "需求", "medium"],
-      ["公會講座邀請名單整理", "活動後轉入商機 / 名單管理。", "名單", ""],
-    ],
+    headers: ["狀態", "說明", "下一步"],
+    rows: [[tag("目前無待辦", "green"), "目前沒有未完成的業務需求單。", "有新需求或審核事項時會顯示。"]],
   };
 }
 
@@ -2388,12 +2331,12 @@ function associationListSection() {
     wide: true,
     headers: ["公會", "類型", "正式關係", "合作標籤", "負責人", "操作"],
     rows: rows.length ? rows : [[
-      state.dataStatus === "live" ? "目前尚未建立公會資料" : "台灣省冷凍空調技師公會",
+      "目前尚未建立公會資料",
       "公會",
-      tag(state.dataStatus === "live" ? "無資料" : "已加入", state.dataStatus === "live" ? "amber" : "green"),
-      state.dataStatus === "live" ? "請新增公會主檔" : "期刊合作、講座協辦",
-      state.dataStatus === "live" ? "無" : "Eric",
-      state.dataStatus === "live" ? actionButton("新增公會", "create-association", "", "is-primary") : "示範資料",
+      tag("無資料", "amber"),
+      "請新增公會主檔",
+      "無",
+      actionButton("新增公會", "create-association", "", "is-primary"),
     ]],
   };
 }
@@ -3182,17 +3125,7 @@ function knowledgeSection(isMarketing) {
     };
   }
 
-  return {
-    type: "table",
-    title: isMarketing ? "產品知識審核" : "常用知識條目",
-    headers: ["主題", "類型", "證據", "可用狀態", "操作"],
-    rows: [
-      ["磁浮主機相對傳統離心機差異", "技術比較", tag("A", "green"), "可對外", "示範資料"],
-      ["大型商辦節能改善說法", "應用場景", tag("B", "green"), isMarketing ? "內部 / 待審" : "內部", "示範資料"],
-      ["常見競品價格異議回覆", "異議處理", tag("B", "amber"), "內部", "示範資料"],
-      ["醫療場域可靠度 FAQ", "FAQ", tag("C", "gray"), isMarketing ? "待技術確認" : "不顯示或標記", "示範資料"],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式產品知識資料。");
 }
 
 function knowledgeActionGroup(item = {}, isMarketing = false) {
@@ -3274,16 +3207,7 @@ function knowledgeArchiveMeta(item = {}) {
 }
 
 function knowledgeDetailSection() {
-  return {
-    type: "cards",
-    title: "條目詳情",
-    cards: [
-      ["一句話重點", "用生命週期成本、節能與維護風險說明，不用價格促銷話術。"],
-      ["建議業務說法", "這類主機適合用整體能耗與長期維護風險評估，而不是只看設備單價。"],
-      ["證據來源", "關聯：正式 DM、公司簡報、技術確認紀錄。"],
-      ["不建議說法", "未確認的節能比例、未授權案例或未審核競品比較。"],
-    ],
-  };
+  return null;
 }
 
 function salesRequestSection(isMarketing) {
@@ -3334,16 +3258,7 @@ function salesRequestSection(isMarketing) {
     };
   }
 
-  return {
-    type: "table",
-    title: isMarketing ? "業務需求列表" : "我的需求單",
-    headers: ["需求", "提出人 / 案件", "類型", "優先級", "狀態"],
-    rows: [
-      ["科技廠競品比較表", "業務 A / 資料中心案", "競爭力分析", tag("急", "red"), tag("製作中", "amber")],
-      ["醫院拜訪簡報", "業務 B / 醫療院所", "簡報", tag("高", "red"), tag("待補資料")],
-      ["公會講座邀請圖", "業務 C / 公會活動", "社群素材", tag("一般"), tag("已完成", "green")],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式業務需求資料。");
 }
 
 function visibleSalesRequests(isMarketing) {
@@ -4018,16 +3933,7 @@ function salesHomeResourcesSection() {
     };
   }
 
-  return {
-    type: "table",
-    title: "常用資料",
-    headers: ["資料", "版本", "適用", "操作"],
-    rows: [
-      ["工程公司版簡報", "2026.07", "工程公司", "下載"],
-      ["磁浮冰水主機 DM", "最新版", "業主 / 技師", "下載"],
-      ["節能改善案例包", "待確認", "內部參考", "查看"],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式文宣資源資料。");
 }
 
 function salesTodoSection() {
@@ -4082,18 +3988,7 @@ function resourceLibrarySection() {
     };
   }
 
-  return {
-    type: "table",
-    title: "搜尋結果：冰水主機",
-    wide: true,
-    headers: ["檔案名稱", "類型", "產品線", "適用客群", "狀態", "操作"],
-    rows: [
-      ["MagBoost Apex 型錄", "DM", "磁浮冰水主機", "業主 / 技師", tag("可對外", "green"), "下載"],
-      ["工程公司版公司簡介", "簡報", "公司能力", "工程公司", tag("可對外", "green"), "下載"],
-      ["競品比較初稿", "分析", "冰水主機", "內部", tag("內部", "amber"), "查看"],
-      ["醫院節能議題包", "文案", "應用場景", "業主", tag("待確認", "gray"), "申請使用"],
-    ],
-  };
+  return dataStatusSection("資料載入中", "正在讀取正式文宣 / 資源資料。");
 }
 
 function salesKnowledgeResourcesSection() {
@@ -4125,7 +4020,7 @@ function salesKnowledgeResourcesSection() {
     };
   }
 
-  return resourceLibrarySection();
+  return dataStatusSection("資料載入中", "正在讀取正式文宣資源資料。");
 }
 
 function marketingResourceManagerSection() {
@@ -4217,12 +4112,8 @@ function tenderSection() {
   return {
     type: "table",
     title: "標案結果",
-    headers: ["標案", "截止", "狀態", "操作"],
-    rows: [
-      ["醫院冰水主機汰換", "8/12", tag("評估中", "amber"), "轉名單"],
-      ["商辦節能改善", "8/28", tag("已追蹤", "green"), "跟進"],
-      ["校園空調採購", "9/03", tag("排除", "gray"), "查看原因"],
-    ],
+    headers: ["狀態", "說明", "下一步"],
+    rows: [[tag("尚無資料", "amber"), "目前沒有可顯示的正式標案資料。", "招標工具目前暫緩處理。"]],
   };
 }
 
@@ -8392,6 +8283,9 @@ function secondaryActionLabel() {
 }
 
 function buildCurrentKpis(page) {
+  if (state.dataStatus === "loading") return dataStatusKpis("資料載入中", "正在讀取正式資料");
+  if (state.dataStatus === "error") return dataStatusKpis("資料讀取失敗", "請重新整理或確認連線");
+
   const key = `${state.role}:${state.page}`;
   const dynamicKpis = {
     "executive:weekly": weeklyKpis(),
@@ -8412,7 +8306,25 @@ function buildCurrentKpis(page) {
     "sales:requests": requestKpis(),
   };
 
-  return dynamicKpis[key] || page.kpis;
+  return dynamicKpis[key] || emptyPageKpis(page.title);
+}
+
+function dataStatusKpis(title, note) {
+  return [
+    [title, "-", note],
+    ["正式資料", "-", "不使用預設展示內容"],
+    ["資料清理", "-", "以正式資料庫為準"],
+    ["下一步", "-", "完成載入後顯示實際狀態"],
+  ];
+}
+
+function emptyPageKpis(pageTitle = "目前頁面") {
+  return [
+    ["正式資料", "0", `${pageTitle} 尚無資料`],
+    ["展示內容", "0", "正式啟用後不顯示"],
+    ["待建立", "0", "請由對應功能新增"],
+    ["狀態", "正式", "使用 Supabase 目前資料"],
+  ];
 }
 
 function weeklyKpis() {
@@ -8442,10 +8354,6 @@ function salesDashboardKpis() {
 
 function resourceKpis() {
   const resources = activeResources();
-  if (!resources.length && state.dataStatus !== "live") {
-    return pages.sales.resources.kpis;
-  }
-
   const externalResources = resources.filter((resource) => resource.is_external_usable).length;
   const internalResources = resources.length - externalResources;
   const withFiles = resources.filter((resource) => resource.file_path).length;
@@ -8459,7 +8367,14 @@ function resourceKpis() {
 }
 
 function leadKpis() {
-  if (!state.data.leads.length) return pages.executive.leads.kpis;
+  if (!state.data.leads.length) {
+    return [
+      ["詢問 / 接觸", "0", "尚未建立名單"],
+      ["有效名單", "0", "尚未分派業務追蹤"],
+      ["形成商機", "0", "尚未形成商機"],
+      ["平均轉換", "0%", "尚無可計算資料"],
+    ];
+  }
 
   const total = state.data.leads.length;
   const qualified = state.data.leads.filter((lead) => ["有效名單", "業務跟進", "形成商機", "需主管協助"].includes(lead.stage)).length;
@@ -8478,8 +8393,12 @@ function leadKpis() {
 function channelKpis() {
   const rows = channelPerformanceRows();
   if (!rows.length) {
-    const page = pages[state.role]?.channels || pages.executive.channels;
-    return page.kpis;
+    return [
+      ["最佳來源", "無", "尚無 Channel 成效"],
+      ["總名單", "0", "尚無名單或成效資料"],
+      ["有效名單", "0", "尚無可計算資料"],
+      ["成交金額", "0", "尚無成交資料"],
+    ];
   }
 
   const best = rows[0];
@@ -8507,7 +8426,12 @@ function associationKpis() {
       ];
     }
 
-    return pages.marketing.associations.kpis;
+    return [
+      ["公會 / 單位", "0", "尚未建立公會資料"],
+      ["年費 / 權益", "0", "尚未建立年費或權益"],
+      ["活動 / 期刊", "0", "尚未建立活動或期刊"],
+      ["待確認", "0", "目前沒有待確認公會資料"],
+    ];
   }
 
   const totalAssociations = state.data.associations.length;
@@ -8544,7 +8468,12 @@ function vendorKpis() {
       ];
     }
 
-    return pages.marketing.vendors.kpis;
+    return [
+      ["合作單位", "0", "尚未建立廠商合作"],
+      ["交付物", "0", "尚未建立交付物"],
+      ["待核准報價", "0", "尚未建立報價狀態"],
+      ["附件完整度", "0%", "尚未建立文件連結"],
+    ];
   }
 
   const deliverables = state.data.campaignVendors.flatMap((vendor) => (
@@ -8577,7 +8506,12 @@ function approvalKpis() {
       ];
     }
 
-    return pages.executive.decisions.kpis;
+    return [
+      ["待核准", "0", "目前沒有待審核事項"],
+      ["需修正", "0", "目前沒有退回補資料"],
+      ["逾期提醒", "0", "目前沒有逾期審核"],
+      ["已處理", "0", "目前沒有已核准紀錄"],
+    ];
   }
 
   const pending = state.data.approvalRequests.filter((request) => request.status === "待審核").length;
@@ -8599,8 +8533,12 @@ function approvalKpis() {
 
 function requestKpis() {
   if (!state.data.salesRequests.length) {
-    const page = pages[state.role]?.requests;
-    return page?.kpis || [];
+    return [
+      ["需求總數", "0", "尚未建立需求單"],
+      ["未完成", "0", "目前沒有未完成需求"],
+      ["急件", "0", "目前沒有急件"],
+      ["已完成", "0", "尚無完成紀錄"],
+    ];
   }
 
   const total = visibleSalesRequests(state.role === "marketing").length;
@@ -8618,8 +8556,12 @@ function requestKpis() {
 
 function expenseKpis() {
   if (!state.data.expenses.length) {
-    const page = pages[state.role]?.budget;
-    return page?.kpis || [];
+    return [
+      ["總支出", "0", "尚無費用彙總"],
+      ["未付款", "0", "目前沒有未付款項目"],
+      ["已付款", "0", "尚無付款紀錄"],
+      ["廠商費用", "0", "尚無廠商費用"],
+    ];
   }
 
   const total = state.data.expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
@@ -8639,8 +8581,12 @@ function knowledgeKpis() {
   const isMarketing = state.role === "marketing";
   const items = visibleKnowledgeItems(isMarketing);
   if (!items.length && state.dataStatus !== "live") {
-    const page = pages[state.role]?.knowledge;
-    return page?.kpis || [];
+    return [
+      ["知識條目", "0", "尚未建立產品知識"],
+      ["可對外", "0", "尚無可對外條目"],
+      ["僅內部 / 待確認", "0", "尚無內部條目"],
+      ["禁止使用", "0", "尚無禁止使用條目"],
+    ];
   }
 
   const usable = items.filter((item) => item.visibility_status === "可對外").length;
@@ -8669,6 +8615,9 @@ function knowledgeKpis() {
 }
 
 function buildCurrentSections(page) {
+  if (state.dataStatus === "loading") return [dataStatusSection("資料載入中", "正在讀取正式資料，請稍候。")];
+  if (state.dataStatus === "error") return [dataStatusSection("資料讀取失敗", "目前無法讀取正式資料，為避免誤判不會顯示預設展示內容。請重新整理或確認登入權限。")];
+
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
     "executive:dashboard": [weeklySummaryEntrySection(), campaignSummarySection(), projectOverviewSection(), campaignRiskSummarySection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
@@ -8694,7 +8643,17 @@ function buildCurrentSections(page) {
     "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false), requestFormPreviewSection()],
   };
 
-  return dynamicSections[key] || page.sections;
+  return dynamicSections[key] || [];
+}
+
+function dataStatusSection(status, description) {
+  return {
+    type: "table",
+    title: "正式資料狀態",
+    wide: true,
+    headers: ["狀態", "說明"],
+    rows: [[tag(status, status === "資料載入中" ? "amber" : "red"), description]],
+  };
 }
 
 function campaignPageSections() {
@@ -8729,7 +8688,7 @@ function renderKpis(kpis) {
 }
 
 function renderSections(sections) {
-  document.getElementById("contentGrid").innerHTML = sections.map(renderSection).join("");
+  document.getElementById("contentGrid").innerHTML = sections.filter(Boolean).map(renderSection).join("");
 }
 
 function renderSection(section) {
@@ -9263,53 +9222,7 @@ async function loadExistingData() {
     state.data.knowledgeResourceLinks = Array.isArray(knowledgeResourceLinks) ? knowledgeResourceLinks : [];
     state.data.expenses = Array.isArray(expenses) ? expenses : [];
 
-    const liveCount = state.data.campaigns.length
-      + state.data.archivedCampaigns.length
-      + state.data.resources.length
-      + state.data.tenders.length
-      + state.data.leads.length
-      + state.data.associations.length
-      + state.data.archivedAssociations.length
-      + state.data.associationTags.length
-      + state.data.associationCooperations.length
-      + state.data.associationStages.length
-      + state.data.associationTasks.length
-      + state.data.cancelledAssociationTasks.length
-      + state.data.associationTaskExpenses.length
-      + state.data.cancelledAssociationTaskExpenses.length
-      + state.data.associationEvents.length
-      + state.data.cancelledAssociationEvents.length
-      + state.data.associationPublications.length
-      + state.data.cancelledAssociationPublications.length
-      + state.data.associationFees.length
-      + state.data.cancelledAssociationFees.length
-      + state.data.associationBenefits.length
-      + state.data.archivedAssociationBenefits.length
-      + state.data.associationNotes.length
-      + state.data.cancelledAssociationNotes.length
-      + state.data.campaignVendors.length
-      + state.data.cancelledCampaignVendors.length
-      + state.data.cancelledDeliverables.length
-      + state.data.campaignTasks.length
-      + state.data.cancelledCampaignTasks.length
-      + state.data.campaignBudgetItems.length
-      + state.data.cancelledCampaignBudgetItems.length
-      + state.data.campaignDocuments.length
-      + state.data.archivedCampaignDocuments.length
-      + state.data.campaignRisks.length
-      + state.data.archivedCampaignRisks.length
-      + state.data.campaignRiskUpdates.length
-      + state.data.cancelledCampaignRiskUpdates.length
-      + state.data.campaignPerformance.length
-      + state.data.vendors.length
-      + state.data.vendorDocuments.length
-      + state.data.salesRequests.length
-      + state.data.cancelledSalesRequests.length
-      + state.data.approvalRequests.length
-      + state.data.knowledgeItems.length
-      + state.data.knowledgeResourceLinks.length
-      + state.data.expenses.length;
-    state.dataStatus = liveCount > 0 ? "live" : "fallback";
+    state.dataStatus = "live";
   } catch (error) {
     console.warn("Existing data load failed", error);
     state.dataStatus = "error";
@@ -9556,7 +9469,7 @@ function showLogin(message = "") {
   document.getElementById("appShell").classList.add("is-hidden");
   document.getElementById("loginScreen").classList.remove("is-hidden");
   document.getElementById("loginMessage").textContent = message;
-  state.dataStatus = "fallback";
+  state.dataStatus = "loading";
 }
 
 function showApp() {
