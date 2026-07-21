@@ -1892,6 +1892,8 @@ function openCancelExpenseSource(sourceKey = "") {
 }
 
 function subsidySection() {
+  if (state.role === "executive") return null;
+
   return {
     type: "table",
     title: "補助申請流程",
