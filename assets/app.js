@@ -341,14 +341,14 @@ const pages = {
     },
     knowledge: {
       title: "產品知識庫",
-      subtitle: "查差異化、技術比較、競品分析、客戶異議處理與 FAQ。",
+      subtitle: "產品知識與文宣資源並行查詢；知識看說法，文宣直接下載或開啟。",
       kpis: [
         ["可查條目", "17", "A/B 等級"],
         ["技術比較", "6", "冰水主機相關"],
         ["競品分析", "4", "內部使用"],
         ["常見 FAQ", "7", "依產業情境整理"],
       ],
-      sections: [knowledgeSection(false), knowledgeDetailSection()],
+      sections: [knowledgeSection(false), salesKnowledgeResourcesSection(), knowledgeDetailSection()],
     },
     tenders: {
       title: "招標工具",
@@ -4086,6 +4086,38 @@ function resourceLibrarySection() {
   };
 }
 
+function salesKnowledgeResourcesSection() {
+  const resources = activeResources();
+  if (resources.length) {
+    return {
+      type: "table",
+      title: "文宣資源",
+      wide: true,
+      headers: ["資源", "類型", "產品線", "適用", "操作"],
+      rows: resources.slice(0, 8).map((resource) => [
+        resource.title || "未命名資料",
+        resource.resource_type || "其他",
+        resource.product_line || "未分類",
+        resource.audience || "未設定",
+        resourceActionGroup(resource),
+      ]),
+      footer: "文宣資源是獨立資料庫，可直接使用；知識條目旁的關聯文宣只是輔助參考。",
+    };
+  }
+
+  if (state.dataStatus === "live") {
+    return {
+      type: "table",
+      title: "文宣資源",
+      wide: true,
+      headers: ["狀態", "說明", "下一步"],
+      rows: [[tag("尚無可用資料", "amber"), "目前沒有可供業務使用的未封存文宣資源。", "可從業務需求單提出需要的資料。"]],
+    };
+  }
+
+  return resourceLibrarySection();
+}
+
 function marketingResourceManagerSection() {
   const resources = activeResources();
   if (resources.length) {
@@ -4151,7 +4183,7 @@ function resourceUsageRuleSection() {
     cards: [
       ["版本清楚", "每份資料顯示版本與更新日期，避免使用過期檔案。"],
       ["範圍清楚", "標示可對外、內部使用、待確認或禁止使用。"],
-      ["來源清楚", "正式 DM、簡報、案例與知識條目互相關聯。"],
+      ["並行管理", "文宣資源可直接下載；與產品知識的關聯只是輔助脈絡。"],
       ["需求回流", "業務找不到資料時，可直接提出需求單。"],
     ],
   };
@@ -5339,12 +5371,12 @@ function knowledgeResourceLinksHtml(item = {}, canManage = false) {
     : "";
   const body = linkedResources.length
     ? `<div class="linked-resource-list">${linkedResources.map(({ link, resource }) => resourceLinkCard(link, resource, canManage)).join("")}</div>`
-    : `<p class="empty-note">尚未連結正式文宣、DM 或資源。</p>`;
+    : `<p class="empty-note">此知識條目尚未附加參考文宣；業務仍可到文宣資源區直接查找可用資料。</p>`;
 
   return `
     <section class="linked-resource-section">
       <div class="linked-resource-header">
-        <h3>關聯文宣 / DM / 資源</h3>
+        <h3>參考文宣 / DM / 資源</h3>
         ${manageAction}
       </div>
       ${body}
@@ -8492,13 +8524,14 @@ function knowledgeKpis() {
   const blocked = items.filter((item) => item.visibility_status === "禁止使用").length;
 
   if (!isMarketing) {
-    const visibleIds = new Set(items.map((item) => item.id));
-    const linkedResources = state.data.knowledgeResourceLinks.filter((link) => visibleIds.has(link.knowledge_item_id)).length;
+    const resources = activeResources();
+    const externalResources = resources.filter((resource) => resource.is_external_usable).length;
+    const internalResources = resources.length - externalResources;
     return [
       ["可查條目", String(items.length), "可對外或僅內部"],
       ["可對外", String(usable), "可直接搭配客戶溝通"],
       ["僅內部", String(internal), "只供內部討論使用"],
-      ["關聯文宣", String(linkedResources), "已連結 DM、簡報或資源"],
+      ["可用文宣", String(resources.length), `${externalResources} 份可對外 / ${internalResources} 份內部`],
     ];
   }
 
