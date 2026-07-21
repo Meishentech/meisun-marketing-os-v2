@@ -122,7 +122,6 @@ const roleMeta = {
       ["dashboard", "業務資料中心"],
       ["resources", "文宣 / 資源下載"],
       ["knowledge", "產品知識庫"],
-      ["tenders", "招標工具"],
       ["leads", "我的名單"],
       ["requests", "業務需求單"],
     ],
@@ -348,7 +347,7 @@ const pages = {
         ["競品分析", "4", "內部使用"],
         ["常見 FAQ", "7", "依產業情境整理"],
       ],
-      sections: [knowledgeSection(false), salesKnowledgeResourcesSection(), knowledgeDetailSection()],
+      sections: [knowledgeSection(false), salesKnowledgeResourcesSection()],
     },
     tenders: {
       title: "招標工具",
@@ -4032,14 +4031,25 @@ function salesHomeResourcesSection() {
 }
 
 function salesTodoSection() {
+  const requests = visibleSalesRequests(false).filter((request) => !["已完成", "已取消"].includes(request.status || ""));
+  if (requests.length) {
+    return {
+      type: "list",
+      title: "我的待辦",
+      items: requests.slice(0, 5).map((request) => [
+        request.request_name || "未命名需求",
+        request.description || request.request_type || "待補需求說明。",
+        request.status || "待處理",
+        request.priority === "急件" ? "high" : request.priority === "一般" ? "medium" : "ok",
+      ]),
+    };
+  }
+
   return {
-    type: "list",
+    type: "table",
     title: "我的待辦",
-    items: [
-      ["醫院汰換案下次追蹤", "7/18 前回報拜訪結果。", "逾期", "high"],
-      ["科技廠需求：競品比較表", "已送行銷，等待資料。", "待回覆", "medium"],
-      ["公會講座名單", "已分派 6 筆，需標記跟進狀態。", "跟進", "ok"],
-    ],
+    headers: ["狀態", "說明", "下一步"],
+    rows: [[tag("目前無待辦", "green"), "你目前沒有未完成的需求單。", "有需要素材或資料時，可提出業務需求。"]],
   };
 }
 
@@ -4248,6 +4258,7 @@ function salesLeadSection() {
     return {
       type: "table",
       title: "我的名單",
+      headerAction: state.auth.canSwitchRoles ? "" : actionButton("新增名單", "create-sales-lead", "", "is-primary"),
       headers: ["公司 / 案件", "來源", "狀態", "下次追蹤"],
       rows: leads.slice(0, 8).map((lead) => [
         lead.company_name || "未命名名單",
@@ -4261,22 +4272,18 @@ function salesLeadSection() {
   return {
     type: "table",
     title: "我的名單",
+    headerAction: state.auth.canSwitchRoles ? "" : actionButton("新增名單", "create-sales-lead", "", "is-primary"),
     headers: ["公司 / 案件", "來源", "狀態", "下次追蹤"],
-    rows: [
-      ["南部醫療院所", "標案", tag("主管協助", "amber"), "7/18"],
-      ["科技廠資料中心", "公會講座", tag("跟進中", "green"), "7/22"],
-      ["商辦大樓管委會", "官網", tag("初談"), "7/25"],
-    ],
+    rows: [[tag("尚無指定名單", "green"), "目前沒有指派給你的名單。", "無", "無"]],
   };
 }
 
 function visibleSalesLeads() {
   if (!state.data.leads.length) return [];
-  if (state.auth.canSwitchRoles) return state.data.leads;
+  if (state.role === "sales" && state.auth.canSwitchRoles) return [];
 
   const email = String(state.auth.email || "").toLowerCase();
-  const assigned = state.data.leads.filter((lead) => String(lead.assigned_sales || "").toLowerCase() === email);
-  return assigned.length ? assigned : state.data.leads;
+  return state.data.leads.filter((lead) => String(lead.assigned_sales || "").toLowerCase() === email);
 }
 
 function leadStageTone(stage = "") {
@@ -4398,11 +4405,94 @@ function selectOptions(options = [], selected = "") {
 
 function leadOptions(selected = "") {
   const options = [["", "不關聯名單"]];
-  state.data.leads.slice(0, 50).forEach((lead) => {
+  const leads = state.role === "sales" ? visibleSalesLeads() : state.data.leads;
+  leads.slice(0, 50).forEach((lead) => {
     const contact = lead.contact_name ? ` / ${lead.contact_name}` : "";
     options.push([lead.id, `${lead.company_name || "未命名名單"}${contact}`]);
   });
   return selectOptions(options, selected);
+}
+
+function salesLeadFormHtml(lead = {}) {
+  return `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>公司 / 案件名稱</span>
+        <input name="company_name" value="${escapeAttr(lead.company_name || "")}" required>
+      </label>
+      <label class="form-field">
+        <span>聯絡人</span>
+        <input name="contact_name" value="${escapeAttr(lead.contact_name || "")}">
+      </label>
+      <label class="form-field">
+        <span>聯絡電話</span>
+        <input name="contact_phone" value="${escapeAttr(lead.contact_phone || "")}">
+      </label>
+      <label class="form-field">
+        <span>聯絡 Email</span>
+        <input name="contact_email" type="email" value="${escapeAttr(lead.contact_email || "")}">
+      </label>
+      <label class="form-field">
+        <span>來源</span>
+        <input name="source_channel" value="${escapeAttr(lead.source_channel || "")}" placeholder="例如：拜訪、官網、活動、介紹">
+      </label>
+      <label class="form-field">
+        <span>重要性</span>
+        <select name="importance">
+          ${selectOptions([["高", "高"], ["中", "中"], ["低", "低"]], lead.importance || "中")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>狀態</span>
+        <select name="stage">
+          ${selectOptions([["詢問", "詢問"], ["有效名單", "有效名單"], ["業務跟進", "業務跟進"], ["形成商機", "形成商機"], ["需主管協助", "需主管協助"]], lead.stage || "詢問")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>下次追蹤</span>
+        <input name="next_followup_date" type="date" value="${escapeAttr(formatDate(lead.next_followup_date))}">
+      </label>
+      <label class="form-field is-wide">
+        <span>需求 / 備註</span>
+        <textarea name="requirement_note">${escapeHtml(lead.requirement_note || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>下一步</span>
+        <textarea name="next_step">${escapeHtml(lead.next_step || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
+function salesLeadPayload(values = {}) {
+  return {
+    company_name: values.company_name?.trim(),
+    contact_name: values.contact_name?.trim() || null,
+    contact_phone: values.contact_phone?.trim() || null,
+    contact_email: values.contact_email?.trim() || null,
+    source_channel: values.source_channel?.trim() || null,
+    requirement_note: values.requirement_note?.trim() || null,
+    importance: values.importance || "中",
+    assigned_sales: state.auth.email,
+    stage: values.stage || "詢問",
+    next_step: values.next_step?.trim() || null,
+    next_followup_date: values.next_followup_date || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateSalesLeadModal() {
+  openModal("新增我的名單", salesLeadFormHtml(), {
+    submitLabel: "建立名單",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = salesLeadPayload(values);
+      if (!payload.company_name) throw new Error("請輸入公司或案件名稱。");
+      await api("POST", "leads", payload);
+      closeModal();
+      await loadExistingData();
+    },
+  });
 }
 
 function campaignOptions(selected = "") {
@@ -8338,14 +8428,14 @@ function weeklyKpis() {
 function salesDashboardKpis() {
   const resources = activeResources();
   const externalResources = resources.filter((resource) => resource.is_external_usable).length;
-  const leads = state.data.leads;
-  const pendingTenders = state.data.tenders.filter((tender) => !["已排除", "已轉名單"].includes(tender.status || ""));
+  const leads = visibleSalesLeads();
+  const knowledgeItems = visibleKnowledgeItems(false);
   const requests = visibleSalesRequests(false);
   const pendingRequests = requests.filter((request) => !["已完成", "已取消"].includes(request.status || ""));
   return [
     ["可下載資料", String(resources.length), `${externalResources} 份可對外`, "resources"],
-    ["新增名單", String(leads.length), "可查看與追蹤", "leads"],
-    ["標案待評估", String(pendingTenders.length), "點擊查看標案", "tenders"],
+    ["我的名單", String(leads.length), "已指派給我的名單", "leads"],
+    ["產品知識", String(knowledgeItems.length), "可查說法與比較", "knowledge"],
     ["待回報跟進", String(pendingRequests.length), "點擊查看需求單", "requests"],
   ];
 }
@@ -8599,8 +8689,7 @@ function buildCurrentSections(page) {
     "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [resourceLibrarySection()],
-    "sales:knowledge": [knowledgeSection(false), salesKnowledgeResourcesSection(), knowledgeDetailSection()],
-    "sales:tenders": [tenderSection(), tenderRuleSection()],
+    "sales:knowledge": [knowledgeSection(false), salesKnowledgeResourcesSection()],
     "sales:leads": [salesLeadSection(), leadFollowUpSection()],
     "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false), requestFormPreviewSection()],
   };
@@ -8865,6 +8954,7 @@ document.addEventListener("click", (event) => {
   if (!button || button.disabled) return;
 
   const { action, id } = button.dataset;
+  if (action === "create-sales-lead") openCreateSalesLeadModal();
   if (action === "edit-sales-request") openEditSalesRequestModal(id);
   if (action === "view-sales-request") openViewSalesRequestModal(id);
   if (action === "cancel-sales-request") openCancelSalesRequestModal(id);
