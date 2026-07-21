@@ -242,7 +242,7 @@ const pages = {
         ["核銷中", "5", "補助相關 2 件"],
         ["待付款", "73萬", "3 筆廠商或活動費用"],
       ],
-      sections: [budgetSection(), subsidySection()],
+      sections: [budgetSection()],
     },
     channels: {
       title: "Channel 成效",
@@ -1815,18 +1815,22 @@ function ratioValue(numerator, denominator) {
 }
 
 function budgetSection() {
-  if (state.data.expenses.length) {
+  const campaigns = budgetTrackingCampaigns();
+
+  if (campaigns.length) {
     return {
       type: "table",
-      title: "費用狀態",
-      headers: ["專案 / 項目", "類型", "金額", "狀態", "日期", "操作"],
-      rows: state.data.expenses.slice(0, 10).map((expense) => [
-        trustedTableHtml(expenseSubjectCell(expense)),
-        expense.category || "未分類",
-        formatMoney(expense.amount),
-        tag(expense.payment_status || "未填", statusTone(expense.payment_status)),
-        formatDate(expense.payment_date) || "未設定",
-        expenseActionGroup(expense),
+      title: "未結案專案預算 / 補助 / 付款進度",
+      wide: true,
+      headers: ["專案 / 時程", "預算與實支", "補助編號", "補助申請進度", "補助款結案", "付款結案", "操作"],
+      rows: campaigns.map((campaign) => [
+        trustedTableHtml(campaignBudgetProjectCell(campaign)),
+        trustedTableHtml(campaignBudgetAmountCell(campaign)),
+        campaign.midea_budget_code || "未建立",
+        trustedTableHtml(campaignSubsidyProgressCell(campaign)),
+        trustedTableHtml(campaignSubsidyClosureCell(campaign)),
+        trustedTableHtml(campaignPaymentClosureCell(campaign)),
+        actionGroup([actionButton("進入專案", "view-campaign-detail", campaign.id, "is-primary")]),
       ]),
     };
   }
@@ -1834,19 +1838,125 @@ function budgetSection() {
   if (state.dataStatus === "live") {
     return {
       type: "table",
-      title: "費用狀態",
+      title: "未結案專案預算 / 補助 / 付款進度",
       headers: ["狀態", "說明", "下一步"],
       rows: [
         [
           tag("尚無資料", "amber"),
-          "目前沒有可顯示的費用彙總資料。",
-          "請先建立預算、廠商費用或公會費用資料。",
+          "目前沒有未結案行銷專案可顯示。",
+          "若有新專案，請先建立行銷專案並補上預算、補助與付款狀態。",
         ],
       ],
     };
   }
 
   return dataStatusSection("資料載入中", "正在讀取正式費用資料。");
+}
+
+function budgetTrackingCampaigns() {
+  return state.data.campaigns
+    .filter((campaign) => !isClosedCampaign(campaign))
+    .slice()
+    .sort(compareBudgetTrackingCampaigns);
+}
+
+function compareBudgetTrackingCampaigns(a = {}, b = {}) {
+  const startDiff = String(campaignStartDate(a) || "9999-12-31").localeCompare(String(campaignStartDate(b) || "9999-12-31"));
+  if (startDiff) return startDiff;
+
+  const endDiff = String(a.planned_end || a.actual_end || "9999-12-31").localeCompare(String(b.planned_end || b.actual_end || "9999-12-31"));
+  if (endDiff) return endDiff;
+
+  return String(a.name || "").localeCompare(String(b.name || ""), "zh-Hant-TW");
+}
+
+function isClosedCampaign(campaign = {}) {
+  return ["結案", "已完成", "完成"].includes(campaign.status);
+}
+
+function campaignBudgetProjectCell(campaign = {}) {
+  return `<span class="cell-main">${escapeHtml(campaign.name || "未命名專案")}</span><span class="cell-sub">${escapeHtml(campaignDateRange(campaign))}</span>`;
+}
+
+function campaignBudgetAmountCell(campaign = {}) {
+  const budget = Number(campaign.budget || 0);
+  const actual = campaignActualSpend(campaign);
+  const estimated = campaignEstimatedSpend(campaign);
+  const baseline = budget || estimated;
+  const variance = actual && baseline ? actual - baseline : 0;
+  const lines = [
+    `<span class="cell-main">預算 ${escapeHtml(formatMoney(budget || estimated))}</span>`,
+    `<span class="cell-sub">實支 ${escapeHtml(formatMoney(actual))}</span>`,
+  ];
+  if (variance) lines.push(`<span class="cell-sub">差額 ${escapeHtml(formatMoney(variance))}</span>`);
+  return lines.join("");
+}
+
+function campaignSubsidyProgressCell(campaign = {}) {
+  const status = campaign.claim_status || (campaign.status === "補助申請" ? "補助申請" : "");
+  const hasSubsidy = hasCampaignSubsidy(campaign);
+  const label = status || (hasSubsidy ? "待更新" : "未申請");
+  const note = campaign.subsidy_planned
+    ? `預估 ${formatMoney(campaign.subsidy_planned)}`
+    : "尚未填預估補助";
+  return `${tag(label, statusTone(label))}<span class="cell-sub">${escapeHtml(note)}</span>`;
+}
+
+function campaignSubsidyClosureCell(campaign = {}) {
+  if (!hasCampaignSubsidy(campaign)) return `${tag("未申請", "gray")}<span class="cell-sub">尚無補助資料</span>`;
+
+  const planned = Number(campaign.subsidy_planned || 0);
+  const received = Number(campaign.subsidy_received || 0);
+  const closed = planned > 0 && received >= planned;
+  const partial = received > 0 && !closed;
+  const label = closed ? "已結案" : partial ? "部分撥付" : "未結案";
+  const diff = planned && received ? planned - received : 0;
+  const note = [
+    `實撥 ${formatMoney(received)}`,
+    diff > 0 ? `差額 / 折讓 ${formatMoney(diff)}` : "",
+  ].filter(Boolean).join("，");
+  return `${tag(label, statusTone(label))}<span class="cell-sub">${escapeHtml(note || "尚未實撥")}</span>`;
+}
+
+function campaignPaymentClosureCell(campaign = {}) {
+  const relatedPayments = campaignPaymentItems(campaign.id);
+  const unpaid = relatedPayments.filter((item) => !["已付款", "不需付款", "不適用"].includes(item.payment_status || "")).length;
+  const paid = relatedPayments.filter((item) => item.payment_status === "已付款").length;
+  const manualStatus = campaign.payment_status || "";
+  const label = manualStatus || (!relatedPayments.length ? "未建立" : unpaid ? "未結案" : "已結案");
+  const tone = unpaid ? "amber" : statusTone(label);
+  const note = relatedPayments.length
+    ? `${paid} 已付 / ${unpaid} 未結`
+    : "尚未建立付款項目";
+  return `${tag(label, tone)}<span class="cell-sub">${escapeHtml(note)}</span>`;
+}
+
+function hasCampaignSubsidy(campaign = {}) {
+  return Boolean(campaign.midea_budget_code || Number(campaign.subsidy_planned || 0) || Number(campaign.subsidy_received || 0) || campaign.claim_status);
+}
+
+function isCampaignSubsidyClosed(campaign = {}) {
+  const planned = Number(campaign.subsidy_planned || 0);
+  const received = Number(campaign.subsidy_received || 0);
+  return hasCampaignSubsidy(campaign) && planned > 0 && received >= planned;
+}
+
+function isCampaignPaymentClosed(campaign = {}) {
+  const manualStatus = campaign.payment_status || "";
+  if (["已付款", "付款結案", "已結案", "不需付款", "不適用"].includes(manualStatus)) return true;
+  const relatedPayments = campaignPaymentItems(campaign.id);
+  return relatedPayments.length > 0
+    && relatedPayments.every((item) => ["已付款", "不需付款", "不適用"].includes(item.payment_status || ""));
+}
+
+function campaignPaymentItems(campaignId) {
+  const budgetItems = state.data.campaignBudgetItems
+    .filter((item) => item.campaign_id === campaignId && !item.cancelled_at)
+    .map((item) => ({ payment_status: item.payment_status || "未請款" }));
+  const vendorItems = state.data.campaignVendors
+    .filter((item) => item.campaign_id === campaignId && !item.cancelled_at && (Number(item.budget_amount || 0) || Number(item.actual_amount || 0)))
+    .map((item) => ({ payment_status: item.payment_status || "未請款" }));
+  return [...budgetItems, ...vendorItems];
 }
 
 function expenseActionGroup(expense = {}) {
@@ -1964,17 +2074,6 @@ function openCancelExpenseSource(sourceKey = "") {
   if (sourceTable === "marketing_campaign_vendors") return openCancelCampaignVendorModal(sourceId);
   if (sourceTable === "association_task_expenses") return openCancelAssociationTaskExpenseModal(sourceId);
   if (sourceTable === "association_fee_records") return openCancelAssociationFeeModal(sourceId);
-}
-
-function subsidySection() {
-  if (state.role === "executive") return null;
-
-  return {
-    type: "table",
-    title: "補助申請流程",
-    headers: ["狀態", "說明", "下一步"],
-    rows: [[tag("待建立", "amber"), "目前沒有獨立補助流程資料表，補助與付款狀態先由費用彙總和各專案 / 公會費用維護。", "需要細分補助流程時再建立專用模組。"]],
-  };
 }
 
 function leadFunnelSection() {
@@ -4297,9 +4396,9 @@ function escapeAttr(value = "") {
 }
 
 function statusTone(status = "") {
-  if (["已追蹤", "已完成", "可對外", "已付款", "已繳", "已簽約", "已報價", "已核准", "已使用"].includes(status)) return "green";
-  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "準備中", "已送審", "待審核", "需修正"].includes(status)) return "amber";
-  if (["已排除", "逾期", "未請款", "未付款", "未繳", "未開始", "未使用", "不適用"].includes(status)) return "gray";
+  if (["已追蹤", "已完成", "可對外", "已付款", "已繳", "已簽約", "已報價", "已核准", "已使用", "已結案", "付款結案"].includes(status)) return "green";
+  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "準備中", "已送審", "待審核", "需修正", "補助申請", "部分撥付", "待更新"].includes(status)) return "amber";
+  if (["已排除", "逾期", "未請款", "未付款", "未繳", "未開始", "未使用", "不適用", "未結案", "未建立", "未申請"].includes(status)) return "gray";
   if (["追加待核"].includes(status)) return "red";
   return "";
 }
@@ -8701,25 +8800,25 @@ function requestKpis() {
 }
 
 function expenseKpis() {
-  if (!state.data.expenses.length) {
+  const campaigns = budgetTrackingCampaigns();
+  if (!campaigns.length) {
     return [
-      ["總支出", "0", "尚無費用彙總"],
-      ["未付款", "0", "目前沒有未付款項目"],
-      ["已付款", "0", "尚無付款紀錄"],
-      ["廠商費用", "0", "尚無廠商費用"],
+      ["未結案專案", "0", "目前沒有需追蹤專案"],
+      ["總預算", "0", "未結案專案預算"],
+      ["補助未結案", "0", "尚無待追蹤補助"],
+      ["付款未結案", "0", "尚無待追蹤付款"],
     ];
   }
 
-  const total = state.data.expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
-  const unpaid = state.data.expenses.filter((expense) => expense.payment_status !== "已付款").length;
-  const paid = state.data.expenses.filter((expense) => expense.payment_status === "已付款").length;
-  const vendorExpenses = state.data.expenses.filter((expense) => expense.source_table === "marketing_campaign_vendors").length;
+  const totalBudget = campaigns.reduce((sum, campaign) => sum + Number(campaign.budget || campaignEstimatedSpend(campaign) || 0), 0);
+  const subsidyOpen = campaigns.filter((campaign) => hasCampaignSubsidy(campaign) && !isCampaignSubsidyClosed(campaign)).length;
+  const paymentOpen = campaigns.filter((campaign) => !isCampaignPaymentClosed(campaign)).length;
 
   return [
-    ["總支出", formatMoney(total), "所有費用彙總"],
-    ["未付款", String(unpaid), "尚未標記為已付款"],
-    ["已付款", String(paid), "已完成付款"],
-    ["廠商費用", String(vendorExpenses), "已納入合作廠商費用"],
+    ["未結案專案", String(campaigns.length), "依時間排序追蹤"],
+    ["總預算", formatMoney(totalBudget), "未結案專案預算"],
+    ["補助未結案", String(subsidyOpen), "已申請或待補資料"],
+    ["付款未結案", String(paymentOpen), "仍有未付款項目"],
   ];
 }
 
@@ -8775,7 +8874,7 @@ function buildCurrentSections(page) {
     "executive:weekly": weeklySummarySections(),
     "marketing:dashboard": [weeklySummaryEntrySection(), campaignSummarySection(), marketingRiskInspectionCardsSection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     "marketing:campaigns": campaignPageSections(),
-    "marketing:budget": [budgetSection(), subsidySection()],
+    "marketing:budget": [budgetSection()],
     "marketing:channels": [channelSummarySection(false), channelDecisionSection()],
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
