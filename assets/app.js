@@ -2621,7 +2621,7 @@ function associationProfileSection(association = {}) {
       ["合作標籤", relationshipChipList(association.id)],
       ["內部負責人", escapeHtml(association.internal_owner || "未填")],
       ["類型", escapeHtml(association.association_type || "未分類")],
-      ["聯絡人", escapeHtml(association.contact_person || "未填")],
+      ["聯絡人", escapeHtml(association.primary_contact || "未填")],
       ["電話 / Email", `${escapeHtml(association.phone || "未填")}<br>${escapeHtml(association.email || "未填")}`],
       ["網站 / LINE", `${escapeHtml(association.website || "未填")}<br>${escapeHtml(association.line_url || "未填")}`],
       ["地址", escapeHtml(association.address || "未填")],
@@ -6164,7 +6164,7 @@ function associationFormHtml(association = {}) {
         </label>
         <label class="form-field">
           <span>聯絡人</span>
-          <input name="contact_person" value="${escapeAttr(association.contact_person || "")}">
+          <input name="primary_contact" value="${escapeAttr(association.primary_contact || "")}">
         </label>
       </div>
     </div>
@@ -6206,7 +6206,7 @@ function associationPayload(values = {}) {
     name: values.name?.trim(),
     association_type: values.association_type?.trim() || null,
     join_status: values.join_status || "未入會",
-    contact_person: values.contact_person?.trim() || null,
+    primary_contact: values.primary_contact?.trim() || null,
     phone: values.phone?.trim() || null,
     email: values.email?.trim() || null,
     address: values.address?.trim() || null,
