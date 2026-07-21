@@ -2395,8 +2395,6 @@ function associationListSection() {
       association.internal_owner || "未填",
       actionGroup([
         actionButton("詳情", "view-association-detail", association.id, "is-primary"),
-        actionButton("編輯", "edit-association", association.id, "is-primary"),
-        actionButton("封存", "archive-association", association.id, "is-danger"),
       ]),
     ]);
 
@@ -2499,7 +2497,6 @@ function associationDetailSections() {
   }
 
   return [
-    associationDetailHeaderSection(association),
     associationProfileSection(association),
     associationTagManagerSection(association),
     associationFeesSection(association),
@@ -2514,39 +2511,22 @@ function associationDetailSections() {
   ];
 }
 
-function associationDetailHeaderSection(association = {}) {
-  const isArchived = Boolean(association.archived_at);
-  return {
-    type: "cards",
-    title: `公會詳情：${associationDisplayName(association)}`,
-    wide: true,
-    cards: [
-      ["返回", actionGroup([actionButton("返回公會列表", "back-association-list", "", "is-primary")])],
-      ["正式關係", `${tag(association.join_status || "未填", isArchived ? "gray" : associationRelationshipTone(association.join_status))} ${isArchived ? tag("已封存", "gray") : ""}`],
-      ["合作標籤", relationshipChipList(association.id)],
-      ["內部負責人", association.internal_owner || "未填"],
-    ],
-  };
-}
-
 function associationProfileSection(association = {}) {
+  const isArchived = Boolean(association.archived_at);
   return {
     type: "cards",
     title: "公會基本資料",
     wide: true,
     cards: [
+      ["正式關係", `${tag(association.join_status || "未填", isArchived ? "gray" : associationRelationshipTone(association.join_status))} ${isArchived ? tag("已封存", "gray") : ""}`],
+      ["合作標籤", relationshipChipList(association.id)],
+      ["內部負責人", escapeHtml(association.internal_owner || "未填")],
       ["類型", escapeHtml(association.association_type || "未分類")],
       ["聯絡人", escapeHtml(association.contact_person || "未填")],
       ["電話 / Email", `${escapeHtml(association.phone || "未填")}<br>${escapeHtml(association.email || "未填")}`],
       ["網站 / LINE", `${escapeHtml(association.website || "未填")}<br>${escapeHtml(association.line_url || "未填")}`],
       ["地址", escapeHtml(association.address || "未填")],
       ["備註", escapeHtml(association.notes || "未填")],
-      ["操作", association.archived_at
-        ? "已封存公會目前只讀。"
-        : actionGroup([
-          actionButton("編輯主檔", "edit-association", association.id, "is-primary"),
-          actionButton("封存公會", "archive-association", association.id, "is-danger"),
-        ])],
     ],
   };
 }
@@ -8284,10 +8264,15 @@ function render() {
   const meta = roleMeta[state.role];
   const page = pages[state.role][state.page];
   const campaignDetail = currentCampaignDetail();
+  const associationDetail = currentAssociationDetail();
 
   document.getElementById("roleEyebrow").textContent = welcomeLine();
-  document.getElementById("pageTitle").textContent = campaignDetail?.name || page.title;
-  document.getElementById("pageSubtitle").textContent = campaignDetail ? "專案詳情：任務、預算、文件、風險與成效。" : page.subtitle;
+  document.getElementById("pageTitle").textContent = campaignDetail?.name || (associationDetail ? associationDisplayName(associationDetail) : page.title);
+  document.getElementById("pageSubtitle").textContent = campaignDetail
+    ? "專案詳情：任務、預算、文件、風險與成效。"
+    : associationDetail
+      ? "公會詳情：主檔、年費、權益、合作項目與歷史紀錄。"
+      : page.subtitle;
   updateTopAction("primaryAction", primaryActionLabel(meta));
   updateTopAction("secondaryAction", secondaryActionLabel());
 
@@ -8308,6 +8293,11 @@ function render() {
 function currentCampaignDetail() {
   if (state.page !== "campaigns" || !state.campaignDetailId) return null;
   return findCampaign(state.campaignDetailId) || null;
+}
+
+function currentAssociationDetail() {
+  if (state.page !== "associations" || !state.associationDetailId) return null;
+  return findAssociation(state.associationDetailId) || null;
 }
 
 function normalizeCurrentPage() {
@@ -8368,6 +8358,7 @@ function dailyGreetingMessage() {
 function primaryActionLabel(meta) {
   if (state.role === "sales") return state.page === "requests" ? "提出素材需求" : "";
   if (state.page === "campaigns" && state.campaignDetailId) return state.role === "executive" ? "返回戰情室" : "返回行銷專案";
+  if (state.page === "associations" && state.associationDetailId) return "返回公會列表";
   if (state.page === "weekly") return "複製週報";
   if (state.role === "executive") return "查看待決策";
   if (state.role === "marketing" && state.page === "campaigns") return "新增行銷案";
@@ -8380,6 +8371,7 @@ function primaryActionLabel(meta) {
 
 function secondaryActionLabel() {
   if (state.role === "marketing" && state.page === "campaigns" && state.campaignDetailId) return "編輯專案";
+  if (state.role === "marketing" && state.page === "associations" && state.associationDetailId) return "編輯公會";
   if (state.page === "weekly") return "匯出週報";
   return "";
 }
@@ -8390,6 +8382,7 @@ function buildCurrentKpis(page) {
 
   const campaignDetail = currentCampaignDetail();
   if (campaignDetail) return campaignDetailKpis(campaignDetail);
+  if (currentAssociationDetail()) return [];
 
   const key = `${state.role}:${state.page}`;
   const dynamicKpis = {
@@ -9004,6 +8997,12 @@ document.getElementById("primaryAction").addEventListener("click", () => {
     return;
   }
 
+  if (state.page === "associations" && state.associationDetailId) {
+    state.associationDetailId = "";
+    render();
+    return;
+  }
+
   if (state.page === "weekly") {
     copyWeeklyReport();
     return;
@@ -9060,6 +9059,11 @@ document.getElementById("primaryAction").addEventListener("click", () => {
 document.getElementById("secondaryAction").addEventListener("click", () => {
   if (state.role === "marketing" && state.page === "campaigns" && state.campaignDetailId) {
     openEditCampaignModal(state.campaignDetailId);
+    return;
+  }
+
+  if (state.role === "marketing" && state.page === "associations" && state.associationDetailId) {
+    openEditAssociationModal(state.associationDetailId);
     return;
   }
 
