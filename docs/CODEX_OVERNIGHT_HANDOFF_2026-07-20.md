@@ -22,6 +22,11 @@
    - Replaces broad authenticated Storage policies for `marketing-resource-files` and `campaign-documents`.
    - Keeps upload/delete object operations available only to marketing/admin for rollback and cleanup.
 
+5. `77c53c5` - Fix approval withdrawal trigger guard.
+   - Updated only `sql/phase1_batch18d_approval_requests_rls.sql`.
+   - Moved `status` handling out of the generic marketing/admin decision-field block so `status = '已撤回'` can be handled by the dedicated withdrawal guard.
+   - Smoke test 4 is the key live check for this fix.
+
 ## Live SQL Status
 
 Already confirmed by user screenshots:
@@ -76,7 +81,14 @@ For 18G:
 
 ## Current Blocker
 
-Codex cannot safely execute live Supabase SQL from this workspace because no Supabase admin/service execution channel is available. The SQL files and smoke tests are ready for Supabase SQL Editor execution after review.
+Codex cannot safely execute live Supabase SQL from this workspace because no Supabase admin/service execution channel is available.
+
+Attempted on 2026-07-21:
+
+- Supabase MCP `_get_project("apgrclmrkarxlajmhnpa")` returned permission denied.
+- Local Supabase CLI is installed (`2.109.0`) and logged in, but `supabase projects list` does not include the Marketing OS project ref `apgrclmrkarxlajmhnpa`.
+
+The SQL files and smoke tests are ready for Supabase SQL Editor execution after review.
 
 ## Local State Notes
 
