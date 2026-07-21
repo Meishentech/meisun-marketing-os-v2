@@ -120,8 +120,7 @@ const roleMeta = {
     primaryAction: "提出素材需求",
     nav: [
       ["dashboard", "業務資料中心"],
-      ["resources", "文宣 / 資源下載"],
-      ["knowledge", "產品知識庫"],
+      ["resources", "文宣 / 產品知識"],
       ["leads", "我的名單"],
       ["requests", "業務需求單"],
     ],
@@ -328,8 +327,8 @@ const pages = {
       sections: [salesHomeResourcesSection(), salesTodoSection()],
     },
     resources: {
-      title: "文宣 / 資源下載",
-      subtitle: "統一下載已核准、可使用的 DM、簡報、產品資料、分析與案例。",
+      title: "文宣 / 產品知識",
+      subtitle: "同一頁查詢正式文宣、產品資料、技術比較、FAQ 與內部說法。",
       kpis: [
         ["正式文宣", "46", "可對外使用"],
         ["內部分析", "18", "不可直接轉傳客戶"],
@@ -8206,14 +8205,15 @@ async function copyWeeklyReport() {
 }
 
 function render() {
+  normalizeCurrentPage();
   const meta = roleMeta[state.role];
   const page = pages[state.role][state.page];
 
   document.getElementById("roleEyebrow").textContent = welcomeLine();
   document.getElementById("pageTitle").textContent = page.title;
   document.getElementById("pageSubtitle").textContent = page.subtitle;
-  document.getElementById("primaryAction").textContent = primaryActionLabel(meta);
-  document.getElementById("secondaryAction").textContent = secondaryActionLabel();
+  updateTopAction("primaryAction", primaryActionLabel(meta));
+  updateTopAction("secondaryAction", secondaryActionLabel());
 
   renderNav(meta.nav);
   renderKpis(buildCurrentKpis(page));
@@ -8227,6 +8227,22 @@ function render() {
   const roleSwitch = document.querySelector(".role-switch");
   roleSwitch.classList.toggle("is-hidden", !state.auth.canSwitchRoles);
   roleSwitch.classList.toggle("is-locked", !state.auth.canSwitchRoles);
+}
+
+function normalizeCurrentPage() {
+  if (state.role === "sales" && state.page === "knowledge") {
+    state.page = "resources";
+  }
+  if (!pages[state.role]?.[state.page]) {
+    state.page = "dashboard";
+    clearCampaignDrilldown();
+  }
+}
+
+function updateTopAction(id, label) {
+  const button = document.getElementById(id);
+  button.textContent = label || "";
+  button.classList.toggle("is-hidden", !label);
 }
 
 function welcomeLine() {
@@ -8266,7 +8282,7 @@ function dailyGreetingMessage() {
 }
 
 function primaryActionLabel(meta) {
-  if (state.role === "sales") return "提出素材需求";
+  if (state.role === "sales") return state.page === "requests" ? "提出素材需求" : "";
   if (state.page === "weekly") return "複製週報";
   if (state.role === "executive") return "查看待決策";
   if (state.role === "marketing" && state.page === "campaigns") return "新增行銷案";
@@ -8279,6 +8295,7 @@ function primaryActionLabel(meta) {
 
 function secondaryActionLabel() {
   if (state.page === "weekly") return "匯出週報";
+  if (state.role === "sales") return "";
   return "匯出摘要";
 }
 
@@ -8302,8 +8319,7 @@ function buildCurrentKpis(page) {
     "marketing:requests": requestKpis(),
     "marketing:weekly": weeklyKpis(),
     "sales:dashboard": salesDashboardKpis(),
-    "sales:resources": resourceKpis(),
-    "sales:knowledge": knowledgeKpis(),
+    "sales:resources": salesResourceKnowledgeKpis(),
     "sales:requests": requestKpis(),
   };
 
@@ -8382,6 +8398,20 @@ function resourceKpis() {
     ["可對外", String(externalResources), "可直接提供客戶"],
     ["僅內部", String(internalResources), "不可直接轉傳"],
     ["檔案 / 連結", `${withFiles} / ${withLinks}`, "可下載或開啟"],
+  ];
+}
+
+function salesResourceKnowledgeKpis() {
+  const resources = activeResources();
+  const externalResources = resources.filter((resource) => resource.is_external_usable).length;
+  const knowledgeItems = visibleKnowledgeItems(false);
+  const externalKnowledge = knowledgeItems.filter((item) => item.visibility_status === "可對外").length;
+  const internalKnowledge = knowledgeItems.length - externalKnowledge;
+  return [
+    ["可用文宣", String(resources.length), `${externalResources} 份可對外`],
+    ["產品知識", String(knowledgeItems.length), `${externalKnowledge} 則可對外`],
+    ["內部說法", String(internalKnowledge), "僅供內部討論"],
+    ["資料來源", "並行", "文宣與知識分區查詢"],
   ];
 }
 
@@ -8656,8 +8686,7 @@ function buildCurrentSections(page) {
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
-    "sales:resources": [resourceLibrarySection()],
-    "sales:knowledge": [knowledgeSection(false), salesKnowledgeResourcesSection()],
+    "sales:resources": [knowledgeSection(false), resourceLibrarySection()],
     "sales:leads": [salesLeadSection(), leadFollowUpSection()],
     "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false), requestFormPreviewSection()],
   };
@@ -8869,7 +8898,7 @@ document.getElementById("primaryAction").addEventListener("click", () => {
     return;
   }
 
-  if (state.role === "sales") {
+  if (state.role === "sales" && state.page === "requests") {
     openCreateSalesRequestModal();
     return;
   }
