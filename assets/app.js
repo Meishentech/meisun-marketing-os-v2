@@ -337,7 +337,7 @@ const pages = {
         ["待確認資料", "7", "需行銷或技術確認"],
         ["本月更新", "12", "版本已更新"],
       ],
-      sections: [resourceLibrarySection(), resourceUsageRuleSection()],
+      sections: [resourceLibrarySection()],
     },
     knowledge: {
       title: "產品知識庫",
@@ -8316,6 +8316,8 @@ function buildCurrentKpis(page) {
     "marketing:knowledge": knowledgeKpis(),
     "marketing:requests": requestKpis(),
     "marketing:weekly": weeklyKpis(),
+    "sales:dashboard": salesDashboardKpis(),
+    "sales:resources": resourceKpis(),
     "sales:knowledge": knowledgeKpis(),
     "sales:requests": requestKpis(),
   };
@@ -8330,6 +8332,39 @@ function weeklyKpis() {
     ["異動行銷案", String(summary.changedCampaigns.length), "本週有資料異動"],
     ["待處理", String(summary.nextPriorities.length), "下週優先事項"],
     ["成效更新", String(summary.weeklyPerformance.length), "本週更新成效資料"],
+  ];
+}
+
+function salesDashboardKpis() {
+  const resources = activeResources();
+  const externalResources = resources.filter((resource) => resource.is_external_usable).length;
+  const leads = state.data.leads;
+  const pendingTenders = state.data.tenders.filter((tender) => !["已排除", "已轉名單"].includes(tender.status || ""));
+  const requests = visibleSalesRequests(false);
+  const pendingRequests = requests.filter((request) => !["已完成", "已取消"].includes(request.status || ""));
+  return [
+    ["可下載資料", String(resources.length), `${externalResources} 份可對外`, "resources"],
+    ["新增名單", String(leads.length), "可查看與追蹤", "leads"],
+    ["標案待評估", String(pendingTenders.length), "點擊查看標案", "tenders"],
+    ["待回報跟進", String(pendingRequests.length), "點擊查看需求單", "requests"],
+  ];
+}
+
+function resourceKpis() {
+  const resources = activeResources();
+  if (!resources.length && state.dataStatus !== "live") {
+    return pages.sales.resources.kpis;
+  }
+
+  const externalResources = resources.filter((resource) => resource.is_external_usable).length;
+  const internalResources = resources.length - externalResources;
+  const withFiles = resources.filter((resource) => resource.file_path).length;
+  const withLinks = resources.filter((resource) => resource.resource_url || resource.canva_url).length;
+  return [
+    ["可用資源", String(resources.length), "未封存文宣資源"],
+    ["可對外", String(externalResources), "可直接提供客戶"],
+    ["僅內部", String(internalResources), "不可直接轉傳"],
+    ["檔案 / 連結", `${withFiles} / ${withLinks}`, "可下載或開啟"],
   ];
 }
 
@@ -8563,8 +8598,8 @@ function buildCurrentSections(page) {
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
-    "sales:resources": [resourceLibrarySection(), resourceUsageRuleSection()],
-    "sales:knowledge": [knowledgeSection(false), knowledgeDetailSection()],
+    "sales:resources": [resourceLibrarySection()],
+    "sales:knowledge": [knowledgeSection(false), salesKnowledgeResourcesSection(), knowledgeDetailSection()],
     "sales:tenders": [tenderSection(), tenderRuleSection()],
     "sales:leads": [salesLeadSection(), leadFollowUpSection()],
     "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false), requestFormPreviewSection()],
@@ -8595,8 +8630,8 @@ function renderNav(navItems) {
 }
 
 function renderKpis(kpis) {
-  document.getElementById("kpiGrid").innerHTML = kpis.map(([label, value, note]) => `
-    <article class="kpi-card">
+  document.getElementById("kpiGrid").innerHTML = kpis.map(([label, value, note, pageTarget]) => `
+    <article class="kpi-card${pageTarget ? " is-clickable" : ""}"${pageTarget ? ` data-page-target="${escapeAttr(pageTarget)}"` : ""}>
       <div class="kpi-label">${label}</div>
       <div class="kpi-value">${value}</div>
       <div class="kpi-note">${note}</div>
@@ -8818,6 +8853,14 @@ document.getElementById("primaryAction").addEventListener("click", () => {
 document.getElementById("secondaryAction").addEventListener("click", exportCurrentSummary);
 
 document.addEventListener("click", (event) => {
+  const kpiCard = event.target.closest("[data-page-target]");
+  if (kpiCard) {
+    state.page = kpiCard.dataset.pageTarget;
+    clearCampaignDrilldown();
+    render();
+    return;
+  }
+
   const button = event.target.closest("[data-action]");
   if (!button || button.disabled) return;
 

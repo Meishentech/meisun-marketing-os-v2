@@ -521,6 +521,17 @@ h1 {
   padding: 18px;
 }
 
+.kpi-card.is-clickable {
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.kpi-card.is-clickable:hover {
+  border-color: #9bc7e9;
+  box-shadow: 0 16px 36px rgba(17, 50, 78, 0.14);
+  transform: translateY(-1px);
+}
+
 .kpi-label {
   color: var(--muted);
   font-size: 13px;
