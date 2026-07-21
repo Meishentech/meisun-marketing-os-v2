@@ -4164,7 +4164,7 @@ function salesLeadSection() {
     title: "我的名單",
     headerAction: state.auth.canSwitchRoles ? "" : actionButton("新增名單", "create-sales-lead", "", "is-primary"),
     headers: ["公司 / 案件", "來源", "狀態", "下次追蹤"],
-    rows: [[tag("尚無指定名單", "green"), "目前沒有指派給你的名單。", "無", "無"]],
+    rows: [[tag("尚無指定名單", "green"), "目前沒有指派給你的名單；行銷總監可分派，或你可自行新增名單。", "無", "無"]],
   };
 }
 
@@ -8340,7 +8340,7 @@ function emptyPageKpis(pageTitle = "目前頁面") {
     ["正式資料", "0", `${pageTitle} 尚無資料`],
     ["展示內容", "0", "正式啟用後不顯示"],
     ["待建立", "0", "請由對應功能新增"],
-    ["狀態", "正式", "使用 Supabase 目前資料"],
+    ["狀態", "正式", "使用目前系統資料"],
   ];
 }
 
