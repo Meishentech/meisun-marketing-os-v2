@@ -154,7 +154,7 @@ const pages = {
         ["補助待核銷", "1", "公會講座資料補齊中"],
         ["待付款", "73萬", "3 筆廠商或活動費用"],
       ],
-      sections: [budgetSection(), subsidySection()],
+      sections: [budgetSection()],
     },
     leads: {
       title: "商機拓展與轉換率",
@@ -8669,7 +8669,7 @@ function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
     "executive:dashboard": [weeklySummaryEntrySection(), campaignSummarySection(), projectOverviewSection(), campaignRiskSummarySection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
-    "executive:budget": [budgetSection(), subsidySection()],
+    "executive:budget": [budgetSection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:channels": [channelSummarySection(false), channelDecisionSection()],
     "executive:decisions": [decisionListSection(), campaignRiskSummarySection(), approvalFlowSection()],
