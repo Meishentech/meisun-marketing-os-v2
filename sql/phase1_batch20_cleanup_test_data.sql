@@ -471,7 +471,7 @@ where exists (
   where coalesce(ast.task_name, '') ilike p.pattern
      or coalesce(ast.description, '') ilike p.pattern
      or coalesce(ast.next_step, '') ilike p.pattern
-     or coalesce(ast.required_materials, '') ilike p.pattern
+     or coalesce(ast.required_materials::text, '') ilike p.pattern
      or coalesce(ast.notes, '') ilike p.pattern
      or coalesce(ast.attachment, '') ilike p.pattern
      or coalesce(ast.cancel_reason, '') ilike p.pattern
@@ -495,7 +495,7 @@ where exists (
   where coalesce(ae.event_name, '') ilike p.pattern
      or coalesce(ae.location, '') ilike p.pattern
      or coalesce(ae.organizer, '') ilike p.pattern
-     or coalesce(ae.required_materials, '') ilike p.pattern
+     or coalesce(ae.required_materials::text, '') ilike p.pattern
      or coalesce(ae.result_notes, '') ilike p.pattern
      or coalesce(ae.attachment, '') ilike p.pattern
      or coalesce(ae.cancel_reason, '') ilike p.pattern
@@ -519,7 +519,7 @@ where exists (
   where coalesce(aps.publication_name, '') ilike p.pattern
      or coalesce(aps.ad_spec, '') ilike p.pattern
      or coalesce(aps.topic, '') ilike p.pattern
-     or coalesce(aps.required_materials, '') ilike p.pattern
+     or coalesce(aps.required_materials::text, '') ilike p.pattern
      or coalesce(aps.result_notes, '') ilike p.pattern
      or coalesce(aps.attachment, '') ilike p.pattern
      or coalesce(aps.cancel_reason, '') ilike p.pattern
