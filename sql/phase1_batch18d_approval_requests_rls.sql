@@ -85,8 +85,7 @@ begin
   end if;
 
   if public.is_marketing_or_admin() then
-    if old.status is distinct from new.status
-       or old.decided_by is distinct from new.decided_by
+    if old.decided_by is distinct from new.decided_by
        or old.decided_at is distinct from new.decided_at
        or old.decision_note is distinct from new.decision_note then
       raise exception 'Only executive users can update approval decision fields';
