@@ -59,6 +59,7 @@ const state = {
   campaignDetailId: "",
   campaignInspectionMode: "",
   associationDetailId: "",
+  knowledgeArchiveAvailable: false,
 };
 
 let modalSubmitHandler = null;
@@ -3197,13 +3198,19 @@ function knowledgeSection(isMarketing) {
 
 function knowledgeActionGroup(item = {}, isMarketing = false) {
   const actions = [actionButton("查看", "view-knowledge-item", item.id, "is-primary")];
-  if (isMarketing) actions.push(actionButton("編輯", "edit-knowledge-item", item.id));
+  if (isMarketing) {
+    actions.push(actionButton("編輯", "edit-knowledge-item", item.id));
+    if (state.knowledgeArchiveAvailable) {
+      actions.push(actionButton("封存", "archive-knowledge-item", item.id, "is-danger"));
+    }
+  }
   return actionGroup(actions);
 }
 
 function visibleKnowledgeItems(isMarketing) {
-  if (isMarketing) return state.data.knowledgeItems;
-  return state.data.knowledgeItems.filter((item) => ["可對外", "僅內部"].includes(item.visibility_status));
+  const activeItems = state.data.knowledgeItems.filter((item) => !item.archived_at);
+  if (isMarketing) return activeItems;
+  return activeItems.filter((item) => ["可對外", "僅內部"].includes(item.visibility_status));
 }
 
 function evidenceTone(level = "") {
@@ -3232,6 +3239,40 @@ function knowledgeGovernanceSection() {
       ["D 不可使用", "標記禁止使用，不出現在業務端。"],
     ],
   };
+}
+
+function archivedKnowledgeSection() {
+  if (state.role !== "marketing") return null;
+  if (!state.knowledgeArchiveAvailable) {
+    return {
+      type: "cards",
+      title: "已封存知識條目",
+      cards: [["封存功能尚未啟用", "請先執行產品知識封存 SQL。完成後，這裡會顯示已封存的歷史紀錄。"]],
+    };
+  }
+  const items = state.data.knowledgeItems.filter((item) => Boolean(item.archived_at));
+  return {
+    type: "details-table",
+    title: `已封存知識條目（${items.length}）`,
+    summary: "只讀保留已封存的產品知識，不再顯示給業務使用。",
+    wide: true,
+    headers: ["主題", "類型", "原可用狀態", "封存資訊", "原因"],
+    rows: items.length
+      ? items.map((item) => [
+        item.title || "未命名知識",
+        item.knowledge_type || "未分類",
+        tag(item.visibility_status || "未填", visibilityTone(item.visibility_status)),
+        knowledgeArchiveMeta(item),
+        item.archive_reason || "未填寫原因",
+      ])
+      : [["無", "目前沒有已封存知識條目。", tag("正常", "green"), "無", "無"]],
+  };
+}
+
+function knowledgeArchiveMeta(item = {}) {
+  const archivedAt = item.archived_at ? formatDate(item.archived_at) : "未記錄時間";
+  const archivedBy = item.archived_by ? formatRequester(item.archived_by) : "未記錄封存人";
+  return `${archivedAt} / ${archivedBy}`;
 }
 
 function knowledgeDetailSection() {
@@ -5182,8 +5223,14 @@ function findVisibleKnowledgeItem(id) {
 function openViewKnowledgeItemModal(id) {
   const item = findVisibleKnowledgeItem(id);
   if (!item) return;
+  const marketingActions = [
+    actionButton("編輯條目", "edit-knowledge-item", item.id, "is-primary"),
+  ];
+  if (state.knowledgeArchiveAvailable) {
+    marketingActions.push(actionButton("封存條目", "archive-knowledge-item", item.id, "is-danger"));
+  }
   const actions = state.role === "marketing"
-    ? `<div class="action-group">${actionButton("編輯條目", "edit-knowledge-item", item.id, "is-primary")}</div>`
+    ? actionGroup(marketingActions)
     : `<div class="action-group">${actionButton("提出補充需求", "request-knowledge-update", item.id, "is-primary")}</div>`;
 
   openModal("知識條目詳情", `
@@ -5197,9 +5244,46 @@ function openViewKnowledgeItemModal(id) {
   });
 }
 
+function openArchiveKnowledgeItemModal(id) {
+  if (!state.knowledgeArchiveAvailable) {
+    openModal("封存尚未啟用", `<p class="empty-note">請先執行產品知識封存 SQL，再回來封存不需要的知識條目。</p>`, {
+      submitLabel: "知道了",
+      hideCancel: true,
+      onSubmit: async () => closeModal(),
+    });
+    return;
+  }
+  const item = state.data.knowledgeItems.find((entry) => entry.id === id);
+  if (!item || item.archived_at) return;
+
+  openModal("封存知識條目", `
+    <p class="empty-note">確定要封存「${escapeHtml(item.title || "未命名知識")}」嗎？封存後不會出現在產品知識審核與業務產品知識庫，但會保留歷史紀錄與既有連結。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>封存原因（選填）</span>
+        <textarea name="archive_reason" placeholder="例如：內容過期、資料重複、改由新版條目取代。"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認封存",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `product_knowledge_items?id=eq.${encodeURIComponent(id)}`, {
+        archived_at: nowIso(),
+        archived_by: state.auth.email,
+        archive_reason: values.archive_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
 function openEditKnowledgeItemModal(id) {
   const item = state.data.knowledgeItems.find((entry) => entry.id === id);
-  if (!item) return;
+  if (!item || item.archived_at) return;
 
   openModal("編輯知識條目", knowledgeItemFormHtml(item, false), {
     submitLabel: "儲存變更",
@@ -8429,7 +8513,7 @@ function buildCurrentSections(page) {
     "marketing:tenders": [tenderSection(), tenderAdminSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection(), vendorFormPreviewSection()],
     "marketing:associations": associationPageSections(),
-    "marketing:knowledge": [knowledgeSection(true), marketingResourceManagerSection(), archivedMarketingResourcesSection(), knowledgeGovernanceSection()],
+    "marketing:knowledge": [knowledgeSection(true), archivedKnowledgeSection(), marketingResourceManagerSection(), archivedMarketingResourcesSection(), knowledgeGovernanceSection()],
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
@@ -8702,6 +8786,7 @@ document.addEventListener("click", (event) => {
   if (action === "send-vendor-approval") openVendorApprovalModal(id);
   if (action === "view-knowledge-item") openViewKnowledgeItemModal(id);
   if (action === "edit-knowledge-item") openEditKnowledgeItemModal(id);
+  if (action === "archive-knowledge-item") openArchiveKnowledgeItemModal(id);
   if (action === "request-knowledge-update") openKnowledgeSupplementRequestModal(id);
   if (action === "add-knowledge-resource") openAddKnowledgeResourceModal(id);
   if (action === "remove-knowledge-resource") openRemoveKnowledgeResourceModal(id);
@@ -8939,7 +9024,7 @@ async function loadExistingData() {
       loadSalesRequests(),
       loadCancelledSalesRequests(),
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
-      safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,detail,recommended_pitch,prohibited_pitch,related_competitor,evidence_level,visibility_status,owner,version,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=100"),
+      loadProductKnowledgeItems(),
       safeGET("product_knowledge_resource_links?select=id,knowledge_item_id,resource_id,created_at&order=created_at.desc&limit=500"),
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
       loadAssociationTasks(),
@@ -9163,6 +9248,14 @@ async function loadMarketingResources() {
   if (Array.isArray(withEditableFields)) return withEditableFields;
 
   return safeGET("marketing_resources?select=id,title,resource_type,product_line,audience,version,resource_url,canva_url,file_path,file_name,file_size,is_external_usable,updated_at&order=updated_at.desc&limit=100");
+}
+
+async function loadProductKnowledgeItems() {
+  const withArchive = await safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,detail,recommended_pitch,prohibited_pitch,related_competitor,evidence_level,visibility_status,owner,version,archived_at,archived_by,archive_reason,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=100", null);
+  state.knowledgeArchiveAvailable = Array.isArray(withArchive);
+  if (Array.isArray(withArchive)) return withArchive;
+
+  return safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,detail,recommended_pitch,prohibited_pitch,related_competitor,evidence_level,visibility_status,owner,version,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=100");
 }
 
 async function loadTenderResults() {
