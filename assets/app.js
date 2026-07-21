@@ -154,6 +154,17 @@ const pages = {
       ],
       sections: [budgetSection()],
     },
+    campaigns: {
+      title: "行銷專案詳情",
+      subtitle: "查看單一行銷案的任務、預算、文件、風險與成效。",
+      kpis: [
+        ["專案詳情", "只讀", "由行銷總監維護"],
+        ["任務", "0", "依專案資料顯示"],
+        ["預算", "0", "依專案資料顯示"],
+        ["風險", "0", "依專案資料顯示"],
+      ],
+      sections: [],
+    },
     leads: {
       title: "商機拓展與轉換率",
       subtitle: "追蹤每個 Channel 產生的名單、跟進狀態與商機轉換。",
@@ -604,7 +615,7 @@ function campaignDetailSections() {
 
   return [
     campaignDetailHeaderSection(campaign),
-    campaignDetailActionCardsSection(campaign),
+    canManageCampaignDetails() ? campaignDetailActionCardsSection(campaign) : null,
     campaignTasksSection(campaign),
     cancelledCampaignTasksSection(campaign),
     campaignBudgetItemsSection(campaign),
@@ -617,6 +628,10 @@ function campaignDetailSections() {
     archivedCampaignRisksSection(campaign),
     campaignPerformanceSection(campaign),
   ];
+}
+
+function canManageCampaignDetails() {
+  return state.role === "marketing";
 }
 
 function campaignDetailHeaderSection(campaign = {}) {
@@ -658,10 +673,10 @@ function campaignTasksSection(campaign = {}) {
     `${formatDate(task.planned_start) || "未填"} - ${formatDate(task.planned_end) || "未填"}`,
     tag(task.status || "未開始", statusTone(task.status || "未開始")),
     `${Number(task.completion_pct || 0)}%`,
-    actionGroup([
+    canManageCampaignDetails() ? actionGroup([
       actionButton("編輯", "edit-campaign-task", task.id, "is-primary"),
       actionButton("取消", "cancel-campaign-task", task.id, "is-danger"),
-    ]),
+    ]) : "無",
   ]);
 
   return {
@@ -669,7 +684,7 @@ function campaignTasksSection(campaign = {}) {
     title: "任務 / 里程碑",
     wide: true,
     headers: ["排序", "任務", "負責人", "期間", "狀態", "完成度", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立任務", "無", "無", tag("未開始", "gray"), "0%", actionButton("新增任務", "create-campaign-task", campaign.id, "is-primary")]],
+    rows: rows.length ? rows : [["無", "尚未建立任務", "無", "無", tag("未開始", "gray"), "0%", canManageCampaignDetails() ? actionButton("新增任務", "create-campaign-task", campaign.id, "is-primary") : "無"]],
   };
 }
 
@@ -702,10 +717,10 @@ function campaignBudgetItemsSection(campaign = {}) {
     budgetAmountText(item),
     tag(item.quote_status || "待報價", statusTone(item.quote_status || "待報價")),
     tag(item.payment_status || "未請款", statusTone(item.payment_status || "未請款")),
-    actionGroup([
+    canManageCampaignDetails() ? actionGroup([
       actionButton("編輯", "edit-campaign-budget-item", item.id, "is-primary"),
       actionButton("取消", "cancel-campaign-budget-item", item.id, "is-danger"),
-    ]),
+    ]) : "無",
   ]);
 
   return {
@@ -713,7 +728,7 @@ function campaignBudgetItemsSection(campaign = {}) {
     title: "預算 / 補助 / 付款項目",
     wide: true,
     headers: ["排序", "項目", "性質", "金額", "報價", "付款", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未開始", "gray"), tag("未請款", "gray"), actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary")]],
+    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未開始", "gray"), tag("未請款", "gray"), canManageCampaignDetails() ? actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary") : "無"]],
   };
 }
 
@@ -745,11 +760,13 @@ function campaignDocumentsSection(campaign = {}) {
     document.version_note || "未填",
     document.file_name || "未上傳檔案",
     formatDate(document.uploaded_at) || "未填",
-    actionGroup([
-      document.file_path ? actionButton("開啟", "open-campaign-document", document.id, "is-primary") : disabledInlineAction("無檔案"),
-      actionButton("編輯", "edit-campaign-document", document.id, "is-primary"),
-      actionButton("封存", "archive-campaign-document", document.id, "is-danger"),
-    ]),
+    canManageCampaignDetails()
+      ? actionGroup([
+        document.file_path ? actionButton("開啟", "open-campaign-document", document.id, "is-primary") : disabledInlineAction("無檔案"),
+        actionButton("編輯", "edit-campaign-document", document.id, "is-primary"),
+        actionButton("封存", "archive-campaign-document", document.id, "is-danger"),
+      ])
+      : (document.file_path ? actionButton("開啟", "open-campaign-document", document.id, "is-primary") : "無"),
   ]);
 
   return {
@@ -757,7 +774,7 @@ function campaignDocumentsSection(campaign = {}) {
     title: "文件 / 版本",
     wide: true,
     headers: ["類型", "標題", "版本", "檔案", "上傳日", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立文件", "無", "無", "無", actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary")]],
+    rows: rows.length ? rows : [["無", "尚未建立文件", "無", "無", "無", canManageCampaignDetails() ? actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary") : "無"]],
   };
 }
 
@@ -795,11 +812,11 @@ function campaignRisksSection(campaign = {}) {
       risk.show_on_dashboard ? tag("戰情室", "amber") : tag("專案內", "gray"),
       latestRiskUpdateText(latest),
       riskUpdateTimelineText(risk.id),
-      actionGroup([
+      canManageCampaignDetails() ? actionGroup([
         actionButton("編輯", "edit-campaign-risk", risk.id, "is-primary"),
         actionButton("追蹤", "create-risk-update", risk.id, "is-primary"),
         actionButton("封存", "archive-campaign-risk", risk.id, "is-danger"),
-      ]),
+      ]) : "無",
     ];
   });
 
@@ -808,7 +825,7 @@ function campaignRisksSection(campaign = {}) {
     title: "風險 / 待決事項",
     wide: true,
     headers: ["類型", "事項", "影響", "負責人", "到期日", "狀態", "顯示", "最新追蹤", "追蹤脈絡", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立風險 / 待決事項", tag("正常", "green"), "無", "無", tag("無", "green"), "無", "無", "無", actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary")]],
+    rows: rows.length ? rows : [["無", "尚未建立風險 / 待決事項", tag("正常", "green"), "無", "無", tag("無", "green"), "無", "無", "無", canManageCampaignDetails() ? actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary") : "無"]],
   };
 }
 
@@ -843,10 +860,10 @@ function campaignRiskUpdatesSection(campaign = {}) {
       formatDate(update.next_followup_date) || "未設定",
       update.is_important ? tag("重要", "amber") : tag("一般", "gray"),
       update.updated_by || "未填",
-      actionGroup([
+      canManageCampaignDetails() ? actionGroup([
         actionButton("編輯", "edit-risk-update", update.id, "is-primary"),
         actionButton("取消", "cancel-risk-update", update.id, "is-danger"),
-      ]),
+      ]) : "無",
     ];
   });
 
@@ -893,14 +910,14 @@ function campaignPerformanceSection(campaign = {}) {
       rows: [[
         tag("尚未填寫", "amber"),
         "此行銷案尚未建立成效資料，可先填主要 Channel、觸及、名單、有效商機與成交金額。",
-        actionButton("新增成效", "edit-campaign-performance", campaign.id, "is-primary"),
+        canManageCampaignDetails() ? actionButton("新增成效", "edit-campaign-performance", campaign.id, "is-primary") : "無",
       ]],
     };
   }
 
   const spend = campaignPerformanceSpend(campaign);
   const rows = [
-    ["主要 Channel", performance.channel || "未填", "行銷案主要歸因來源", actionButton("編輯成效", "edit-campaign-performance", campaign.id, "is-primary")],
+    ["主要 Channel", performance.channel || "未填", "行銷案主要歸因來源", canManageCampaignDetails() ? actionButton("編輯成效", "edit-campaign-performance", campaign.id, "is-primary") : "無"],
     ["觸及 / 名單", `${formatCount(performance.reach_count)} / ${formatCount(performance.lead_count)}`, `名單轉換率 ${ratioText(performance.lead_count, performance.reach_count)}`, "無"],
     ["詢問 / 有效商機", `${formatCount(performance.inquiry_count)} / ${formatCount(performance.qualified_lead_count)}`, `詢問率 ${ratioText(performance.inquiry_count, performance.reach_count)}，有效名單率 ${ratioText(performance.qualified_lead_count, performance.lead_count)}`, "無"],
     ["成交", `${formatCount(performance.deal_count)} 件 / ${formatCurrencyFull(performance.deal_amount)}`, `成交率 ${ratioText(performance.deal_count, performance.qualified_lead_count)}`, "無"],
@@ -8698,6 +8715,7 @@ function buildCurrentSections(page) {
   const key = `${state.role}:${state.page}`;
   const dynamicSections = {
     "executive:dashboard": [weeklySummaryEntrySection(), campaignSummarySection(), projectOverviewSection(), campaignRiskSummarySection(), archivedCampaignsSection(), decisionListSection(), channelSummarySection(true)],
+    "executive:campaigns": state.campaignDetailId ? campaignDetailSections() : [campaignRiskSummarySection()],
     "executive:budget": [budgetSection()],
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:channels": [channelSummarySection(false), channelDecisionSection()],
@@ -9056,6 +9074,9 @@ document.addEventListener("click", (event) => {
   }
   if (action === "back-campaign-list") {
     clearCampaignDrilldown();
+    if (state.role === "executive" && state.page === "campaigns") {
+      state.page = "dashboard";
+    }
     render();
   }
   if (action === "view-campaign-inspection") {
