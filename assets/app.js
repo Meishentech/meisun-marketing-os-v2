@@ -8293,6 +8293,7 @@ function buildCurrentKpis(page) {
     "executive:leads": leadKpis(),
     "executive:channels": channelKpis(),
     "executive:decisions": approvalKpis(),
+    "marketing:dashboard": marketingDashboardKpis(),
     "marketing:budget": expenseKpis(),
     "marketing:channels": channelKpis(),
     "marketing:associations": associationKpis(),
@@ -8334,6 +8335,24 @@ function weeklyKpis() {
     ["異動行銷案", String(summary.changedCampaigns.length), "本週有資料異動"],
     ["待處理", String(summary.nextPriorities.length), "下週優先事項"],
     ["成效更新", String(summary.weeklyPerformance.length), "本週更新成效資料"],
+  ];
+}
+
+function marketingDashboardKpis() {
+  const campaigns = state.data.campaigns;
+  const highPriority = campaigns.filter((campaign) => ["高", "重要", "高重要性"].includes(campaign.priority || "")).length;
+  const knowledgeItems = visibleKnowledgeItems(true);
+  const pendingKnowledge = knowledgeItems.filter((item) => item.visibility_status === "待確認" || item.evidence_level === "C" || item.evidence_level === "D").length;
+  const expenses = state.data.expenses;
+  const unsettledExpenses = expenses.filter((expense) => expense.payment_status !== "已付款").length;
+  const requests = visibleSalesRequests(true);
+  const openRequests = requests.filter((request) => !["已完成", "已取消"].includes(request.status || "")).length;
+
+  return [
+    ["進行中行銷案", String(campaigns.length), `高重要性 ${highPriority} 件`, "campaigns"],
+    ["待審素材", String(pendingKnowledge), "點擊查看產品知識庫", "knowledge"],
+    ["預算核銷中", String(unsettledExpenses), "點擊查看預算 / 付款", "budget"],
+    ["業務需求", String(openRequests), "點擊查看需求單", "requests"],
   ];
 }
 
