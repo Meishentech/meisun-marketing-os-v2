@@ -20,7 +20,7 @@ begin;
 
 create temp table if not exists cleanup_test_patterns (
   pattern text primary key
-) on commit drop;
+);
 
 insert into cleanup_test_patterns (pattern) values
   ('%smoke%'),
