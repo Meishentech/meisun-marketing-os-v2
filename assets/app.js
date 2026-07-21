@@ -8520,6 +8520,10 @@ function isTrustedTableMarkup(html = "") {
     .replace(/<span class="cell-sub">/g, "")
     .replaceAll("</span>", "")
     .replaceAll('<div class="action-group">', "")
+    .replaceAll('<div class="deliverable-stack">', "")
+    .replaceAll('<div class="deliverable-item">', "")
+    .replaceAll('<div class="deliverable-item is-empty">', "")
+    .replaceAll('<div class="deliverable-more">', "")
     .replaceAll('<div class="progress-track">', "")
     .replace(/<div class="progress-fill(?: [a-z-]+)?" style="width:\d+%">/g, "")
     .replaceAll("</div>", "")
@@ -8666,6 +8670,7 @@ document.addEventListener("click", (event) => {
     render();
   }
   if (action === "view-campaign-inspection") {
+    state.page = "campaigns";
     state.campaignDetailId = "";
     state.campaignInspectionMode = id;
     render();
