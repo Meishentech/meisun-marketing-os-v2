@@ -8479,8 +8479,9 @@ function expenseKpis() {
 }
 
 function knowledgeKpis() {
-  const items = visibleKnowledgeItems(state.role === "marketing");
-  if (!items.length) {
+  const isMarketing = state.role === "marketing";
+  const items = visibleKnowledgeItems(isMarketing);
+  if (!items.length && state.dataStatus !== "live") {
     const page = pages[state.role]?.knowledge;
     return page?.kpis || [];
   }
@@ -8489,6 +8490,17 @@ function knowledgeKpis() {
   const internal = items.filter((item) => item.visibility_status === "僅內部").length;
   const pending = items.filter((item) => item.visibility_status === "待確認").length;
   const blocked = items.filter((item) => item.visibility_status === "禁止使用").length;
+
+  if (!isMarketing) {
+    const visibleIds = new Set(items.map((item) => item.id));
+    const linkedResources = state.data.knowledgeResourceLinks.filter((link) => visibleIds.has(link.knowledge_item_id)).length;
+    return [
+      ["可查條目", String(items.length), "可對外或僅內部"],
+      ["可對外", String(usable), "可直接搭配客戶溝通"],
+      ["僅內部", String(internal), "只供內部討論使用"],
+      ["關聯文宣", String(linkedResources), "已連結 DM、簡報或資源"],
+    ];
+  }
 
   return [
     ["知識條目", String(items.length), "已建立產品知識"],
