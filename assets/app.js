@@ -1775,9 +1775,9 @@ function budgetSection() {
     return {
       type: "table",
       title: "費用狀態",
-      headers: ["項目", "類型", "金額", "狀態", "日期", "操作"],
+      headers: ["專案 / 項目", "類型", "金額", "狀態", "日期", "操作"],
       rows: state.data.expenses.slice(0, 10).map((expense) => [
-        expense.title || "未命名費用",
+        trustedTableHtml(expenseSubjectCell(expense)),
         expense.category || "未分類",
         formatMoney(expense.amount),
         tag(expense.payment_status || "未填", statusTone(expense.payment_status)),
@@ -1829,33 +1829,63 @@ function parseExpenseSourceKey(sourceKey = "") {
   return { sourceTable, sourceId: idParts.join(":") };
 }
 
+function findExpenseBySource(sourceTable = "", sourceId = "") {
+  return state.data.expenses.find((expense) => (
+    expense.source_table === sourceTable
+    && String(expense.source_id || "") === String(sourceId || "")
+  ));
+}
+
+function expenseSubjectCell(expense = {}) {
+  const context = expenseContextName(expense);
+  const title = expense.title || "未命名費用";
+  if (!context) return `<span class="cell-main">${escapeHtml(title)}</span>`;
+  return `<span class="cell-main">${escapeHtml(context)}</span><span class="cell-sub">${escapeHtml(title)}</span>`;
+}
+
+function expenseContextName(expense = {}) {
+  if (expense.campaign_id) return campaignName(expense.campaign_id);
+  if (expense.association_id) {
+    const association = findAssociation(expense.association_id);
+    return association ? associationDisplayName(association) : "未關聯公會";
+  }
+  return "";
+}
+
 function openExpenseSource(sourceKey = "") {
   const { sourceTable, sourceId } = parseExpenseSourceKey(sourceKey);
   if (!sourceTable || !sourceId) return;
+  const expense = findExpenseBySource(sourceTable, sourceId);
 
   if (sourceTable === "marketing_campaign_budget_items") {
     const item = findCampaignBudgetItem(sourceId);
-    if (item?.campaign_id) {
+    const campaignId = item?.campaign_id || expense?.campaign_id;
+    if (campaignId) {
       state.page = "campaigns";
       state.campaignInspectionMode = "";
-      state.campaignDetailId = item.campaign_id;
+      state.campaignDetailId = campaignId;
       render();
     }
     return;
   }
 
   if (sourceTable === "marketing_campaign_vendors") {
-    state.page = "vendors";
-    clearCampaignDrilldown();
+    const campaignVendor = state.data.campaignVendors.find((item) => String(item.id || "") === String(sourceId || ""));
+    const campaignId = campaignVendor?.campaign_id || expense?.campaign_id;
+    state.page = campaignId ? "campaigns" : "vendors";
+    state.campaignInspectionMode = "";
+    state.campaignDetailId = campaignId || "";
+    state.associationDetailId = "";
     render();
     return;
   }
 
   if (sourceTable === "association_task_expenses") {
     const expense = findAssociationTaskExpense(sourceId);
-    if (expense?.association_id) {
+    const associationId = expense?.association_id || findExpenseBySource(sourceTable, sourceId)?.association_id;
+    if (associationId) {
       state.page = "associations";
-      state.associationDetailId = expense.association_id;
+      state.associationDetailId = associationId;
       state.campaignDetailId = "";
       state.campaignInspectionMode = "";
       render();
@@ -1865,9 +1895,10 @@ function openExpenseSource(sourceKey = "") {
 
   if (sourceTable === "association_fee_records") {
     const fee = findAssociationFee(sourceId);
-    if (fee?.association_id) {
+    const associationId = fee?.association_id || expense?.association_id;
+    if (associationId) {
       state.page = "associations";
-      state.associationDetailId = fee.association_id;
+      state.associationDetailId = associationId;
       state.campaignDetailId = "";
       state.campaignInspectionMode = "";
       render();
