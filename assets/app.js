@@ -53,6 +53,7 @@ const state = {
     approvalRequests: [],
     knowledgeItems: [],
     knowledgeResourceLinks: [],
+    subsidyRules: [],
     expenses: [],
   },
   dataStatus: "loading",
@@ -60,6 +61,7 @@ const state = {
   campaignInspectionMode: "",
   associationDetailId: "",
   knowledgeArchiveAvailable: false,
+  subsidyRulesAvailable: false,
 };
 
 let modalSubmitHandler = null;
@@ -680,12 +682,14 @@ function campaignBudgetItemsSection(campaign = {}) {
     item.item_name || "未命名費用",
     item.budget_nature || "未分類",
     budgetAmountText(item),
+    trustedTableHtml(budgetItemSubsidyCell(item)),
     tag(item.quote_status || "待報價", statusTone(item.quote_status || "待報價")),
     tag(item.payment_status || "未請款", statusTone(item.payment_status || "未請款")),
     canManageCampaignDetails() ? actionGroup([
+      actionButton("檢核", "view-subsidy-checklist", `budget:${item.id}`, "is-primary"),
       actionButton("編輯", "edit-campaign-budget-item", item.id, "is-primary"),
       actionButton("取消", "cancel-campaign-budget-item", item.id, "is-danger"),
-    ]) : "無",
+    ]) : actionButton("檢核", "view-subsidy-checklist", `budget:${item.id}`, "is-primary"),
   ]);
 
   return {
@@ -693,8 +697,8 @@ function campaignBudgetItemsSection(campaign = {}) {
     title: "預算 / 補助 / 付款項目",
     headerAction: canManageCampaignDetails() ? actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary") : "",
     wide: true,
-    headers: ["排序", "項目", "性質", "金額", "報價", "付款", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未開始", "gray"), tag("未請款", "gray"), "無"]],
+    headers: ["排序", "項目", "性質", "金額", "補助檢核", "報價", "付款", "操作"],
+    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未申請", "gray"), tag("未開始", "gray"), tag("未請款", "gray"), "無"]],
   };
 }
 
@@ -1830,7 +1834,10 @@ function budgetSection() {
         trustedTableHtml(campaignSubsidyProgressCell(campaign)),
         trustedTableHtml(campaignSubsidyClosureCell(campaign)),
         trustedTableHtml(campaignPaymentClosureCell(campaign)),
-        actionGroup([actionButton("進入專案", "view-campaign-detail", campaign.id, "is-primary")]),
+        actionGroup([
+          actionButton("進入專案", "view-campaign-detail", campaign.id, "is-primary"),
+          actionButton("補助檢核", "view-subsidy-checklist", `campaign:${campaign.id}`),
+        ]),
       ]),
     };
   }
@@ -1896,10 +1903,22 @@ function campaignSubsidyProgressCell(campaign = {}) {
   const status = campaign.claim_status || (campaign.status === "補助申請" ? "補助申請" : "");
   const hasSubsidy = hasCampaignSubsidy(campaign);
   const label = status || (hasSubsidy ? "待更新" : "未申請");
+  const rule = campaignSubsidyRule(campaign);
+  const items = campaignSubsidyItems(campaign.id);
+  const missingCount = campaignSubsidyMissingCount(campaign);
   const note = campaign.subsidy_planned
     ? `預估 ${formatMoney(campaign.subsidy_planned)}`
     : "尚未填預估補助";
-  return `${tag(label, statusTone(label))}<span class="cell-sub">${escapeHtml(note)}</span>`;
+  const ruleLine = rule ? subsidyRuleLabel(rule) : "尚未選擇原廠規則";
+  const missingLine = items.length
+    ? `${items.length} 筆補助項目 / ${missingCount} 項需補`
+    : "尚未標記補助預算項目";
+  return [
+    tag(label, statusTone(label)),
+    `<span class="cell-sub">${escapeHtml(note)}</span>`,
+    `<span class="cell-sub">${escapeHtml(ruleLine)}</span>`,
+    `<span class="cell-sub">${escapeHtml(missingLine)}</span>`,
+  ].join("");
 }
 
 function campaignSubsidyClosureCell(campaign = {}) {
@@ -1932,7 +1951,39 @@ function campaignPaymentClosureCell(campaign = {}) {
 }
 
 function hasCampaignSubsidy(campaign = {}) {
-  return Boolean(campaign.midea_budget_code || Number(campaign.subsidy_planned || 0) || Number(campaign.subsidy_received || 0) || campaign.claim_status);
+  return Boolean(campaign.midea_budget_code || campaign.subsidy_rule_id || Number(campaign.subsidy_planned || 0) || Number(campaign.subsidy_received || 0) || campaign.claim_status || campaignSubsidyItems(campaign.id).length);
+}
+
+function campaignSubsidyMissingCount(campaign = {}) {
+  const rule = campaignSubsidyRule(campaign);
+  const items = campaignSubsidyItems(campaign.id);
+  let count = 0;
+  if (items.length && !rule) count += 1;
+  items.forEach((item) => {
+    if (!budgetItemSubsidyRule(item)) count += 1;
+    if (!subsidyApplicationDone(item.subsidy_application_status || "未申請")) count += 1;
+    if (!subsidyReimbursementDone(item.subsidy_reimbursement_status || "未核銷")) count += 1;
+    if (item.subsidy_missing_notes) count += 1;
+  });
+  return count;
+}
+
+function budgetItemSubsidyCell(item = {}) {
+  if (!isSubsidyApplicable(item)) {
+    return `${tag("未申請", "gray")}<span class="cell-sub">此項目未標記補助</span>`;
+  }
+
+  const rule = budgetItemSubsidyRule(item);
+  const application = item.subsidy_application_status || "未申請";
+  const reimbursement = item.subsidy_reimbursement_status || "未核銷";
+  const missing = item.subsidy_missing_notes ? "有缺件備註" : "";
+  const tone = subsidyApplicationDone(application) && subsidyReimbursementDone(reimbursement) && !missing ? "green" : "amber";
+  return [
+    tag(application, tone),
+    tag(reimbursement, statusTone(reimbursement)),
+    `<span class="cell-sub">${escapeHtml(rule ? subsidyRuleLabel(rule) : "尚未指定規則")}</span>`,
+    missing ? `<span class="cell-sub">${escapeHtml(missing)}</span>` : "",
+  ].filter(Boolean).join("");
 }
 
 function isCampaignSubsidyClosed(campaign = {}) {
@@ -3625,6 +3676,67 @@ function campaignBudgetItemsFor(campaignId) {
     .sort(sortBySeqThenDate("created_at"));
 }
 
+function subsidyRules() {
+  return (state.data.subsidyRules || [])
+    .filter((rule) => rule.is_active !== false)
+    .slice()
+    .sort((a, b) => Number(a.rule_order || 999) - Number(b.rule_order || 999));
+}
+
+function findSubsidyRule(id) {
+  if (!id) return null;
+  return subsidyRules().find((rule) => String(rule.id || "") === String(id || "")) || null;
+}
+
+function subsidyRuleLabel(rule = {}) {
+  return [rule.activity_type, rule.activity_subcategory, rule.activity_purpose]
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function subsidyRuleOptions(selected = "", blankLabel = "不指定補助規則") {
+  const options = [["", blankLabel]];
+  subsidyRules().forEach((rule) => {
+    const ratio = rule.max_support_ratio != null ? ` / 最高 ${Math.round(Number(rule.max_support_ratio) * 100)}%` : "";
+    const note = rule.max_support_ratio_note ? ` / ${rule.max_support_ratio_note}` : "";
+    options.push([rule.id, `${subsidyRuleLabel(rule)}${ratio}${note}`]);
+  });
+  return selectOptions(options, selected || "");
+}
+
+function campaignSubsidyRule(campaign = {}) {
+  return findSubsidyRule(campaign.subsidy_rule_id);
+}
+
+function budgetItemSubsidyRule(item = {}) {
+  return findSubsidyRule(item.subsidy_rule_id) || campaignSubsidyRule(findCampaign(item.campaign_id) || {});
+}
+
+function isSubsidyApplicable(item = {}) {
+  const applicationStatus = item.subsidy_application_status || "未申請";
+  const reimbursementStatus = item.subsidy_reimbursement_status || "未核銷";
+  return Boolean(item.is_subsidy_applicable || item.subsidy_rule_id || applicationStatus !== "未申請" || reimbursementStatus !== "未核銷");
+}
+
+function subsidyChecklistItems(text = "") {
+  return String(text || "")
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function subsidyApplicationDone(status = "") {
+  return ["已送申請", "已核准", "不申請"].includes(status || "");
+}
+
+function subsidyReimbursementDone(status = "") {
+  return ["已送核銷", "已核銷", "不適用"].includes(status || "");
+}
+
+function campaignSubsidyItems(campaignId) {
+  return campaignBudgetItemsFor(campaignId).filter(isSubsidyApplicable);
+}
+
 function campaignDocumentsFor(campaignId) {
   return state.data.campaignDocuments
     .filter((document) => String(document.campaign_id || "") === String(campaignId || ""))
@@ -4396,9 +4508,9 @@ function escapeAttr(value = "") {
 }
 
 function statusTone(status = "") {
-  if (["已追蹤", "已完成", "可對外", "已付款", "已繳", "已簽約", "已報價", "已核准", "已使用", "已結案", "付款結案"].includes(status)) return "green";
-  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "準備中", "已送審", "待審核", "需修正", "補助申請", "部分撥付", "待更新"].includes(status)) return "amber";
-  if (["已排除", "逾期", "未請款", "未付款", "未繳", "未開始", "未使用", "不適用", "未結案", "未建立", "未申請"].includes(status)) return "gray";
+  if (["已追蹤", "已完成", "可對外", "已付款", "已繳", "已簽約", "已報價", "已核准", "已使用", "已結案", "付款結案", "已送申請", "已送核銷", "已核銷", "不申請"].includes(status)) return "green";
+  if (["評估中", "待確認", "待付款", "待核准", "待報價", "進行中", "準備中", "準備資料", "準備核銷", "已送審", "待審核", "需修正", "需補件", "補助申請", "部分撥付", "待更新"].includes(status)) return "amber";
+  if (["已排除", "逾期", "未請款", "未付款", "未繳", "未開始", "未使用", "不適用", "未結案", "未建立", "未申請", "未核銷"].includes(status)) return "gray";
   if (["追加待核"].includes(status)) return "red";
   return "";
 }
@@ -7324,6 +7436,14 @@ function campaignFormHtml(campaign = {}) {
           <span>請款狀態</span>
           <input name="claim_status" value="${escapeAttr(campaign.claim_status || "")}">
         </label>
+        <label class="form-field is-wide">
+          <span>對應美的補助規則</span>
+          <select name="subsidy_rule_id">${subsidyRuleOptions(campaign.subsidy_rule_id || "", state.subsidyRulesAvailable ? "不指定補助規則" : "尚未建立補助規則表")}</select>
+        </label>
+        <label class="form-field is-wide">
+          <span>補助規則備註</span>
+          <textarea name="subsidy_rule_notes" placeholder="例如：本案拆分場地、裝潢、文宣三筆申請，需依原廠要求補齊照片與發票明細。">${escapeHtml(campaign.subsidy_rule_notes || "")}</textarea>
+        </label>
       </div>
     </div>
 
@@ -7393,7 +7513,7 @@ function numericOrNull(value) {
 }
 
 function campaignPayload(values = {}) {
-  return {
+  const payload = {
     name: values.name.trim(),
     association_id: values.association_id || null,
     association_activity_type: values.association_activity_type?.trim() || null,
@@ -7418,6 +7538,11 @@ function campaignPayload(values = {}) {
     notes: values.notes?.trim() || null,
     updated_at: nowIso(),
   };
+  if (state.subsidyRulesAvailable) {
+    payload.subsidy_rule_id = values.subsidy_rule_id || null;
+    payload.subsidy_rule_notes = values.subsidy_rule_notes?.trim() || null;
+  }
+  return payload;
 }
 
 async function nextCampaignSortOrder() {
@@ -7656,16 +7781,43 @@ function campaignBudgetItemFormHtml(item = {}) {
         <span>付款日</span>
         <input name="payment_date" type="date" value="${escapeAttr(formatDate(item.payment_date))}">
       </label>
+      <div class="form-field">
+        <span>是否申請美的補助</span>
+        <div class="checkbox-row">
+          <input name="is_subsidy_applicable" type="checkbox"${isSubsidyApplicable(item) ? " checked" : ""}>
+          <span>此費用需要納入補助申請 / 核銷檢核</span>
+        </div>
+      </div>
+      <label class="form-field">
+        <span>對應補助規則</span>
+        <select name="subsidy_rule_id">${subsidyRuleOptions(item.subsidy_rule_id || "", "沿用專案規則 / 不指定")}</select>
+      </label>
+      <label class="form-field">
+        <span>補助申請狀態</span>
+        <select name="subsidy_application_status">
+          ${selectOptions([["未申請", "未申請"], ["準備資料", "準備資料"], ["已送申請", "已送申請"], ["需補件", "需補件"], ["已核准", "已核准"], ["不申請", "不申請"]], item.subsidy_application_status || "未申請")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>補助核銷狀態</span>
+        <select name="subsidy_reimbursement_status">
+          ${selectOptions([["未核銷", "未核銷"], ["準備核銷", "準備核銷"], ["已送核銷", "已送核銷"], ["需補件", "需補件"], ["已核銷", "已核銷"], ["不適用", "不適用"]], item.subsidy_reimbursement_status || "未核銷")}
+        </select>
+      </label>
       <label class="form-field is-wide">
         <span>估算依據 / 備註</span>
         <textarea name="basis_note">${escapeHtml(item.basis_note || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
+        <span>補助缺件 / 提醒</span>
+        <textarea name="subsidy_missing_notes" placeholder="例如：缺活動照片、第三方發票、付款紀錄或 DN。">${escapeHtml(item.subsidy_missing_notes || "")}</textarea>
       </label>
     </div>
   `;
 }
 
 function campaignBudgetItemPayload(values = {}, campaignId = "") {
-  return {
+  const payload = {
     campaign_id: campaignId,
     seq: numericOrNull(values.seq) ?? 0,
     item_name: values.item_name.trim(),
@@ -7678,6 +7830,14 @@ function campaignBudgetItemPayload(values = {}, campaignId = "") {
     payment_status: values.payment_status || "未請款",
     payment_date: values.payment_date || null,
   };
+  if (state.subsidyRulesAvailable) {
+    payload.is_subsidy_applicable = values.is_subsidy_applicable === "on";
+    payload.subsidy_rule_id = values.subsidy_rule_id || null;
+    payload.subsidy_application_status = values.subsidy_application_status || "未申請";
+    payload.subsidy_reimbursement_status = values.subsidy_reimbursement_status || "未核銷";
+    payload.subsidy_missing_notes = values.subsidy_missing_notes?.trim() || null;
+  }
+  return payload;
 }
 
 function openCreateCampaignBudgetItemModal(campaignId) {
@@ -7736,6 +7896,130 @@ function openCancelCampaignBudgetItemModal(id) {
       await loadExistingData();
     },
   });
+}
+
+function openSubsidyChecklistModal(target = "") {
+  const [scope, id] = String(target || "").split(":");
+  if (scope === "campaign") {
+    const campaign = findCampaign(id);
+    if (!campaign) return;
+    openModal("美的補助檢核", campaignSubsidyChecklistHtml(campaign), {
+      submitLabel: "關閉",
+      hideCancel: true,
+      onSubmit: async () => closeModal(),
+    });
+    return;
+  }
+
+  if (scope === "budget") {
+    const item = findCampaignBudgetItem(id);
+    if (!item) return;
+    const campaign = findCampaign(item.campaign_id) || {};
+    openModal("預算項目補助檢核", budgetItemSubsidyChecklistHtml(item, campaign), {
+      submitLabel: "關閉",
+      hideCancel: true,
+      onSubmit: async () => closeModal(),
+    });
+  }
+}
+
+function campaignSubsidyChecklistHtml(campaign = {}) {
+  const rule = campaignSubsidyRule(campaign);
+  const items = campaignSubsidyItems(campaign.id);
+  const itemRows = items.map((item) => `
+    <div class="checklist-row">
+      <strong>${escapeHtml(item.item_name || "未命名費用")}</strong>
+      <span>${tag(item.subsidy_application_status || "未申請", statusTone(item.subsidy_application_status || "未申請"))}${tag(item.subsidy_reimbursement_status || "未核銷", statusTone(item.subsidy_reimbursement_status || "未核銷"))}</span>
+      <span>${escapeHtml(item.subsidy_missing_notes || "無缺件備註")}</span>
+    </div>
+  `).join("");
+
+  return `
+    <div class="form-section">
+      <h3>${escapeHtml(campaign.name || "未命名專案")}</h3>
+      ${subsidyRuleOverviewHtml(rule, campaign.subsidy_rule_notes)}
+    </div>
+    <div class="form-section">
+      <h3>已標記補助預算項目</h3>
+      <div class="checklist-stack">
+        ${itemRows || `<p class="empty-note">尚未有預算項目標記為申請補助。</p>`}
+      </div>
+    </div>
+    ${subsidyRuleChecklistHtml(rule)}
+  `;
+}
+
+function budgetItemSubsidyChecklistHtml(item = {}, campaign = {}) {
+  const rule = budgetItemSubsidyRule(item);
+  return `
+    <div class="form-section">
+      <h3>${escapeHtml(item.item_name || "未命名費用")}</h3>
+      <div class="checklist-stack">
+        <div class="checklist-row">
+          <strong>所屬專案</strong>
+          <span>${escapeHtml(campaign.name || "未命名專案")}</span>
+        </div>
+        <div class="checklist-row">
+          <strong>申請 / 核銷狀態</strong>
+          <span>${tag(item.subsidy_application_status || "未申請", statusTone(item.subsidy_application_status || "未申請"))}${tag(item.subsidy_reimbursement_status || "未核銷", statusTone(item.subsidy_reimbursement_status || "未核銷"))}</span>
+        </div>
+        <div class="checklist-row">
+          <strong>缺件提醒</strong>
+          <span>${escapeHtml(item.subsidy_missing_notes || "尚未填寫缺件提醒")}</span>
+        </div>
+      </div>
+      ${subsidyRuleOverviewHtml(rule, item.subsidy_rule_id ? "" : campaign.subsidy_rule_notes)}
+    </div>
+    ${subsidyRuleChecklistHtml(rule)}
+  `;
+}
+
+function subsidyRuleOverviewHtml(rule = null, note = "") {
+  if (!state.subsidyRulesAvailable) {
+    return `<p class="empty-note">尚未執行 Batch 22 SQL，補助規則表還不能讀取。</p>`;
+  }
+  if (!rule) {
+    return `<p class="empty-note">尚未選擇對應的美的補助規則。請先在專案或預算項目中指定規則。</p>`;
+  }
+
+  const ratio = rule.max_support_ratio != null
+    ? `最高支持比例 ${Math.round(Number(rule.max_support_ratio) * 100)}%`
+    : (rule.max_support_ratio_note || "未設定支持比例");
+  return `
+    <div class="checklist-stack">
+      <div class="checklist-row">
+        <strong>原廠規則</strong>
+        <span>${escapeHtml(subsidyRuleLabel(rule))}</span>
+      </div>
+      <div class="checklist-row">
+        <strong>支持比例</strong>
+        <span>${escapeHtml(ratio)}</span>
+      </div>
+      <div class="checklist-row">
+        <strong>重點提醒</strong>
+        <span>${escapeHtml(rule.key_points || note || "無特別提醒")}</span>
+      </div>
+    </div>
+  `;
+}
+
+function subsidyRuleChecklistHtml(rule = null) {
+  if (!rule) return "";
+  return `
+    <div class="form-section">
+      <h3>申請資料 Checklist</h3>
+      ${checklistItemsHtml(subsidyChecklistItems(rule.application_materials), "尚未提供申請資料要求")}
+    </div>
+    <div class="form-section">
+      <h3>核銷資料 Checklist</h3>
+      ${checklistItemsHtml(subsidyChecklistItems(rule.verification_documents), "尚未提供核銷資料要求")}
+    </div>
+  `;
+}
+
+function checklistItemsHtml(items = [], emptyText = "尚無項目") {
+  if (!items.length) return `<p class="empty-note">${escapeHtml(emptyText)}</p>`;
+  return `<ul class="checklist-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
 }
 
 function campaignDocumentTypeOptions() {
@@ -9269,6 +9553,7 @@ document.addEventListener("click", (event) => {
   if (action === "create-campaign-budget-item") openCreateCampaignBudgetItemModal(id);
   if (action === "edit-campaign-budget-item") openEditCampaignBudgetItemModal(id);
   if (action === "cancel-campaign-budget-item") openCancelCampaignBudgetItemModal(id);
+  if (action === "view-subsidy-checklist") openSubsidyChecklistModal(id);
   if (action === "create-campaign-document") openCreateCampaignDocumentModal(id);
   if (action === "edit-campaign-document") openEditCampaignDocumentModal(id);
   if (action === "archive-campaign-document") openArchiveCampaignDocumentModal(id);
@@ -9471,6 +9756,7 @@ document.getElementById("logoutButton").addEventListener("click", async () => {
 
 async function loadExistingData() {
   state.dataStatus = "loading";
+  state.subsidyRulesAvailable = false;
   render();
 
   try {
@@ -9496,6 +9782,7 @@ async function loadExistingData() {
       approvalRequests,
       knowledgeItems,
       knowledgeResourceLinks,
+      subsidyRules,
       expenses,
       associationTasks,
       associationTaskExpenses,
@@ -9526,6 +9813,7 @@ async function loadExistingData() {
       safeGET("approval_requests?select=id,entity_type,entity_id,title,summary,amount,due_date,requested_by,approver_role,status,decided_by,decided_at,decision_note,created_at&order=created_at.desc&limit=100"),
       loadProductKnowledgeItems(),
       safeGET("product_knowledge_resource_links?select=id,knowledge_item_id,resource_id,created_at&order=created_at.desc&limit=500"),
+      loadMideaSubsidyRules(),
       safeGET("all_expenses_overview?select=source_id,source_table,title,category,amount,amount_budget,amount_actual,payment_status,payment_date,campaign_id,association_id,vendor_id,owner_contact,created_at&order=payment_date.desc.nullslast,created_at.desc&limit=100"),
       loadAssociationTasks(),
       loadAssociationTaskExpenses(),
@@ -9581,6 +9869,8 @@ async function loadExistingData() {
     state.data.approvalRequests = Array.isArray(approvalRequests) ? approvalRequests : [];
     state.data.knowledgeItems = Array.isArray(knowledgeItems) ? knowledgeItems : [];
     state.data.knowledgeResourceLinks = Array.isArray(knowledgeResourceLinks) ? knowledgeResourceLinks : [];
+    state.subsidyRulesAvailable = Array.isArray(subsidyRules);
+    state.data.subsidyRules = Array.isArray(subsidyRules) ? subsidyRules : [];
     state.data.expenses = Array.isArray(expenses) ? expenses : [];
 
     state.dataStatus = "live";
@@ -9593,11 +9883,19 @@ async function loadExistingData() {
 }
 
 async function loadMarketingCampaigns() {
-  const fullSelect = "id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,midea_budget_code,payment_status,claim_status,flight_cost,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,owner,owner_unit,vendors,association_id,association_activity_type,sort_order,archived_at,archived_by,archive_reason,created_at";
+  const fullSelect = "id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,midea_budget_code,subsidy_rule_id,subsidy_rule_notes,payment_status,claim_status,flight_cost,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,owner,owner_unit,vendors,association_id,association_activity_type,sort_order,archived_at,archived_by,archive_reason,created_at";
   const withArchive = await safeGET(`marketing_campaigns?select=${fullSelect}&order=sort_order.asc.nullslast,created_at.desc&limit=100`, null);
   if (Array.isArray(withArchive)) return withArchive;
 
+  const legacyFullSelect = "id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,midea_budget_code,payment_status,claim_status,flight_cost,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,owner,owner_unit,vendors,association_id,association_activity_type,sort_order,archived_at,archived_by,archive_reason,created_at";
+  const legacyArchive = await safeGET(`marketing_campaigns?select=${legacyFullSelect}&order=sort_order.asc.nullslast,created_at.desc&limit=100`, null);
+  if (Array.isArray(legacyArchive)) return legacyArchive;
+
   return safeGET("marketing_campaigns?select=id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,created_at&order=sort_order.asc.nullslast,created_at.desc&limit=100");
+}
+
+async function loadMideaSubsidyRules() {
+  return safeGET("midea_subsidy_rules?select=id,source_year,rule_order,activity_type,activity_subcategory,activity_purpose,accounting_method,coordinating_department,template_type,template_type_en,description,application_materials,verification_documents,max_support_ratio,max_support_ratio_note,key_points,is_active&is_active=eq.true&order=rule_order.asc&limit=100", null);
 }
 
 async function loadCampaignTasks() {
@@ -9657,6 +9955,9 @@ async function loadAssociationNotes() {
 }
 
 async function loadCampaignBudgetItems() {
+  const withSubsidy = await safeGET("marketing_campaign_budget_items?select=id,campaign_id,seq,item_name,budget_nature,amount_twd,exchange_rate,amount_rmb,basis_note,quote_status,payment_status,payment_date,is_subsidy_applicable,subsidy_rule_id,subsidy_application_status,subsidy_reimbursement_status,subsidy_missing_notes,cancelled_at,cancelled_by,cancel_reason,created_at&order=seq.asc,created_at.asc&limit=300", null);
+  if (Array.isArray(withSubsidy)) return withSubsidy;
+
   const withLifecycle = await safeGET("marketing_campaign_budget_items?select=id,campaign_id,seq,item_name,budget_nature,amount_twd,exchange_rate,amount_rmb,basis_note,quote_status,payment_status,payment_date,cancelled_at,cancelled_by,cancel_reason,created_at&order=seq.asc,created_at.asc&limit=300", null);
   if (Array.isArray(withLifecycle)) return withLifecycle;
 
