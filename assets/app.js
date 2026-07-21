@@ -614,54 +614,18 @@ function campaignDetailSections() {
   }
 
   return [
-    campaignDetailHeaderSection(campaign),
-    canManageCampaignDetails() ? campaignDetailActionCardsSection(campaign) : null,
     campaignTasksSection(campaign),
-    cancelledCampaignTasksSection(campaign),
     campaignBudgetItemsSection(campaign),
-    cancelledCampaignBudgetItemsSection(campaign),
     campaignDocumentsSection(campaign),
-    archivedCampaignDocumentsSection(campaign),
     campaignRisksSection(campaign),
     campaignRiskUpdatesSection(campaign),
-    cancelledCampaignRiskUpdatesSection(campaign),
-    archivedCampaignRisksSection(campaign),
     campaignPerformanceSection(campaign),
+    campaignArchivedCancelledSection(campaign),
   ];
 }
 
 function canManageCampaignDetails() {
   return state.role === "marketing";
-}
-
-function campaignDetailHeaderSection(campaign = {}) {
-  return {
-    type: "cards",
-    title: `專案詳情：${campaign.name || "未命名行銷案"}`,
-    wide: true,
-    cards: [
-      ["返回", actionGroup([actionButton("返回行銷專案", "back-campaign-list", "", "is-primary")])],
-      ["執行狀態", `${tag(campaign.status || "未填", campaignStatusTone(campaign.status))} ${tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中"))}`],
-      ["期間", campaignDateRange(campaign)],
-      ["預算", `${formatMoney(campaign.budget)} / 實支 ${formatMoney(campaign.actual_spend)}`],
-    ],
-  };
-}
-
-function campaignDetailActionCardsSection(campaign = {}) {
-  return {
-    type: "cards",
-    title: "新增專案子項目",
-    wide: true,
-    cards: [
-      ["新增任務", actionGroup([actionButton("新增任務", "create-campaign-task", campaign.id, "is-primary")])],
-      ["新增預算項目", actionGroup([actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary")])],
-      ["新增文件版本", actionGroup([actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary")])],
-      ["新增風險 / 待決事項", actionGroup([actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary")])],
-      ["新增 / 編輯成效", actionGroup([actionButton(performanceForCampaign(campaign.id) ? "編輯成效" : "新增成效", "edit-campaign-performance", campaign.id, "is-primary")])],
-      ["資料原則", "取消或封存只會從進行中清單移除，歷史紀錄保留在下方收合區塊。"],
-    ],
-  };
 }
 
 function campaignTasksSection(campaign = {}) {
@@ -682,9 +646,10 @@ function campaignTasksSection(campaign = {}) {
   return {
     type: "table",
     title: "任務 / 里程碑",
+    headerAction: canManageCampaignDetails() ? actionButton("新增任務", "create-campaign-task", campaign.id, "is-primary") : "",
     wide: true,
     headers: ["排序", "任務", "負責人", "期間", "狀態", "完成度", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立任務", "無", "無", tag("未開始", "gray"), "0%", canManageCampaignDetails() ? actionButton("新增任務", "create-campaign-task", campaign.id, "is-primary") : "無"]],
+    rows: rows.length ? rows : [["無", "尚未建立任務", "無", "無", tag("未開始", "gray"), "0%", "無"]],
   };
 }
 
@@ -726,9 +691,10 @@ function campaignBudgetItemsSection(campaign = {}) {
   return {
     type: "table",
     title: "預算 / 補助 / 付款項目",
+    headerAction: canManageCampaignDetails() ? actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary") : "",
     wide: true,
     headers: ["排序", "項目", "性質", "金額", "報價", "付款", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未開始", "gray"), tag("未請款", "gray"), canManageCampaignDetails() ? actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary") : "無"]],
+    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未開始", "gray"), tag("未請款", "gray"), "無"]],
   };
 }
 
@@ -772,9 +738,10 @@ function campaignDocumentsSection(campaign = {}) {
   return {
     type: "table",
     title: "文件 / 版本",
+    headerAction: canManageCampaignDetails() ? actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary") : "",
     wide: true,
     headers: ["類型", "標題", "版本", "檔案", "上傳日", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立文件", "無", "無", "無", canManageCampaignDetails() ? actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary") : "無"]],
+    rows: rows.length ? rows : [["無", "尚未建立文件", "無", "無", "無", "無"]],
   };
 }
 
@@ -823,9 +790,10 @@ function campaignRisksSection(campaign = {}) {
   return {
     type: "table",
     title: "風險 / 待決事項",
+    headerAction: canManageCampaignDetails() ? actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary") : "",
     wide: true,
     headers: ["類型", "事項", "影響", "負責人", "到期日", "狀態", "顯示", "最新追蹤", "追蹤脈絡", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立風險 / 待決事項", tag("正常", "green"), "無", "無", tag("無", "green"), "無", "無", "無", canManageCampaignDetails() ? actionButton("新增風險", "create-campaign-risk", campaign.id, "is-primary") : "無"]],
+    rows: rows.length ? rows : [["無", "尚未建立風險 / 待決事項", tag("正常", "green"), "無", "無", tag("無", "green"), "無", "無", "無", "無"]],
   };
 }
 
@@ -905,12 +873,13 @@ function campaignPerformanceSection(campaign = {}) {
     return {
       type: "table",
       title: "成效資料",
+      headerAction: canManageCampaignDetails() ? actionButton("新增成效", "edit-campaign-performance", campaign.id, "is-primary") : "",
       wide: true,
       headers: ["狀態", "說明", "操作"],
       rows: [[
         tag("尚未填寫", "amber"),
         "此行銷案尚未建立成效資料，可先填主要 Channel、觸及、名單、有效商機與成交金額。",
-        canManageCampaignDetails() ? actionButton("新增成效", "edit-campaign-performance", campaign.id, "is-primary") : "無",
+        "無",
       ]],
     };
   }
@@ -929,9 +898,70 @@ function campaignPerformanceSection(campaign = {}) {
   return {
     type: "table",
     title: "成效資料",
+    headerAction: canManageCampaignDetails() ? actionButton("編輯成效", "edit-campaign-performance", campaign.id, "is-primary") : "",
     wide: true,
     headers: ["項目", "數值", "判讀", "操作"],
     rows,
+  };
+}
+
+function campaignArchivedCancelledSection(campaign = {}) {
+  const rows = [
+    ...state.data.cancelledCampaignTasks
+      .filter((task) => String(task.campaign_id || "") === String(campaign.id || ""))
+      .map((task) => [
+        tag("已取消任務", "gray"),
+        task.task_name || "未命名任務",
+        tag(task.status || "已取消", "gray"),
+        cancellationMeta(task),
+        task.cancel_reason || "未填寫原因",
+      ]),
+    ...state.data.cancelledCampaignBudgetItems
+      .filter((item) => String(item.campaign_id || "") === String(campaign.id || ""))
+      .map((item) => [
+        tag("已取消預算", "gray"),
+        item.item_name || "未命名費用",
+        budgetAmountText(item),
+        cancellationMeta(item),
+        item.cancel_reason || "未填寫原因",
+      ]),
+    ...state.data.archivedCampaignDocuments
+      .filter((document) => String(document.campaign_id || "") === String(campaign.id || ""))
+      .map((document) => [
+        tag("已封存文件", "gray"),
+        document.title || document.file_name || "未命名文件",
+        document.doc_type || "其他",
+        archiveDocumentMeta(document),
+        document.archive_reason || "未填寫原因",
+      ]),
+    ...state.data.archivedCampaignRisks
+      .filter((risk) => String(risk.campaign_id || "") === String(campaign.id || ""))
+      .map((risk) => [
+        tag("已封存風險", "gray"),
+        risk.title || "未命名事項",
+        tag(risk.impact_level || "中", riskImpactTone(risk.impact_level || "中")),
+        archiveRiskMeta(risk),
+        risk.archive_reason || "未填寫原因",
+      ]),
+    ...cancelledCampaignRiskUpdatesForCampaign(campaign.id).map((update) => {
+      const risk = findCampaignRisk(update.risk_id);
+      return [
+        tag("已取消追蹤", "gray"),
+        risk?.title || "未關聯事項",
+        formatDate(update.update_date) || "未填日期",
+        cancellationMeta(update),
+        update.cancel_reason || "未填寫原因",
+      ];
+    }),
+  ];
+
+  return {
+    type: "details-table",
+    title: `已封存取消（${rows.length}）`,
+    summary: "集中保留已取消與已封存紀錄，不顯示在各分類下方。",
+    wide: true,
+    headers: ["類型", "項目", "狀態 / 金額", "封存 / 取消資訊", "原因"],
+    rows: rows.length ? rows : [[tag("無紀錄", "green"), "目前沒有已封存或已取消項目。", "無", "無", "無"]],
   };
 }
 
@@ -8254,10 +8284,11 @@ function render() {
   normalizeCurrentPage();
   const meta = roleMeta[state.role];
   const page = pages[state.role][state.page];
+  const campaignDetail = currentCampaignDetail();
 
   document.getElementById("roleEyebrow").textContent = welcomeLine();
-  document.getElementById("pageTitle").textContent = page.title;
-  document.getElementById("pageSubtitle").textContent = page.subtitle;
+  document.getElementById("pageTitle").textContent = campaignDetail?.name || page.title;
+  document.getElementById("pageSubtitle").textContent = campaignDetail ? "專案詳情：任務、預算、文件、風險與成效。" : page.subtitle;
   updateTopAction("primaryAction", primaryActionLabel(meta));
   updateTopAction("secondaryAction", secondaryActionLabel());
 
@@ -8273,6 +8304,11 @@ function render() {
   const roleSwitch = document.querySelector(".role-switch");
   roleSwitch.classList.toggle("is-hidden", !state.auth.canSwitchRoles);
   roleSwitch.classList.toggle("is-locked", !state.auth.canSwitchRoles);
+}
+
+function currentCampaignDetail() {
+  if (state.page !== "campaigns" || !state.campaignDetailId) return null;
+  return findCampaign(state.campaignDetailId) || null;
 }
 
 function normalizeCurrentPage() {
@@ -8332,6 +8368,7 @@ function dailyGreetingMessage() {
 
 function primaryActionLabel(meta) {
   if (state.role === "sales") return state.page === "requests" ? "提出素材需求" : "";
+  if (state.page === "campaigns" && state.campaignDetailId) return state.role === "executive" ? "返回戰情室" : "返回行銷專案";
   if (state.page === "weekly") return "複製週報";
   if (state.role === "executive") return "查看待決策";
   if (state.role === "marketing" && state.page === "campaigns") return "新增行銷案";
@@ -8350,6 +8387,9 @@ function secondaryActionLabel() {
 function buildCurrentKpis(page) {
   if (state.dataStatus === "loading") return dataStatusKpis("資料載入中", "正在讀取正式資料");
   if (state.dataStatus === "error") return dataStatusKpis("資料讀取失敗", "請重新整理或確認連線");
+
+  const campaignDetail = currentCampaignDetail();
+  if (campaignDetail) return campaignDetailKpis(campaignDetail);
 
   const key = `${state.role}:${state.page}`;
   const dynamicKpis = {
@@ -8374,6 +8414,14 @@ function buildCurrentKpis(page) {
   return dynamicKpis[key] || emptyPageKpis(page.title);
 }
 
+function campaignDetailKpis(campaign = {}) {
+  return [
+    ["期間", campaignDateRange(campaign), "開始與預計完成時間"],
+    ["執行狀態 / 緊急度", `${tag(campaign.status || "未填", campaignStatusTone(campaign.status))} ${tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中"))}`, "依專案目前狀態判斷"],
+    ["預算", `${formatMoney(campaign.budget)} / 實支 ${formatMoney(campaign.actual_spend)}`, "預算與實際支出"],
+  ];
+}
+
 function dataStatusKpis(title, note) {
   return [
     [title, "-", note],
@@ -8384,11 +8432,7 @@ function dataStatusKpis(title, note) {
 }
 
 function emptyPageKpis(pageTitle = "目前頁面") {
-  return [
-    ["正式資料", "0", `${pageTitle} 尚無資料`],
-    ["展示內容", "0", "正式啟用後不顯示"],
-    ["待建立", "0", "請由對應功能新增"],
-  ];
+  return [];
 }
 
 function weeklyKpis() {
@@ -8938,6 +8982,13 @@ document.querySelectorAll(".role-button").forEach((button) => {
 });
 
 document.getElementById("primaryAction").addEventListener("click", () => {
+  if (state.page === "campaigns" && state.campaignDetailId) {
+    clearCampaignDrilldown();
+    if (state.role === "executive") state.page = "dashboard";
+    render();
+    return;
+  }
+
   if (state.page === "weekly") {
     copyWeeklyReport();
     return;
