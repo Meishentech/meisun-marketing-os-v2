@@ -338,7 +338,7 @@ const pages = {
     },
     knowledge: {
       title: "產品知識庫",
-      subtitle: "產品知識與文宣資源並行查詢；知識看說法，文宣直接下載或開啟。",
+      subtitle: "查詢產品說法、技術比較、FAQ 與可使用文宣。",
       kpis: [
         ["可查條目", "17", "A/B 等級"],
         ["技術比較", "6", "冰水主機相關"],
@@ -4086,7 +4086,6 @@ function resourceUsageRuleSection() {
     cards: [
       ["版本清楚", "每份資料顯示版本與更新日期，避免使用過期檔案。"],
       ["範圍清楚", "標示可對外、內部使用、待確認或禁止使用。"],
-      ["並行管理", "文宣資源可直接下載；與產品知識的關聯只是輔助脈絡。"],
       ["需求回流", "業務找不到資料時，可直接提出需求單。"],
     ],
   };
@@ -8412,7 +8411,6 @@ function salesResourceKnowledgeKpis() {
     ["可用文宣", String(resources.length), `${externalResources} 份可對外`],
     ["產品知識", String(knowledgeItems.length), `${externalKnowledge} 則可對外`],
     ["內部說法", String(internalKnowledge), "僅供內部討論"],
-    ["資料來源", "並行", "文宣與知識分區查詢"],
   ];
 }
 
