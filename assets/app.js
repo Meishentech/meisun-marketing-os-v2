@@ -3232,7 +3232,6 @@ function knowledgeGovernanceSection() {
     type: "cards",
     title: "證據等級與治理",
     cards: [
-      ["新增文宣資源", actionButton("新增資源", "create-marketing-resource", "", "is-primary")],
       ["A 正式來源", "可對外使用，需關聯 DM、型錄、簡報或正式文件。"],
       ["B 技術確認", "可內部使用，對外需行銷總監確認。"],
       ["C 待確認", "只能內部討論，不給業務預設查詢。"],
@@ -4093,6 +4092,7 @@ function marketingResourceManagerSection() {
     return {
       type: "table",
       title: "文宣資源管理",
+      headerAction: actionButton("新增資源", "create-marketing-resource", "", "is-primary"),
       wide: true,
       headers: ["資源", "類型", "適用", "狀態", "檔案 / 連結", "操作"],
       rows: resources.slice(0, 10).map((resource) => [
@@ -4112,13 +4112,14 @@ function marketingResourceManagerSection() {
   return {
     type: "table",
     title: "文宣資源管理",
+    headerAction: actionButton("新增資源", "create-marketing-resource", "", "is-primary"),
     wide: true,
     headers: ["狀態", "說明", "下一步"],
     rows: [
       [
         tag("尚無資料", "amber"),
         "目前沒有從 marketing_resources 讀到文宣 / DM / 資源。",
-        actionButton("新增資源", "create-marketing-resource", "", "is-primary"),
+        "請由右上角新增資源。",
       ],
     ],
   };
@@ -8564,6 +8565,7 @@ function renderSections(sections) {
 
 function renderSection(section) {
   const wideClass = section.wide ? " is-wide" : "";
+  const header = `<div class="panel-header"><h2>${escapeHtml(section.title)}</h2>${section.headerAction ? `<div class="panel-header-action">${section.headerAction}</div>` : ""}</div>`;
   const tableClass = [
     "table",
     section.compact ? "is-compact" : "",
@@ -8573,7 +8575,7 @@ function renderSection(section) {
   if (section.type === "table") {
     return `
       <article class="panel${wideClass}">
-        <div class="panel-header"><h2>${escapeHtml(section.title)}</h2></div>
+        ${header}
         <div class="panel-body">
           ${renderTable(section, tableClass)}
           ${section.footer ? `<div class="section-footer">${section.footer}</div>` : ""}
@@ -8599,7 +8601,7 @@ function renderSection(section) {
   if (section.type === "list") {
     return `
       <article class="panel${wideClass}">
-        <div class="panel-header"><h2>${escapeHtml(section.title)}</h2></div>
+        ${header}
         <div class="panel-body list">
           ${section.items.map(([title, body, status, priority]) => `
             <div class="list-item priority-${priority}">
@@ -8618,7 +8620,7 @@ function renderSection(section) {
   if (section.type === "cards") {
     return `
       <article class="panel${wideClass}">
-        <div class="panel-header"><h2>${escapeHtml(section.title)}</h2></div>
+        ${header}
         <div class="panel-body mini-grid">
           ${section.cards.map(([title, body]) => `
             <div class="mini-card">
