@@ -546,6 +546,41 @@ h1 {
   font-weight: 900;
 }
 
+.kpi-detail-lines {
+  display: grid;
+  gap: 8px;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.kpi-detail-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kpi-detail-line span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.kpi-detail-line strong {
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.kpi-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-height: 28px;
+}
+
 .kpi-note {
   margin-top: 10px;
   color: var(--muted-2);

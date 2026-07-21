@@ -834,6 +834,7 @@ function campaignRiskUpdatesSection(campaign = {}) {
       ]) : "無",
     ];
   });
+  if (!rows.length) return null;
 
   return {
     type: "details-table",
@@ -8416,10 +8417,25 @@ function buildCurrentKpis(page) {
 
 function campaignDetailKpis(campaign = {}) {
   return [
-    ["期間", campaignDateRange(campaign), "開始與預計完成時間"],
-    ["執行狀態 / 緊急度", `${tag(campaign.status || "未填", campaignStatusTone(campaign.status))} ${tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中"))}`, "依專案目前狀態判斷"],
-    ["預算", `${formatMoney(campaign.budget)} / 實支 ${formatMoney(campaign.actual_spend)}`, "預算與實際支出"],
+    ["期間", kpiDetailLines([
+      ["開始", formatDate(campaign.planned_start || campaign.actual_start) || "未設定"],
+      ["預計完成", formatDate(campaign.planned_end || campaign.actual_end) || "未設定"],
+    ]), "開始與預計完成時間"],
+    ["執行狀態 / 緊急度", `<div class="kpi-chip-row">${tag(campaign.status || "未填", campaignStatusTone(campaign.status))}${tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中"))}</div>`, "依專案目前狀態判斷"],
+    ["預算", kpiDetailLines([
+      ["預算", formatMoney(campaign.budget)],
+      ["實支", formatMoney(campaign.actual_spend)],
+    ]), "預算與實際支出"],
   ];
+}
+
+function kpiDetailLines(lines = []) {
+  return `<div class="kpi-detail-lines">${lines.map(([label, value]) => `
+    <div class="kpi-detail-line">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `).join("")}</div>`;
 }
 
 function dataStatusKpis(title, note) {
