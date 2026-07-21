@@ -134,6 +134,22 @@ function storeSession(data, email = "") {
   if (email) sessionStorage.setItem("ms_email", email);
 }
 
+function clearStoredSession() {
+  ["ms_token", "ms_refresh", "ms_expires", "ms_email", "ms_role"].forEach((key) => {
+    sessionStorage.removeItem(key);
+  });
+}
+
+async function readAuthResponse(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return { msg: text };
+  }
+}
+
 async function signInWithPassword(email, password) {
   const response = await fetch(`${SB}/auth/v1/token?grant_type=password`, {
     method: "POST",
@@ -141,13 +157,65 @@ async function signInWithPassword(email, password) {
     body: JSON.stringify({ email, password }),
   });
 
-  const data = await response.json();
+  const data = await readAuthResponse(response);
   if (!response.ok || !data.access_token) {
     throw new Error(data.error_description || data.msg || "帳號或密碼錯誤");
   }
 
   storeSession(data, email);
   return data;
+}
+
+async function requestPasswordReset(email) {
+  const response = await fetch(`${SB}/auth/v1/recover`, {
+    method: "POST",
+    headers: { apikey: KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email,
+      redirect_to: `${window.location.origin}${window.location.pathname}`,
+    }),
+  });
+
+  const data = await readAuthResponse(response);
+  if (!response.ok) {
+    throw new Error(data.error_description || data.msg || "無法寄出重設密碼信。");
+  }
+  return data;
+}
+
+async function updateCurrentUserPassword(password) {
+  const response = await fetch(`${SB}/auth/v1/user`, {
+    method: "PUT",
+    headers: getHeaders({ requireAuth: true }),
+    body: JSON.stringify({ password }),
+  });
+
+  const data = await readAuthResponse(response);
+  if (!response.ok) {
+    throw new Error(data.error_description || data.msg || "密碼更新失敗，請稍後再試。");
+  }
+  return data;
+}
+
+async function markPasswordChanged(email) {
+  return api("PATCH", `app_user_access?email=eq.${encodeURIComponent(email)}`, {
+    must_change_password: false,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+function applyRecoverySessionFromUrl() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const accessToken = params.get("access_token");
+  if (!accessToken) return false;
+
+  storeSession({
+    access_token: accessToken,
+    refresh_token: params.get("refresh_token") || "",
+    expires_in: Number(params.get("expires_in") || 3600),
+  });
+  window.history.replaceState(null, "", `${window.location.origin}${window.location.pathname}${window.location.search}`);
+  return true;
 }
 
 async function getCurrentUser() {
@@ -200,7 +268,5 @@ async function signOut() {
     console.warn("logout failed", error);
   }
 
-  ["ms_token", "ms_refresh", "ms_expires", "ms_email", "ms_role"].forEach((key) => {
-    sessionStorage.removeItem(key);
-  });
+  clearStoredSession();
 }

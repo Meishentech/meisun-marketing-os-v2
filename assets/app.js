@@ -9309,6 +9309,50 @@ document.getElementById("formModal").addEventListener("click", (event) => {
   if (event.target.id === "formModal") closeModal();
 });
 
+function passwordUpdateFormHtml(email, reason = "") {
+  return `
+    <div class="form-grid">
+      <div class="form-field is-wide">
+        <span>帳號</span>
+        <strong>${escapeHtml(email || "目前登入帳號")}</strong>
+      </div>
+      ${reason ? `<p class="form-note is-wide">${escapeHtml(reason)}</p>` : ""}
+      <label class="form-field">
+        <span>新密碼</span>
+        <input name="new_password" type="password" autocomplete="new-password" minlength="6" required>
+      </label>
+      <label class="form-field">
+        <span>確認新密碼</span>
+        <input name="confirm_password" type="password" autocomplete="new-password" minlength="6" required>
+      </label>
+    </div>
+  `;
+}
+
+function validatePasswordUpdate(values) {
+  const password = String(values.new_password || "");
+  const confirm = String(values.confirm_password || "");
+  if (password.length < 6) throw new Error("新密碼至少需要 6 碼。");
+  if (password !== confirm) throw new Error("兩次輸入的新密碼不一致。");
+  if (password === "123456") throw new Error("新密碼不可使用初始密碼 123456。");
+}
+
+function openPasswordUpdateModal(email, reason = "請設定新密碼後再進入平台。") {
+  openModal("設定新密碼", passwordUpdateFormHtml(email, reason), {
+    submitLabel: "確認變更",
+    pendingLabel: "更新中...",
+    hideCancel: true,
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      validatePasswordUpdate(values);
+      await updateCurrentUserPassword(values.new_password);
+      if (email) await markPasswordChanged(email);
+      closeModal();
+      await bootAuthenticatedApp(email);
+    },
+  });
+}
+
 document.getElementById("modalForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!modalSubmitHandler) {
@@ -9348,6 +9392,23 @@ document.getElementById("modalForm").addEventListener("submit", async (event) =>
   }
 });
 
+async function handleRecoverySessionFromUrl() {
+  if (!applyRecoverySessionFromUrl()) return false;
+
+  try {
+    const user = await getCurrentUser();
+    const email = user?.email || sessionStorage.getItem("ms_email") || "";
+    if (email) sessionStorage.setItem("ms_email", email);
+    showLogin("請設定新密碼完成重設。");
+    openPasswordUpdateModal(email, "請輸入新密碼，完成後系統會直接進入平台。");
+  } catch (error) {
+    await signOut();
+    showLogin("重設密碼連結已失效，請重新寄送忘記密碼信。");
+  }
+
+  return true;
+}
+
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const email = document.getElementById("loginEmail").value.trim();
@@ -9362,6 +9423,7 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
 
   button.disabled = true;
   button.textContent = "登入中...";
+  message.classList.remove("is-success");
   message.textContent = "";
 
   try {
@@ -9373,6 +9435,33 @@ document.getElementById("loginForm").addEventListener("submit", async (event) =>
 
   button.disabled = false;
   button.textContent = "登入";
+});
+
+document.getElementById("forgotPasswordButton").addEventListener("click", async () => {
+  const email = document.getElementById("loginEmail").value.trim();
+  const button = document.getElementById("forgotPasswordButton");
+  const message = document.getElementById("loginMessage");
+
+  message.classList.remove("is-success");
+  if (!email) {
+    message.textContent = "請先輸入 Email，再點選忘記密碼。";
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "寄送中...";
+  message.textContent = "";
+
+  try {
+    await requestPasswordReset(email);
+    message.textContent = "已寄出重設密碼信，請到信箱點擊連結後設定新密碼。";
+    message.classList.add("is-success");
+  } catch (error) {
+    message.textContent = error.message || "無法寄出重設密碼信，請稍後再試。";
+  }
+
+  button.disabled = false;
+  button.textContent = "忘記密碼 / 重新設定密碼";
 });
 
 document.getElementById("logoutButton").addEventListener("click", async () => {
@@ -9690,6 +9779,8 @@ render();
 init();
 
 async function init() {
+  if (await handleRecoverySessionFromUrl()) return;
+
   if (!(await hasValidSession())) {
     showLogin();
     return;
@@ -9713,8 +9804,9 @@ async function bootAuthenticatedApp(email) {
     return;
   }
   if (access.mustChange) {
-    await signOut();
-    showLogin("此帳號需要先完成密碼變更，請先到原平台登入並更新密碼。");
+    showLogin("第一次登入請先設定新密碼。");
+    document.getElementById("loginEmail").value = email;
+    openPasswordUpdateModal(email, "第一次登入需先將初始密碼改成個人密碼，完成後才會進入平台。");
     return;
   }
 
@@ -9740,7 +9832,9 @@ function normalizeRole(role) {
 function showLogin(message = "") {
   document.getElementById("appShell").classList.add("is-hidden");
   document.getElementById("loginScreen").classList.remove("is-hidden");
-  document.getElementById("loginMessage").textContent = message;
+  const loginMessage = document.getElementById("loginMessage");
+  loginMessage.classList.remove("is-success");
+  loginMessage.textContent = message;
   state.dataStatus = "loading";
 }
 
