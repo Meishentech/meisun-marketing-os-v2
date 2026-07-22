@@ -12,6 +12,9 @@ const state = {
     archivedCampaigns: [],
     resources: [],
     tenders: [],
+    tenderProjects: [],
+    tenderKeywords: [],
+    tenderRuns: [],
     leads: [],
     associations: [],
     archivedAssociations: [],
@@ -60,6 +63,7 @@ const state = {
   campaignDetailId: "",
   campaignInspectionMode: "",
   associationDetailId: "",
+  tenderProjectId: "",
   knowledgeArchiveAvailable: false,
   subsidyRulesAvailable: false,
 };
@@ -70,6 +74,20 @@ let modalPendingClose = false;
 let modalSessionId = 0;
 const RESOURCE_FILE_MAX_BYTES = 200 * 1024 * 1024;
 const CAMPAIGN_DOCUMENT_FILE_MAX_BYTES = 20 * 1024 * 1024;
+const TENDER_STATUS_OPTIONS = ["未讀", "評估中", "已追蹤", "已排除"];
+const TENDER_FILTER_MODE_OPTIONS = ["保守", "平衡", "嚴格"];
+const TENDER_SCAN_CATEGORIES = [
+  ["bid_open", "招標 / 投標中"],
+  ["procurement", "採購 / 報價"],
+  ["deadline", "截止 / 開標日期"],
+  ["chiller", "冰水主機"],
+  ["central_ac", "中央空調 / 空調設備"],
+  ["ventilation", "通風設備"],
+  ["maglev", "磁浮 / 磁懸浮"],
+  ["exclude_closed", "降低決標 / 得標"],
+  ["exclude_residential", "降低家用冷氣"],
+];
+const DEFAULT_TENDER_SCAN_CATEGORIES = TENDER_SCAN_CATEGORIES.map(([id]) => id);
 
 const roleAliases = {
   executive: "executive",
@@ -279,7 +297,7 @@ const pages = {
         ["本週新標案", "8", "2 件建議追蹤"],
         ["已轉商機", "6", "回到名單管理追蹤"],
       ],
-      sections: [tenderSection()],
+      sections: tenderSections,
     },
     vendors: {
       title: "合作廠商 / 交付物",
@@ -391,7 +409,7 @@ const pages = {
         ["已轉商機", "6", "回到名單管理追蹤"],
         ["已排除", "14", "不符合產品或區域"],
       ],
-      sections: [tenderSection(), tenderRuleSection()],
+      sections: tenderSections,
     },
     leads: {
       title: "我的名單",
@@ -4478,53 +4496,494 @@ function resourceUsageRuleSection() {
   };
 }
 
-function tenderSection() {
-  if (state.data.tenders.length) {
-    return {
-      type: "table",
-      title: "標案結果",
-      headers: ["標案", "截止", "狀態", "操作"],
-      rows: state.data.tenders.slice(0, 8).map((tender) => [
-        tender.title || "未命名標案",
-        formatDate(tender.published_at) || "未標示",
-        tag(tender.status || "未讀", statusTone(tender.status)),
-        tender.converted_lead_id ? "已轉名單" : tender.status === "已追蹤" ? "轉名單" : "查看",
-      ]),
-    };
+function tenderSections() {
+  const projects = sortedTenderProjects();
+  if (!projects.length) {
+    return [
+      {
+        type: "table",
+        title: "招標監測專案",
+        wide: true,
+        headerAction: state.role === "marketing" ? actionButton("新增監測專案", "create-tender-project", "", "is-primary") : "",
+        headers: ["狀態", "說明", "下一步"],
+        rows: [[tag("尚無資料", "amber"), "目前尚未建立招標監測專案。", state.role === "marketing" ? "請先新增監測專案與關鍵字。" : "請由行銷建立監測專案。"]],
+      },
+    ];
   }
 
+  const selected = selectedTenderProject();
+  return [
+    tenderProjectListSection(projects),
+    tenderProjectDetailSection(selected),
+    tenderResultsSection(selected),
+    tenderRunHistorySection(selected),
+  ].filter(Boolean);
+}
+
+function tenderProjectListSection(projects = sortedTenderProjects()) {
   return {
     type: "table",
-    title: "標案結果",
-    headers: ["狀態", "說明", "下一步"],
-    rows: [[tag("尚無資料", "amber"), "目前沒有可顯示的正式標案資料。", "招標工具目前暫緩處理。"]],
+    title: "招標監測專案",
+    wide: true,
+    headerAction: state.role === "marketing" ? actionButton("新增監測專案", "create-tender-project", "", "is-primary") : "",
+    headers: ["專案", "模式 / 來源", "命中", "最近掃描", "操作"],
+    rows: projects.map((project, index) => {
+      const isSelected = project.id === selectedTenderProjectId();
+      const run = tenderLatestRun(project.id);
+      const resultCount = tenderResultsForProject(project.id).length;
+      const source = project.scan_mode === "主動找案"
+        ? tenderSearchQueryLabel(project)
+        : project.source_url || "未填網址";
+      const actions = [
+        actionButton(isSelected ? "已選取" : "查看", "select-tender-project", project.id, isSelected ? "" : "is-primary", isSelected),
+      ];
+      if (state.role === "marketing") {
+        actions.push(actionButton("上", "move-tender-project-up", project.id, "", index === 0));
+        actions.push(actionButton("下", "move-tender-project-down", project.id, "", index === projects.length - 1));
+        actions.push(actionButton("編輯", "edit-tender-project", project.id));
+      }
+      return [
+        trustedTableHtml(`<span class="cell-main">${escapeHtml(project.name || "未命名監測專案")}</span><span class="cell-sub">${project.is_active === false ? "停用" : "啟用"}｜${escapeHtml(project.filter_mode || "保守")}模式</span>`),
+        trustedTableHtml(`<span class="cell-main">${escapeHtml(project.scan_mode || "指定網址")}</span><span class="cell-sub">${escapeHtml(source)}</span>`),
+        `${resultCount} 筆`,
+        tenderRunSummary(run),
+        trustedTableHtml(actionGroup(actions)),
+      ];
+    }),
   };
 }
 
-function tenderAdminSection() {
+function tenderProjectDetailSection(project) {
+  if (!project) return null;
+  const keywords = tenderKeywordsForProject(project.id);
+  const keywordRows = keywords.length
+    ? keywords.map((keyword) => tenderKeywordCard(keyword)).join("")
+    : `<p class="empty-note">尚未設定關鍵字。</p>`;
+  const categoryLabels = tenderCategoryLabels(project.scan_categories).map((label) => tag(label, "gray")).join(" ");
   return {
-    type: "cards",
-    title: "招標管理功能",
-    cards: [
-      ["監測專案", "管理來源網址、頁數、啟用狀態與最近掃描結果。"],
-      ["關鍵字", "維護冰水主機、節能、磁浮、中央空調等關鍵字。"],
-      ["篩選規則", "設定排除條件與相關度，避免低關聯標案進名單。"],
-      ["轉商機", "標案先評估、再追蹤，確認後才轉入商機 / 名單。"],
-    ],
+    type: "html",
+    title: `監測設定：${project.name || "未命名監測專案"}`,
+    wide: true,
+    html: `
+      <div class="tender-detail-grid">
+        <div class="tender-summary-card">
+          <h3>來源與規則</h3>
+          <p><strong>${escapeHtml(project.scan_mode || "指定網址")}</strong></p>
+          <p>${escapeHtml(project.scan_mode === "主動找案" ? tenderSearchQueryLabel(project) : project.source_url || "未填網址")}</p>
+          <p>${escapeHtml(project.last_scan_status || "尚未掃描")}</p>
+          <div class="tender-chip-row">${categoryLabels}</div>
+          <div class="action-group">
+            ${state.role === "marketing" ? actionButton("編輯設定", "edit-tender-project", project.id, "is-primary") : ""}
+            ${state.role === "marketing" ? actionButton("立即掃描", "scan-tender-project", project.id) : ""}
+          </div>
+        </div>
+        <div class="tender-summary-card">
+          <h3>關鍵字</h3>
+          ${state.role === "marketing" ? `
+            <div class="tender-keyword-form">
+              <input id="tenderKeywordInput" placeholder="新增關鍵字，例如 冰水主機">
+              ${actionButton("新增", "create-tender-keyword", project.id, "is-primary")}
+            </div>
+          ` : ""}
+          <div class="tender-keyword-list">${keywordRows}</div>
+        </div>
+      </div>
+    `,
   };
 }
 
-function tenderRuleSection() {
+function tenderResultsSection(project) {
+  if (!project) return null;
+  const results = tenderResultsForProject(project.id);
   return {
-    type: "cards",
-    title: "標案轉名單原則",
-    cards: [
-      ["先評估", "未讀標案不直接進入名單，避免資料雜訊。"],
-      ["再追蹤", "狀態到已追蹤後，才能轉成商機 / 名單。"],
-      ["可回查", "名單保留來源標案，方便檢討標案工具成效。"],
-      ["業務跟進", "後續追蹤回到我的名單，不在標案頁管理完整流程。"],
-    ],
+    type: "table",
+    title: "命中標案",
+    wide: true,
+    headers: ["標案", "關鍵字", "判斷", "發布 / 更新", "狀態", "操作"],
+    rows: results.length ? results.map((result) => [
+      trustedTableHtml(`<span class="cell-main">${escapeHtml(result.title || "未命名標案")}</span><span class="cell-sub">${escapeHtml(result.snippet || "無摘要")}</span>`),
+      tenderKeywordTags(result.matched_keywords),
+      tenderRelevanceCell(result),
+      trustedTableHtml(`<span class="cell-main">${formatDate(result.published_at) || "未標示"}</span><span class="cell-sub">更新 ${formatDateTime(result.last_seen_at) || "未記錄"}</span>`),
+      tag(result.status || "未讀", statusTone(result.status || "未讀")),
+      trustedTableHtml(actionGroup([
+        result.url ? actionButton("開啟", "open-tender-result", result.id, "is-primary") : disabledInlineAction("無連結"),
+        state.role === "marketing" ? actionButton("狀態", "edit-tender-result-status", result.id) : "",
+      ].filter(Boolean))),
+    ]) : [["尚無命中結果", "無", "無", "無", tag("尚無", "green"), "無"]],
   };
+}
+
+function tenderRunHistorySection(project) {
+  if (!project) return null;
+  const runs = tenderRunsForProject(project.id).slice(0, 8);
+  return {
+    type: "details-table",
+    title: `掃描紀錄（${runs.length}）`,
+    summary: "查看最近掃描結果",
+    wide: true,
+    headers: ["時間", "狀態", "檢查頁數", "命中 / 新增", "訊息"],
+    rows: runs.length ? runs.map((run) => [
+      formatDateTime(run.started_at) || "未記錄",
+      tag(tenderRunStatusLabel(run.status), tenderRunTone(run.status)),
+      String(run.checked_pages ?? 0),
+      `${run.found_count ?? 0} / ${run.new_count ?? 0}`,
+      run.error_message || "無錯誤訊息",
+    ]) : [["尚無掃描紀錄", tag("無", "green"), "0", "0 / 0", "尚未執行掃描"]],
+  };
+}
+
+function tenderKeywordCard(keyword) {
+  const actions = state.role === "marketing"
+    ? actionGroup([
+      actionButton(keyword.is_active ? "停用" : "啟用", "toggle-tender-keyword", keyword.id),
+      actionButton("刪除", "delete-tender-keyword", keyword.id, "is-danger"),
+    ])
+    : "";
+  return `
+    <div class="tender-keyword-card">
+      <div>
+        <strong>${escapeHtml(keyword.keyword || "未命名關鍵字")}</strong>
+        <span>${keyword.is_active === false ? "停用" : "啟用"}</span>
+      </div>
+      ${actions}
+    </div>
+  `;
+}
+
+function tenderKeywordTags(keywords = []) {
+  const values = Array.isArray(keywords) ? keywords : [];
+  if (!values.length) return "無";
+  return trustedTableHtml(values.slice(0, 4).map((keyword) => tag(keyword, "gray")).join(" "));
+}
+
+function tenderRelevanceCell(result = {}) {
+  const level = result.relevance_level || "待確認";
+  const score = result.relevance_score != null ? ` ${Number(result.relevance_score)}` : "";
+  const reasons = Array.isArray(result.relevance_reasons) && result.relevance_reasons.length
+    ? result.relevance_reasons.join("；")
+    : "";
+  return trustedTableHtml(`${tag(`${level}${score}`, tenderRelevanceTone(level))}${reasons ? `<span class="cell-sub">${escapeHtml(reasons)}</span>` : ""}`);
+}
+
+function selectedTenderProjectId() {
+  const projects = sortedTenderProjects();
+  if (state.tenderProjectId && projects.some((project) => project.id === state.tenderProjectId)) return state.tenderProjectId;
+  return projects[0]?.id || "";
+}
+
+function selectedTenderProject() {
+  const id = selectedTenderProjectId();
+  if (!id) return null;
+  state.tenderProjectId = id;
+  return sortedTenderProjects().find((project) => project.id === id) || null;
+}
+
+function sortedTenderProjects() {
+  return [...state.data.tenderProjects].sort((a, b) => {
+    const ar = Number.isFinite(Number(a.sort_order)) ? Number(a.sort_order) : Number.MAX_SAFE_INTEGER;
+    const br = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : Number.MAX_SAFE_INTEGER;
+    if (ar !== br) return ar - br;
+    return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+  });
+}
+
+function tenderResultsForProject(projectId) {
+  return state.data.tenders
+    .filter((result) => String(result.project_id || "") === String(projectId || ""))
+    .sort((a, b) => String(b.last_seen_at || "").localeCompare(String(a.last_seen_at || "")));
+}
+
+function tenderKeywordsForProject(projectId) {
+  return state.data.tenderKeywords
+    .filter((keyword) => String(keyword.project_id || "") === String(projectId || ""))
+    .sort((a, b) => Number(Boolean(b.is_active)) - Number(Boolean(a.is_active)) || String(a.keyword || "").localeCompare(String(b.keyword || "")));
+}
+
+function tenderRunsForProject(projectId) {
+  return state.data.tenderRuns
+    .filter((run) => String(run.project_id || "") === String(projectId || ""))
+    .sort((a, b) => String(b.started_at || "").localeCompare(String(a.started_at || "")));
+}
+
+function tenderLatestRun(projectId) {
+  return tenderRunsForProject(projectId)[0] || null;
+}
+
+function tenderRunSummary(run) {
+  if (!run) return "尚未掃描";
+  return `${formatDateTime(run.started_at) || "未記錄"} / ${tenderRunStatusLabel(run.status)}`;
+}
+
+function tenderRunStatusLabel(status = "") {
+  return { running: "掃描中", success: "成功", failed: "失敗" }[status] || status || "未知";
+}
+
+function tenderRunTone(status = "") {
+  if (status === "success") return "green";
+  if (status === "failed") return "red";
+  if (status === "running") return "amber";
+  return "";
+}
+
+function tenderRelevanceTone(level = "") {
+  if (level === "高相關") return "green";
+  if (level === "低相關") return "gray";
+  return "amber";
+}
+
+function tenderCategoryLabels(categories = []) {
+  const ids = Array.isArray(categories) && categories.length ? categories : DEFAULT_TENDER_SCAN_CATEGORIES;
+  return ids.map((id) => TENDER_SCAN_CATEGORIES.find(([value]) => value === id)?.[1]).filter(Boolean);
+}
+
+function tenderSearchQueryLabel(project = {}) {
+  const queries = Array.isArray(project.search_queries) ? project.search_queries.filter(Boolean) : [];
+  if (queries.length) return `${queries.slice(0, 3).join("、")}${queries.length > 3 ? "…" : ""}`;
+  return "依關鍵字自動組合搜尋";
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16);
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function tenderKpis() {
+  const projects = state.data.tenderProjects;
+  const keywords = state.data.tenderKeywords;
+  const results = state.data.tenders;
+  const activeProjects = projects.filter((project) => project.is_active !== false).length;
+  const activeKeywords = keywords.filter((keyword) => keyword.is_active !== false).length;
+  const unread = results.filter((result) => result.status === "未讀").length;
+  const highRelevance = results.filter((result) => result.relevance_level === "高相關").length;
+  return [
+    ["監測專案", String(projects.length), `${activeProjects} 個啟用中`],
+    ["啟用關鍵字", String(activeKeywords), `${keywords.length} 個關鍵字`],
+    ["未讀命中", String(unread), "待評估或排除"],
+    ["高相關", String(highRelevance), "建議優先查看"],
+  ];
+}
+
+function openTenderProjectModal(projectId = "") {
+  const project = projectId ? state.data.tenderProjects.find((item) => item.id === projectId) : {};
+  const isEdit = Boolean(project?.id);
+  openModal(isEdit ? "編輯招標監測專案" : "新增招標監測專案", tenderProjectFormHtml(project || {}), {
+    submitLabel: isEdit ? "儲存變更" : "建立專案",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const scanMode = values.scan_mode || "指定網址";
+      const sourceUrl = String(values.source_url || "").trim();
+      if (!values.name || (scanMode === "指定網址" && !sourceUrl)) {
+        setModalMessage("請填寫專案名稱；指定網址模式也需要填監測網址。", "error");
+        return;
+      }
+      const searchQueries = parseTenderSearchQueries(values.search_queries);
+      if (scanMode === "主動找案" && !searchQueries.length && !tenderKeywordsForProject(projectId).some((keyword) => keyword.is_active !== false)) {
+        setModalMessage("主動找案請至少填一組搜尋指令，或先建立啟用中的關鍵字。", "error");
+        return;
+      }
+      const payload = {
+        name: values.name.trim(),
+        scan_mode: scanMode,
+        source_url: scanMode === "主動找案" ? "active-search://default" : sourceUrl,
+        search_queries: searchQueries,
+        page_limit: Math.max(1, Math.min(Number(values.page_limit) || 1, 10)),
+        filter_mode: values.filter_mode || "保守",
+        scan_categories: tenderCategoriesFromForm(form),
+        is_active: values.is_active === "on",
+        notify_email: values.notify_email?.trim() || null,
+        notes: values.notes?.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+      if (isEdit) {
+        await api("PATCH", `tender_projects?id=eq.${project.id}`, payload);
+        state.tenderProjectId = project.id;
+      } else {
+        const lastRank = sortedTenderProjects().reduce((max, item) => Math.max(max, Number(item.sort_order) || 0), 0);
+        const rows = await api("POST", "tender_projects", { ...payload, sort_order: lastRank + 10 });
+        state.tenderProjectId = rows?.[0]?.id || state.tenderProjectId;
+      }
+      await loadExistingData();
+      closeModal();
+    },
+  });
+}
+
+function tenderProjectFormHtml(project = {}) {
+  const categories = new Set(Array.isArray(project.scan_categories) && project.scan_categories.length ? project.scan_categories : DEFAULT_TENDER_SCAN_CATEGORIES);
+  return `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>專案名稱 *</span>
+        <input name="name" value="${escapeAttr(project.name || "")}" placeholder="例如：耕莘醫院招標公告" required>
+      </label>
+      <label class="form-field">
+        <span>掃描模式</span>
+        <select name="scan_mode">
+          ${selectOptions([["指定網址", "指定網址"], ["主動找案", "主動找案"]], project.scan_mode || "指定網址")}
+        </select>
+      </label>
+      <label class="form-field">
+        <span>掃描頁數</span>
+        <input name="page_limit" type="number" min="1" max="10" value="${escapeAttr(project.page_limit ?? 2)}">
+      </label>
+      <label class="form-field is-wide">
+        <span>監測網址</span>
+        <input name="source_url" value="${escapeAttr(String(project.source_url || "").startsWith("active-search://") ? "" : project.source_url || "")}" placeholder="https://...">
+      </label>
+      <label class="form-field is-wide">
+        <span>搜尋指令</span>
+        <textarea name="search_queries" placeholder="每行一組，例如：冰水主機 招標">${escapeHtml(Array.isArray(project.search_queries) ? project.search_queries.join("\n") : "")}</textarea>
+      </label>
+      <label class="form-field">
+        <span>篩選模式</span>
+        <select name="filter_mode">
+          ${selectOptions(TENDER_FILTER_MODE_OPTIONS.map((value) => [value, value]), project.filter_mode || "保守")}
+        </select>
+      </label>
+      <div class="form-field">
+        <span>啟用狀態</span>
+        <label class="inline-checkbox"><input name="is_active" type="checkbox" ${project.is_active === false ? "" : "checked"}> 每日監測</label>
+      </div>
+      <div class="form-field is-wide">
+        <span>掃描類別</span>
+        <div class="checkbox-grid">
+          ${TENDER_SCAN_CATEGORIES.map(([id, label]) => `
+            <label class="inline-checkbox"><input name="scan_categories" type="checkbox" value="${escapeAttr(id)}" ${categories.has(id) ? "checked" : ""}> ${escapeHtml(label)}</label>
+          `).join("")}
+        </div>
+      </div>
+      <label class="form-field is-wide">
+        <span>通知 Email</span>
+        <input name="notify_email" type="email" value="${escapeAttr(project.notify_email || "")}" placeholder="可留空">
+      </label>
+      <label class="form-field is-wide">
+        <span>備註</span>
+        <textarea name="notes">${escapeHtml(project.notes || "")}</textarea>
+      </label>
+    </div>
+  `;
+}
+
+function parseTenderSearchQueries(raw = "") {
+  return String(raw || "").split(/[\n,，]+/).map((item) => item.trim()).filter(Boolean).slice(0, 12);
+}
+
+function tenderCategoriesFromForm(form) {
+  const values = [...form.querySelectorAll('input[name="scan_categories"]:checked')].map((input) => input.value);
+  return values.length ? values : DEFAULT_TENDER_SCAN_CATEGORIES;
+}
+
+async function createTenderKeyword(projectId) {
+  const input = document.getElementById("tenderKeywordInput");
+  const keyword = input?.value.trim();
+  if (!projectId || !keyword) return;
+  try {
+    await api("POST", "tender_keywords", { project_id: projectId, keyword, is_active: true });
+    state.tenderProjectId = projectId;
+    await loadExistingData();
+  } catch (error) {
+    alert("關鍵字新增失敗，可能是已存在或權限不足。");
+  }
+}
+
+async function toggleTenderKeyword(keywordId) {
+  const keyword = state.data.tenderKeywords.find((item) => item.id === keywordId);
+  if (!keyword) return;
+  await api("PATCH", `tender_keywords?id=eq.${keywordId}`, {
+    is_active: keyword.is_active === false,
+    updated_at: new Date().toISOString(),
+  });
+  state.tenderProjectId = keyword.project_id;
+  await loadExistingData();
+}
+
+async function deleteTenderKeyword(keywordId) {
+  const keyword = state.data.tenderKeywords.find((item) => item.id === keywordId);
+  if (!keyword || !confirm(`確定刪除關鍵字「${keyword.keyword || "未命名"}」？`)) return;
+  try {
+    await api("DELETE", `tender_keywords?id=eq.${keywordId}`);
+    state.tenderProjectId = keyword.project_id;
+    await loadExistingData();
+  } catch (error) {
+    alert("目前無法刪除關鍵字，請先改為停用。");
+  }
+}
+
+function openTenderResultStatusModal(resultId) {
+  const result = state.data.tenders.find((item) => item.id === resultId);
+  if (!result) return;
+  openModal("更新標案狀態", `
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>標案</span>
+        <input value="${escapeAttr(result.title || "未命名標案")}" readonly>
+      </label>
+      <label class="form-field is-wide">
+        <span>狀態</span>
+        <select name="status">${selectOptions(TENDER_STATUS_OPTIONS.map((value) => [value, value]), result.status || "未讀")}</select>
+      </label>
+    </div>
+  `, {
+    submitLabel: "儲存狀態",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `tender_results?id=eq.${resultId}`, {
+        status: values.status || "未讀",
+        updated_at: new Date().toISOString(),
+      });
+      state.tenderProjectId = result.project_id;
+      await loadExistingData();
+      closeModal();
+    },
+  });
+}
+
+function openTenderResult(resultId) {
+  const result = state.data.tenders.find((item) => item.id === resultId);
+  if (!result?.url) return;
+  window.open(result.url, "_blank", "noopener");
+}
+
+async function moveTenderProject(projectId, direction) {
+  const projects = sortedTenderProjects();
+  const index = projects.findIndex((project) => project.id === projectId);
+  const targetIndex = index + direction;
+  if (index < 0 || targetIndex < 0 || targetIndex >= projects.length) return;
+  const current = projects[index];
+  const target = projects[targetIndex];
+  await Promise.all([
+    api("PATCH", `tender_projects?id=eq.${current.id}`, { sort_order: Number(target.sort_order) || (targetIndex + 1) * 10, updated_at: new Date().toISOString() }),
+    api("PATCH", `tender_projects?id=eq.${target.id}`, { sort_order: Number(current.sort_order) || (index + 1) * 10, updated_at: new Date().toISOString() }),
+  ]);
+  state.tenderProjectId = projectId;
+  await loadExistingData();
+}
+
+async function scanTenderProject(projectId) {
+  try {
+    const response = await fetch("/api/tender-scan", {
+      method: "POST",
+      headers: getHeaders({ requireAuth: true }),
+      body: JSON.stringify({ projectId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `掃描服務目前不可用（${response.status}）`);
+    alert(`掃描完成：命中 ${data.foundCount ?? 0} 筆，新發現 ${data.newCount ?? 0} 筆。`);
+    state.tenderProjectId = projectId;
+    await loadExistingData();
+  } catch (error) {
+    alert(`目前無法執行即時掃描：${error.message || "V2 尚未接上掃描 API"}。`);
+  }
 }
 
 function salesLeadSection() {
@@ -8866,6 +9325,7 @@ function primaryActionLabel(meta) {
   if (state.role === "marketing" && state.page === "vendors") return "新增廠商合作";
   if (state.role === "marketing" && state.page === "associations") return "新增公會";
   if (state.role === "marketing" && state.page === "knowledge") return "新增知識條目";
+  if (state.role === "marketing" && state.page === "tenders") return "新增監測專案";
   return state.role === "marketing" ? "" : meta.primaryAction;
 }
 
@@ -8896,6 +9356,7 @@ function buildCurrentKpis(page) {
     "marketing:campaigns": campaignKpis(),
     "marketing:budget": expenseKpis(),
     "marketing:channels": channelKpis(),
+    "marketing:tenders": tenderKpis(),
     "marketing:associations": associationKpis(),
     "marketing:vendors": vendorKpis(),
     "marketing:knowledge": knowledgeKpis(),
@@ -9329,7 +9790,7 @@ function buildCurrentSections(page) {
     "marketing:campaigns": campaignPageSections(),
     "marketing:budget": [budgetSection()],
     "marketing:channels": [channelSummarySection(false)],
-    "marketing:tenders": [tenderSection()],
+    "marketing:tenders": tenderSections(),
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection()],
     "marketing:associations": associationPageSections(),
     "marketing:knowledge": [knowledgeSection(true), archivedKnowledgeSection(), marketingResourceManagerSection(), archivedMarketingResourcesSection()],
@@ -9476,6 +9937,17 @@ function renderSection(section) {
     `;
   }
 
+  if (section.type === "html") {
+    return `
+      <article class="panel${wideClass}">
+        ${header}
+        <div class="panel-body">
+          ${section.html || ""}
+        </div>
+      </article>
+    `;
+  }
+
   return `<article class="panel${wideClass}"><div class="panel-body empty-note">尚未定義內容。</div></article>`;
 }
 
@@ -9602,6 +10074,11 @@ document.getElementById("primaryAction").addEventListener("click", () => {
 
   if (state.role === "marketing" && state.page === "knowledge") {
     openCreateKnowledgeItemModal();
+    return;
+  }
+
+  if (state.role === "marketing" && state.page === "tenders") {
+    openTenderProjectModal();
     return;
   }
 
@@ -9764,6 +10241,20 @@ document.addEventListener("click", (event) => {
   }
   if (action === "copy-weekly-report") copyWeeklyReport();
   if (action === "export-weekly-report") exportWeeklyReport();
+  if (action === "create-tender-project") openTenderProjectModal();
+  if (action === "select-tender-project") {
+    state.tenderProjectId = id;
+    render();
+  }
+  if (action === "edit-tender-project") openTenderProjectModal(id);
+  if (action === "move-tender-project-up") moveTenderProject(id, -1);
+  if (action === "move-tender-project-down") moveTenderProject(id, 1);
+  if (action === "create-tender-keyword") createTenderKeyword(id);
+  if (action === "toggle-tender-keyword") toggleTenderKeyword(id);
+  if (action === "delete-tender-keyword") deleteTenderKeyword(id);
+  if (action === "edit-tender-result-status") openTenderResultStatusModal(id);
+  if (action === "open-tender-result") openTenderResult(id);
+  if (action === "scan-tender-project") scanTenderProject(id);
 });
 
 document.getElementById("modalClose").addEventListener("click", closeModal);
@@ -9942,6 +10433,9 @@ async function loadExistingData() {
       campaigns,
       resources,
       tenders,
+      tenderProjects,
+      tenderKeywords,
+      tenderRuns,
       leads,
       associations,
       associationTags,
@@ -9973,6 +10467,9 @@ async function loadExistingData() {
       loadMarketingCampaigns(),
       loadMarketingResources(),
       loadTenderResults(),
+      loadTenderProjects(),
+      loadTenderKeywords(),
+      loadTenderRuns(),
       safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
       safeGET("associations?limit=50"),
       safeGET("association_relationship_tags?select=id,association_id,tag,created_at&order=created_at.desc&limit=100"),
@@ -10006,6 +10503,9 @@ async function loadExistingData() {
     state.data.archivedCampaigns = Array.isArray(campaigns) ? archivedCampaigns(campaigns) : [];
     state.data.resources = Array.isArray(resources) ? resources : [];
     state.data.tenders = Array.isArray(tenders) ? tenders : [];
+    state.data.tenderProjects = Array.isArray(tenderProjects) ? tenderProjects : [];
+    state.data.tenderKeywords = Array.isArray(tenderKeywords) ? tenderKeywords : [];
+    state.data.tenderRuns = Array.isArray(tenderRuns) ? tenderRuns : [];
     state.data.leads = Array.isArray(leads) ? leads : [];
     state.data.associations = Array.isArray(associations) ? activeAssociations(associations) : [];
     state.data.archivedAssociations = Array.isArray(associations) ? archivedAssociations(associations) : [];
@@ -10191,11 +10691,35 @@ async function loadProductKnowledgeItems() {
   return safeGET("product_knowledge_items?select=id,title,product_line,knowledge_type,target_segment,use_context,summary,detail,recommended_pitch,prohibited_pitch,related_competitor,evidence_level,visibility_status,owner,version,created_at,updated_at&order=updated_at.desc,created_at.desc&limit=100");
 }
 
+async function loadTenderProjects() {
+  const full = await safeGET("tender_projects?select=id,name,source_url,page_limit,is_active,notify_email,notes,sort_order,last_scanned_at,last_scan_status,scan_categories,filter_mode,scan_mode,search_queries,created_at,updated_at&order=sort_order.asc.nullslast,created_at.asc&limit=100", null);
+  if (Array.isArray(full)) return full;
+
+  const withFilters = await safeGET("tender_projects?select=id,name,source_url,page_limit,is_active,notify_email,notes,sort_order,last_scanned_at,last_scan_status,scan_categories,filter_mode,created_at,updated_at&order=sort_order.asc.nullslast,created_at.asc&limit=100", null);
+  if (Array.isArray(withFilters)) return withFilters;
+
+  return safeGET("tender_projects?select=id,name,source_url,page_limit,is_active,notify_email,notes,sort_order,last_scanned_at,last_scan_status,created_at,updated_at&order=sort_order.asc.nullslast,created_at.asc&limit=100");
+}
+
+async function loadTenderKeywords() {
+  return safeGET("tender_keywords?select=id,project_id,keyword,is_active,created_at,updated_at&order=created_at.asc&limit=300");
+}
+
+async function loadTenderRuns() {
+  return safeGET("tender_scan_runs?select=id,project_id,started_at,finished_at,status,checked_pages,found_count,new_count,error_message&order=started_at.desc&limit=300");
+}
+
 async function loadTenderResults() {
-  const withLead = await safeGET("tender_results?select=id,title,published_at,status,last_seen_at,matched_keywords,snippet,url,converted_lead_id&order=last_seen_at.desc&limit=20", null);
+  const full = await safeGET("tender_results?select=id,project_id,title,url,published_at,matched_keywords,snippet,status,first_seen_at,last_seen_at,relevance_score,relevance_level,relevance_reasons,converted_lead_id,created_at,updated_at&order=last_seen_at.desc&limit=300", null);
+  if (Array.isArray(full)) return full;
+
+  const withRelevance = await safeGET("tender_results?select=id,project_id,title,url,published_at,matched_keywords,snippet,status,first_seen_at,last_seen_at,relevance_score,relevance_level,relevance_reasons,created_at,updated_at&order=last_seen_at.desc&limit=300", null);
+  if (Array.isArray(withRelevance)) return withRelevance;
+
+  const withLead = await safeGET("tender_results?select=id,project_id,title,published_at,status,last_seen_at,matched_keywords,snippet,url,converted_lead_id&order=last_seen_at.desc&limit=300", null);
   if (Array.isArray(withLead)) return withLead;
 
-  return safeGET("tender_results?select=id,title,published_at,status,last_seen_at,matched_keywords,snippet,url&order=last_seen_at.desc&limit=20");
+  return safeGET("tender_results?select=id,project_id,title,published_at,status,last_seen_at,matched_keywords,snippet,url&order=last_seen_at.desc&limit=300");
 }
 
 async function loadCampaignVendors() {

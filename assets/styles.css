@@ -894,6 +894,111 @@ h1 {
   margin-top: 10px;
 }
 
+.tender-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tender-summary-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.tender-summary-card h3 {
+  margin: 0;
+  color: #163d5d;
+  font-size: 16px;
+}
+
+.tender-summary-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tender-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tender-keyword-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.tender-keyword-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  font: inherit;
+}
+
+.tender-keyword-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tender-keyword-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #deebf4;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.tender-keyword-card strong,
+.tender-keyword-card span {
+  display: block;
+}
+
+.tender-keyword-card strong {
+  color: #173a59;
+  font-size: 14px;
+}
+
+.tender-keyword-card span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.inline-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  color: #27465e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.inline-checkbox input {
+  width: auto;
+  min-height: auto;
+}
+
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1271,6 +1376,9 @@ h1 {
   .kpi-grid,
   .mini-grid,
   .form-grid,
+  .tender-detail-grid,
+  .tender-keyword-form,
+  .checkbox-grid,
   .content-grid {
     grid-template-columns: 1fr;
   }
@@ -1406,6 +1514,11 @@ h1 {
 
   .action-group {
     gap: 7px;
+  }
+
+  .tender-keyword-card {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .inline-action {
