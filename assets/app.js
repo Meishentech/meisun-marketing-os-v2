@@ -101,10 +101,10 @@ const roleMeta = {
     ],
   },
   marketing: {
-    eyebrow: "MARKETING DIRECTOR",
+    eyebrow: "MARKETING",
     primaryAction: "新增行銷案",
     nav: [
-      ["dashboard", "行銷總監工作台"],
+      ["dashboard", "行銷工作台"],
       ["campaigns", "行銷專案管理"],
       ["budget", "預算 / 補助 / 付款"],
       ["channels", "Channel 成效"],
@@ -149,7 +149,7 @@ const pages = {
     },
     budget: {
       title: "預算 / 補助 / 付款",
-      subtitle: "總經理看摘要、風險與待核准項目，細節由行銷總監維護。",
+      subtitle: "總經理看摘要、風險與待核准項目，細節由行銷維護。",
       kpis: [
         ["已使用", "238萬", "下半年預算使用 57%"],
         ["待核准", "51萬", "2 筆重大費用"],
@@ -162,7 +162,7 @@ const pages = {
       title: "行銷專案詳情",
       subtitle: "查看單一行銷案的任務、預算、文件、風險與成效。",
       kpis: [
-        ["專案詳情", "只讀", "由行銷總監維護"],
+        ["專案詳情", "只讀", "由行銷維護"],
         ["任務", "0", "依專案資料顯示"],
         ["預算", "0", "依專案資料顯示"],
         ["風險", "0", "依專案資料顯示"],
@@ -227,7 +227,7 @@ const pages = {
   },
   marketing: {
     dashboard: {
-      title: "行銷總監工作台",
+      title: "行銷工作台",
       subtitle: "管理行銷案、廠商、素材、預算、補助、名單與業務需求。",
       kpis: [
         ["進行中行銷案", "12", "高重要性 4 件"],
@@ -250,7 +250,7 @@ const pages = {
     },
     budget: {
       title: "預算 / 補助 / 付款",
-      subtitle: "行銷總監維護預算申請、核銷、補助與付款細節，總經理看摘要與待核准。",
+      subtitle: "行銷維護預算申請、核銷、補助與付款細節，總經理看摘要與待核准。",
       kpis: [
         ["預算項目", "18", "行銷案與公會費用"],
         ["待送核准", "4", "含廠商追加與活動贊助"],
@@ -261,7 +261,7 @@ const pages = {
     },
     channels: {
       title: "Channel 成效",
-      subtitle: "行銷總監追蹤各通路的詢問、名單、商機與轉換率，調整資源配置。",
+      subtitle: "行銷追蹤各通路的詢問、名單、商機與轉換率，調整資源配置。",
       kpis: [
         ["最佳來源", "公會", "有效名單 31，商機 9"],
         ["標案工具", "33%", "名單轉商機率最高"],
@@ -2556,7 +2556,7 @@ function vendorFormPreviewSection() {
     title: "新增廠商欄位",
     cards: [
       ["廠商角色", "裝潢 / 美編 / 印刷 / 公會 / 場地。"],
-      ["美昇對接人", "行銷總監、助理或專案負責人。"],
+      ["美昇對接人", "行銷、助理或專案負責人。"],
       ["報價 / 合約", "待報價、已報價、待核准、已簽約。"],
       ["付款 / 交付", "未請款、待付款、已付款、待審、已完成。"],
     ],
@@ -3421,7 +3421,7 @@ function knowledgeSection(isMarketing) {
         [
           tag("尚無資料", "amber"),
           isMarketing ? "目前尚未建立產品知識條目。" : "目前沒有可供業務使用的知識條目。",
-          isMarketing ? "請新增產品差異化、技術比較或 FAQ 條目。" : "待行銷總監建立並標記可對外或僅內部後會顯示。",
+          isMarketing ? "請新增產品差異化、技術比較或 FAQ 條目。" : "待行銷建立並標記可對外或僅內部後會顯示。",
         ],
       ],
     };
@@ -3467,7 +3467,7 @@ function knowledgeGovernanceSection() {
     title: "證據等級與治理",
     cards: [
       ["A 正式來源", "可對外使用，需關聯 DM、型錄、簡報或正式文件。"],
-      ["B 技術確認", "可內部使用，對外需行銷總監確認。"],
+      ["B 技術確認", "可內部使用，對外需行銷確認。"],
       ["C 待確認", "只能內部討論，不給業務預設查詢。"],
       ["D 不可使用", "標記禁止使用，不出現在業務端。"],
     ],
@@ -4549,7 +4549,7 @@ function salesLeadSection() {
     title: "我的名單",
     headerAction: state.auth.canSwitchRoles ? "" : actionButton("新增名單", "create-sales-lead", "", "is-primary"),
     headers: ["公司 / 案件", "來源", "狀態", "下次追蹤"],
-    rows: [[tag("尚無指定名單", "green"), "目前沒有指派給你的名單；行銷總監可分派，或你可自行新增名單。", "無", "無"]],
+    rows: [[tag("尚無指定名單", "green"), "目前沒有指派給你的名單；行銷可分派，或你可自行新增名單。", "無", "無"]],
   };
 }
 
@@ -10331,7 +10331,7 @@ function showApp() {
 function roleLabel(role) {
   return {
     executive: "總經理",
-    marketing: "行銷總監",
+    marketing: "行銷",
     sales: "業務",
   }[role] || "業務";
 }
