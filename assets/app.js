@@ -3868,6 +3868,8 @@ function upcomingCampaignTasks() {
 function pendingCampaignPayments() {
   return state.data.campaignBudgetItems
     .filter((item) => {
+      const campaign = findCampaign(item.campaign_id);
+      if (campaign?.status === "未啟動") return false;
       const paymentStatus = item.payment_status || "未請款";
       return !["已付款", "不需付款"].includes(paymentStatus) && hasBudgetAmount(item);
     })
