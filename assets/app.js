@@ -299,7 +299,7 @@ const pages = {
         ["業務常用", "10", "差異化與異議處理最多"],
         ["關聯文宣", "42", "DM、簡報、案例與型錄"],
       ],
-      sections: [knowledgeSection(true), marketingResourceManagerSection(), archivedMarketingResourcesSection(), knowledgeGovernanceSection()],
+      sections: [knowledgeSection(true), marketingResourceManagerSection(), archivedMarketingResourcesSection()],
     },
     requests: {
       title: "業務需求單",
@@ -9217,7 +9217,7 @@ function buildCurrentSections(page) {
     "marketing:tenders": [tenderSection()],
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection()],
     "marketing:associations": associationPageSections(),
-    "marketing:knowledge": [knowledgeSection(true), archivedKnowledgeSection(), marketingResourceManagerSection(), archivedMarketingResourcesSection(), knowledgeGovernanceSection()],
+    "marketing:knowledge": [knowledgeSection(true), archivedKnowledgeSection(), marketingResourceManagerSection(), archivedMarketingResourcesSection()],
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
