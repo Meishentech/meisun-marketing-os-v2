@@ -96,6 +96,7 @@ const roleMeta = {
       ["dashboard", "總經理戰情室"],
       ["budget", "預算 / 補助 / 付款"],
       ["decisions", "待決策中心"],
+      ["requests", "業務需求單"],
       ["weekly", "週報摘要"],
     ],
   },
@@ -199,6 +200,17 @@ const pages = {
         ["已處理", "8", "本月已完成決策項"],
       ],
       sections: [decisionListSection(), approvalFlowSection()],
+    },
+    requests: {
+      title: "業務需求單",
+      subtitle: "由總經理提出需要行銷補充的簡報、DM、市場分析、競品比較或活動資料需求。",
+      kpis: [
+        ["全部需求", "0", "依正式資料顯示"],
+        ["待處理", "0", "尚未完成的需求"],
+        ["已完成", "0", "已交付或回覆"],
+        ["急件", "0", "優先處理"],
+      ],
+      sections: [salesRequestSection("executive"), cancelledSalesRequestSection("executive")],
     },
     weekly: {
       title: "週報摘要",
@@ -3449,13 +3461,15 @@ function knowledgeDetailSection() {
   return null;
 }
 
-function salesRequestSection(isMarketing) {
-  const requests = visibleSalesRequests(isMarketing);
+function salesRequestSection(scope) {
+  const isMarketing = scope === true;
+  const isExecutiveView = scope === "executive";
+  const requests = visibleSalesRequests(scope);
   if (requests.length) {
     return {
       type: "table",
       compact: true,
-      title: isMarketing ? "業務需求列表" : "我的需求單",
+      title: isMarketing || isExecutiveView ? "業務需求列表" : "我的需求單",
       headers: isMarketing
         ? ["需求", "提出人", "類型", "優先級", "狀態", "操作"]
         : ["需求", "提出人", "類型", "優先級", "狀態", "操作"],
@@ -3470,7 +3484,9 @@ function salesRequestSection(isMarketing) {
             actionButton("更新", "edit-sales-request", request.id, "is-primary"),
             actionButton("取消", "cancel-sales-request", request.id, "is-danger"),
           ])
-          : actionGroup([
+          : isExecutiveView
+            ? actionGroup([actionButton("檢視", "view-sales-request", request.id)])
+            : actionGroup([
             actionButton("檢視", "view-sales-request", request.id),
             actionButton("取消", "cancel-sales-request", request.id, "is-danger"),
           ]),
@@ -3485,13 +3501,13 @@ function salesRequestSection(isMarketing) {
 
     return {
       type: "table",
-      title: isMarketing ? "業務需求列表" : "我的需求單",
+      title: isMarketing || isExecutiveView ? "業務需求列表" : "我的需求單",
       headers: ["狀態", "說明", "下一步"],
       rows: [
         [
           tag("尚無資料", "amber"),
-          emptyMessage,
-          isMarketing ? "請新增或匯入需求單資料。" : "新增需求後會只顯示你的需求單。",
+          isExecutiveView ? "目前沒有可檢視的業務需求單。" : emptyMessage,
+          isMarketing ? "請新增或匯入需求單資料。" : "新增需求後會顯示在需求列表中。",
         ],
       ],
     };
@@ -3500,21 +3516,22 @@ function salesRequestSection(isMarketing) {
   return dataStatusSection("資料載入中", "正在讀取正式業務需求資料。");
 }
 
-function visibleSalesRequests(isMarketing) {
+function visibleSalesRequests(scope) {
   const activeRequests = state.data.salesRequests.filter((request) => !isCancelledSalesRequest(request));
-  if (isMarketing) return activeRequests;
+  if (scope === true || scope === "executive") return activeRequests;
   const email = String(state.auth.email || "").toLowerCase();
   const ownRequests = activeRequests.filter((request) => String(request.requested_by || "").toLowerCase() === email);
   return ownRequests;
 }
 
-function cancelledSalesRequestSection(isMarketing) {
-  const requests = visibleCancelledSalesRequests(isMarketing);
+function cancelledSalesRequestSection(scope) {
+  const isAllScope = scope === true || scope === "executive";
+  const requests = visibleCancelledSalesRequests(scope);
   return {
     type: "details-table",
     compact: true,
     title: `已取消需求（${requests.length}）`,
-    summary: isMarketing ? "只讀顯示已取消業務需求。" : "只讀顯示你自己取消的需求。",
+    summary: isAllScope ? "只讀顯示已取消業務需求。" : "只讀顯示你自己取消的需求。",
     headers: ["需求", "提出人", "類型", "優先級", "取消資訊"],
     rows: requests.length
       ? requests.slice(0, 10).map((request) => [
@@ -3526,7 +3543,7 @@ function cancelledSalesRequestSection(isMarketing) {
       ])
       : [[
         "目前沒有已取消需求",
-        isMarketing ? "全部業務" : formatRequester(state.auth.email),
+        isAllScope ? "全部需求" : formatRequester(state.auth.email),
         "無",
         tag("無紀錄", "green"),
         "無",
@@ -3534,8 +3551,8 @@ function cancelledSalesRequestSection(isMarketing) {
   };
 }
 
-function visibleCancelledSalesRequests(isMarketing) {
-  if (isMarketing) return state.data.cancelledSalesRequests;
+function visibleCancelledSalesRequests(scope) {
+  if (scope === true || scope === "executive") return state.data.cancelledSalesRequests;
   const email = String(state.auth.email || "").toLowerCase();
   return state.data.cancelledSalesRequests.filter((request) => String(request.requested_by || "").toLowerCase() === email);
 }
@@ -8779,6 +8796,7 @@ function primaryActionLabel(meta) {
   if (state.page === "campaigns" && state.campaignDetailId) return state.role === "executive" ? "返回戰情室" : "返回行銷專案";
   if (state.page === "associations" && state.associationDetailId) return "返回公會列表";
   if (state.page === "weekly") return "複製週報";
+  if (state.role === "executive" && state.page === "requests") return "提出需求";
   if (state.role === "executive") return "查看待決策";
   if (state.role === "marketing" && state.page === "campaigns" && !state.campaignDetailId && !state.campaignInspectionMode) return "新增行銷案";
   if (state.role === "marketing" && state.page === "requests") return "新增需求單";
@@ -8810,6 +8828,7 @@ function buildCurrentKpis(page) {
     "executive:leads": leadKpis(),
     "executive:channels": channelKpis(),
     "executive:decisions": approvalKpis(),
+    "executive:requests": requestKpis(),
     "marketing:dashboard": marketingDashboardKpis(),
     "marketing:campaigns": campaignKpis(),
     "marketing:budget": expenseKpis(),
@@ -9126,10 +9145,12 @@ function requestKpis() {
     ];
   }
 
-  const total = visibleSalesRequests(state.role === "marketing").length;
-  const open = visibleSalesRequests(state.role === "marketing").filter((request) => request.status !== "已完成").length;
-  const urgent = visibleSalesRequests(state.role === "marketing").filter((request) => ["急件", "急", "高"].includes(request.priority)).length;
-  const done = visibleSalesRequests(state.role === "marketing").filter((request) => request.status === "已完成").length;
+  const scope = state.role === "marketing" ? true : state.role === "executive" ? "executive" : false;
+  const requests = visibleSalesRequests(scope);
+  const total = requests.length;
+  const open = requests.filter((request) => request.status !== "已完成").length;
+  const urgent = requests.filter((request) => ["急件", "急", "高"].includes(request.priority)).length;
+  const done = requests.filter((request) => request.status === "已完成").length;
 
   return [
     ["需求總數", String(total), "已建立需求單"],
@@ -9211,6 +9232,7 @@ function buildCurrentSections(page) {
     "executive:leads": [leadFunnelSection(), executiveLeadRiskSection()],
     "executive:channels": [channelSummarySection(false)],
     "executive:decisions": [decisionListSection(), campaignRiskSummarySection(), approvalFlowSection()],
+    "executive:requests": [salesRequestSection("executive"), cancelledSalesRequestSection("executive")],
     "executive:weekly": weeklySummarySections(),
     "marketing:dashboard": [weeklySummaryEntrySection(), campaignSummarySection(), marketingRiskInspectionCardsSection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     "marketing:campaigns": campaignPageSections(),
@@ -9448,6 +9470,11 @@ document.getElementById("primaryAction").addEventListener("click", () => {
   }
 
   if (state.role === "sales" && state.page === "requests") {
+    openCreateSalesRequestModal();
+    return;
+  }
+
+  if (state.role === "executive" && state.page === "requests") {
     openCreateSalesRequestModal();
     return;
   }
