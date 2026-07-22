@@ -121,6 +121,7 @@ const roleMeta = {
     primaryAction: "提出素材需求",
     nav: [
       ["dashboard", "業務資料中心"],
+      ["campaigns", "行銷專案"],
       ["resources", "文宣 / 產品知識"],
       ["requests", "業務需求單"],
     ],
@@ -358,6 +359,17 @@ const pages = {
         ["本月更新", "12", "版本已更新"],
       ],
       sections: [resourceLibrarySection()],
+    },
+    campaigns: {
+      title: "行銷專案",
+      subtitle: "查看目前進行中的行銷專案、期間、狀態與專案說明。",
+      kpis: [
+        ["進行中專案", "0", "不含未啟動與已結案"],
+        ["高重要性", "0", "需優先掌握"],
+        ["近期完成", "0", "30 天內預計完成"],
+        ["可查看", "基本資訊", "僅顯示專案基本資訊"],
+      ],
+      sections: [],
     },
     knowledge: {
       title: "產品知識庫",
@@ -623,6 +635,8 @@ function campaignDetailSections() {
     return [campaignInspectionCardsSection(), projectOverviewSection(), archivedCampaignsSection()];
   }
 
+  if (state.role === "sales") return salesCampaignDetailSections(campaign);
+
   return [
     campaignTasksSection(campaign),
     campaignBudgetItemsSection(campaign),
@@ -631,6 +645,45 @@ function campaignDetailSections() {
     campaignRiskUpdatesSection(campaign),
     campaignPerformanceSection(campaign),
     campaignArchivedCancelledSection(campaign),
+  ];
+}
+
+function salesCampaignListSection() {
+  const campaigns = salesVisibleCampaigns();
+  const rows = campaigns.map((campaign) => [
+    campaign.name || "未命名專案",
+    tag(campaign.status || "未填", campaignStatusTone(campaign.status)),
+    campaign.priority ? tag(campaign.priority, campaignPriorityTone(campaign.priority)) : "未填",
+    campaignDateRange(campaign),
+    campaign.purpose || "尚未填寫",
+    actionButton("詳情", "view-campaign-detail", campaign.id, "is-primary"),
+  ]);
+
+  return {
+    type: "table",
+    title: "進行中行銷專案",
+    wide: true,
+    headers: ["專案", "狀態", "重要性", "期間", "說明", "操作"],
+    rows: rows.length ? rows : [["目前沒有進行中行銷專案", tag("無", "green"), "無", "無", "無", "無"]],
+  };
+}
+
+function salesCampaignDetailSections(campaign = {}) {
+  return [
+    {
+      type: "table",
+      title: "專案基本資訊",
+      wide: true,
+      headers: ["項目", "內容"],
+      rows: [
+        ["執行狀態", tag(campaign.status || "未填", campaignStatusTone(campaign.status))],
+        ["重要性", campaign.priority ? tag(campaign.priority, campaignPriorityTone(campaign.priority)) : "未填"],
+        ["期間", campaignDateRange(campaign)],
+        ["負責單位", campaign.owner_unit || campaign.owner || "未填"],
+        ["專案說明", campaign.purpose || "尚未填寫"],
+        ["合作對象", campaign.partner || vendorListText(campaign) || "未填"],
+      ],
+    },
   ];
 }
 
@@ -1626,6 +1679,11 @@ function campaignDateRange(campaign = {}) {
   const end = formatDate(campaign.actual_end || campaign.planned_end);
   if (start && end) return `${start} - ${end}`;
   return start || end || "未設定";
+}
+
+function vendorListText(campaign = {}) {
+  if (Array.isArray(campaign.vendors)) return campaign.vendors.filter(Boolean).join("、");
+  return campaign.vendors || "";
 }
 
 function campaignExpenses(campaignId) {
@@ -3593,6 +3651,17 @@ function findAssociation(associationId) {
 
 function activeCampaigns(campaigns = []) {
   return campaigns.filter((campaign) => !campaign.archived_at);
+}
+
+function salesVisibleCampaigns() {
+  return state.data.campaigns
+    .filter((campaign) => !isCampaignNotStarted(campaign))
+    .filter((campaign) => !["結案", "已完成", "完成", "已結案"].includes(campaign.status || ""))
+    .sort((a, b) => (
+      String(campaignStartDate(a) || "9999").localeCompare(String(campaignStartDate(b) || "9999"))
+      || campaignUrgencyScore(b) - campaignUrgencyScore(a)
+      || String(a.name || "").localeCompare(String(b.name || ""))
+    ));
 }
 
 function archivedCampaigns(campaigns = []) {
@@ -8705,7 +8774,7 @@ function render() {
   document.getElementById("roleEyebrow").textContent = welcomeLine();
   document.getElementById("pageTitle").textContent = campaignDetail?.name || (associationDetail ? associationDisplayName(associationDetail) : page.title);
   document.getElementById("pageSubtitle").textContent = campaignDetail
-    ? "專案詳情：任務、預算、文件、風險與成效。"
+    ? (state.role === "sales" ? "專案詳情：查看期間、狀態與專案基本說明。" : "專案詳情：任務、預算、文件、風險與成效。")
     : associationDetail
       ? "公會詳情：主檔、年費、權益、合作項目與歷史紀錄。"
       : page.subtitle;
@@ -8792,6 +8861,7 @@ function dailyGreetingMessage() {
 }
 
 function primaryActionLabel(meta) {
+  if (state.role === "sales" && state.page === "campaigns" && state.campaignDetailId) return "返回行銷專案";
   if (state.role === "sales") return state.page === "requests" ? "提出素材需求" : "";
   if (state.page === "campaigns" && state.campaignDetailId) return state.role === "executive" ? "返回戰情室" : "返回行銷專案";
   if (state.page === "associations" && state.associationDetailId) return "返回公會列表";
@@ -8818,7 +8888,7 @@ function buildCurrentKpis(page) {
   if (state.dataStatus === "error") return dataStatusKpis("資料讀取失敗", "請重新整理或確認連線");
 
   const campaignDetail = currentCampaignDetail();
-  if (campaignDetail) return campaignDetailKpis(campaignDetail);
+  if (campaignDetail) return state.role === "sales" ? salesCampaignDetailKpis(campaignDetail) : campaignDetailKpis(campaignDetail);
   if (currentAssociationDetail()) return [];
 
   const key = `${state.role}:${state.page}`;
@@ -8839,6 +8909,7 @@ function buildCurrentKpis(page) {
     "marketing:requests": requestKpis(),
     "marketing:weekly": weeklyKpis(),
     "sales:dashboard": salesDashboardKpis(),
+    "sales:campaigns": salesCampaignKpis(),
     "sales:resources": salesResourceKnowledgeKpis(),
     "sales:requests": requestKpis(),
   };
@@ -8857,6 +8928,17 @@ function campaignDetailKpis(campaign = {}) {
       ["預算", formatMoney(campaign.budget)],
       ["實支", formatMoney(campaign.actual_spend)],
     ]), "預算與實際支出"],
+  ];
+}
+
+function salesCampaignDetailKpis(campaign = {}) {
+  return [
+    ["期間", kpiDetailLines([
+      ["開始", formatDate(campaign.planned_start || campaign.actual_start) || "未設定"],
+      ["預計完成", formatDate(campaign.planned_end || campaign.actual_end) || "未設定"],
+    ]), "開始與預計完成時間"],
+    ["執行狀態", tag(campaign.status || "未填", campaignStatusTone(campaign.status)), "目前專案狀態"],
+    ["重要性", tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中")), "供業務掌握優先順序"],
   ];
 }
 
@@ -8926,6 +9008,22 @@ function campaignKpis() {
     ["高重要性", String(highPriority), "需要優先追蹤"],
     ["待處理", String(pendingFollowup), "含補助、討論與下一步"],
     ["公會期刊排程", String(publications.length), `${upcomingPublicationDeadline} 筆 30 天內截稿`, "associations"],
+  ];
+}
+
+function salesCampaignKpis() {
+  const campaigns = salesVisibleCampaigns();
+  const highPriority = campaigns.filter((campaign) => ["高", "重要", "高重要性"].includes(campaign.priority || "")).length;
+  const upcoming = campaigns.filter((campaign) => {
+    const end = formatDate(campaign.actual_end || campaign.planned_end);
+    return end && end <= addDaysString(30);
+  }).length;
+
+  return [
+    ["進行中專案", String(campaigns.length), "不含未啟動與已結案"],
+    ["高重要性", String(highPriority), "需要優先掌握"],
+    ["近期完成", String(upcoming), "30 天內預計完成"],
+    ["可查看", "基本資訊", "僅顯示專案基本資訊"],
   ];
 }
 
@@ -9245,6 +9343,7 @@ function buildCurrentSections(page) {
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
+    "sales:campaigns": state.campaignDetailId ? campaignDetailSections() : [salesCampaignListSection()],
     "sales:resources": [knowledgeSection(false), resourceLibrarySection()],
     "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false)],
   };
