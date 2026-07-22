@@ -150,6 +150,15 @@ async function readAuthResponse(response) {
   }
 }
 
+function authErrorMessage(data, fallback) {
+  const raw = data.error_description || data.msg || data.message || "";
+  const normalized = String(raw).toLowerCase();
+  if (normalized.includes("rate limit")) {
+    return "重設密碼信寄送太頻繁，請稍後再試；若急需登入，請聯絡管理員協助重設。";
+  }
+  return raw || fallback;
+}
+
 async function signInWithPassword(email, password) {
   const response = await fetch(`${SB}/auth/v1/token?grant_type=password`, {
     method: "POST",
@@ -159,7 +168,7 @@ async function signInWithPassword(email, password) {
 
   const data = await readAuthResponse(response);
   if (!response.ok || !data.access_token) {
-    throw new Error(data.error_description || data.msg || "帳號或密碼錯誤");
+    throw new Error(authErrorMessage(data, "帳號或密碼錯誤"));
   }
 
   storeSession(data, email);
@@ -178,7 +187,7 @@ async function requestPasswordReset(email) {
 
   const data = await readAuthResponse(response);
   if (!response.ok) {
-    throw new Error(data.error_description || data.msg || "無法寄出重設密碼信。");
+    throw new Error(authErrorMessage(data, "無法寄出重設密碼信。"));
   }
   return data;
 }
@@ -192,7 +201,7 @@ async function updateCurrentUserPassword(password) {
 
   const data = await readAuthResponse(response);
   if (!response.ok) {
-    throw new Error(data.error_description || data.msg || "密碼更新失敗，請稍後再試。");
+    throw new Error(authErrorMessage(data, "密碼更新失敗，請稍後再試。"));
   }
   return data;
 }
