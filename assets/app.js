@@ -8960,7 +8960,7 @@ function emptyPageKpis(pageTitle = "目前頁面") {
 function weeklyKpis() {
   const summary = weeklySummaryData();
   return [
-    ["週期", `${summary.start.slice(5)} ~ ${summary.end.slice(5)}`, "本週一到今天"],
+    ["週期", "本週", `${summary.start.slice(5)} ~ ${summary.end.slice(5)}`],
     ["異動行銷案", String(summary.changedCampaigns.length), "本週有資料異動"],
     ["待處理", String(summary.nextPriorities.length), "下週優先事項"],
     ["成效更新", String(summary.weeklyPerformance.length), "本週更新成效資料"],
