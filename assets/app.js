@@ -187,7 +187,7 @@ const pages = {
         ["待調整", "Facebook", "觸及高但有效名單低"],
         ["待補資料", "官網", "需補產品線與產業分類"],
       ],
-      sections: [channelSummarySection(false), channelDecisionSection()],
+      sections: [channelSummarySection(false)],
     },
     decisions: {
       title: "待決策中心",
