@@ -4975,10 +4975,6 @@ function requestFormHtml(request = {}, readOnly = false) {
         <span>預計使用日</span>
         <input name="due_date" type="date" value="${escapeAttr(formatDate(request.due_date))}"${readonly}>
       </label>
-      <label class="form-field">
-        <span>關聯名單</span>
-        <select name="lead_id"${disabled}>${leadOptions(request.lead_id || "")}</select>
-      </label>
       <label class="form-field is-wide">
         <span>需求說明</span>
         <textarea name="description"${readonly}>${escapeHtml(request.description || "")}</textarea>
@@ -4995,7 +4991,7 @@ function openCreateSalesRequestModal(prefill = {}) {
       await api("POST", "sales_requests", {
         request_name: values.request_name.trim(),
         requested_by: state.auth.email,
-        lead_id: values.lead_id || null,
+        lead_id: null,
         request_type: values.request_type,
         priority: values.priority || "一般",
         status: "待處理",
