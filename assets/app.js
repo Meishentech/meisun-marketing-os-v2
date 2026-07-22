@@ -88,6 +88,7 @@ const TENDER_SCAN_CATEGORIES = [
   ["exclude_residential", "降低家用冷氣"],
 ];
 const DEFAULT_TENDER_SCAN_CATEGORIES = TENDER_SCAN_CATEGORIES.map(([id]) => id);
+const BUSINESS_MANAGEMENT_URL = "https://magenta-hotteok-62c0dc.netlify.app/";
 
 const roleAliases = {
   executive: "executive",
@@ -9823,11 +9824,15 @@ function campaignPageSections() {
 
 function renderNav(navItems) {
   const nav = document.getElementById("navList");
-  nav.innerHTML = navItems.map(([id, label]) => `
+  const internalItems = navItems.map(([id, label]) => `
     <button class="nav-button ${id === state.page ? "is-active" : ""}" type="button" data-page="${id}">${label}</button>
   `).join("");
+  const externalItem = `
+    <a class="nav-button nav-external-link" href="${BUSINESS_MANAGEMENT_URL}" target="_blank" rel="noopener noreferrer">業務管理系統</a>
+  `;
+  nav.innerHTML = `${internalItems}${externalItem}`;
 
-  nav.querySelectorAll(".nav-button").forEach((button) => {
+  nav.querySelectorAll("button.nav-button[data-page]").forEach((button) => {
     button.addEventListener("click", () => {
       state.page = button.dataset.page;
       clearCampaignDrilldown();

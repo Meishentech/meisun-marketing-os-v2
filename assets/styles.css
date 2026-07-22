@@ -224,6 +224,7 @@ button {
   background: transparent;
   color: #b9d1e5;
   text-align: left;
+  text-decoration: none;
 }
 
 .nav-button::before {
@@ -237,6 +238,19 @@ button {
 .nav-button.is-active {
   background: var(--blue);
   color: #fff;
+}
+
+.nav-external-link {
+  margin-top: 10px;
+  border-top-color: rgba(255, 255, 255, .12);
+  padding-top: 12px;
+}
+
+.nav-external-link::after {
+  content: "↗";
+  margin-left: auto;
+  font-size: 12px;
+  opacity: .72;
 }
 
 .sidebar-note {
