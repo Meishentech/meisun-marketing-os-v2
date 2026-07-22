@@ -970,13 +970,12 @@ function weeklySummaryEntrySection() {
   const summary = weeklySummaryData();
   return {
     type: "cards",
-    title: "週報摘要",
+    title: `週報摘要：${summary.start} ~ ${summary.end}`,
     wide: true,
     cards: [
-      ["本週期間", `${summary.start} ~ ${summary.end}`],
-      ["異動行銷案", `${summary.changedCampaigns.length} 件有資料異動。`],
-      ["下週優先", `${summary.nextPriorities.length} 件需要先確認。`],
-      ["產出週報", actionButton("查看週報摘要", "view-weekly-summary", "", "is-primary")],
+      ["異動行銷案", `${summary.changedCampaigns.length} 件有資料異動。<br>${actionGroup([actionButton("查看異動", "view-weekly-changes", "", "is-primary", !summary.changedCampaigns.length)])}`],
+      ["下週優先", `${summary.nextPriorities.length} 件需要先確認。<br>${actionGroup([actionButton("查看優先", "view-weekly-priorities", "", "is-primary", !summary.nextPriorities.length)])}`],
+      ["完整週報", actionButton("查看週報摘要", "view-weekly-summary", "", "is-primary")],
     ],
   };
 }
@@ -1126,6 +1125,45 @@ function weeklyNextPrioritySection(summary = weeklySummaryData()) {
     headers: ["類型", "事項", "原因", "操作"],
     rows: rows.length ? rows : [[tag("正常", "green"), "目前沒有下週優先事項", "沒有 7 天內到期任務、待付款、高風險或待決策事項。", "無"]],
   };
+}
+
+function openWeeklyChangesModal() {
+  const summary = weeklySummaryData();
+  const rows = summary.changedCampaigns.map((campaign) => [
+    campaign.name || "未命名行銷案",
+    tag(campaign.priority || "中", campaignPriorityTone(campaign.priority || "中")),
+    tag(campaign.status || "未填", campaignStatusTone(campaign.status || "未填")),
+    weeklyCampaignFacts(campaign.id, summary),
+    actionButton("進入專案", "view-campaign-detail", campaign.id, "is-primary"),
+  ]);
+
+  openModal(
+    `本週異動行銷案：${summary.start} ~ ${summary.end}`,
+    renderTable({
+      headers: ["行銷案", "重要性", "狀態", "異動內容", "操作"],
+      rows: rows.length ? rows : [["目前沒有異動行銷案", "無", "無", "無", "無"]],
+    }, "data-table"),
+    { submitLabel: "關閉", hideCancel: true, onSubmit: async () => closeModal() },
+  );
+}
+
+function openWeeklyPrioritiesModal() {
+  const summary = weeklySummaryData();
+  const rows = summary.nextPriorities.map((item) => [
+    tag(item.type, item.tone),
+    item.title,
+    item.detail,
+    item.campaign_id ? actionButton("進入專案", "view-campaign-detail", item.campaign_id, "is-primary") : item.action || "無",
+  ]);
+
+  openModal(
+    `下週優先事項：${summary.start} ~ ${summary.end}`,
+    renderTable({
+      headers: ["類型", "事項", "原因", "操作"],
+      rows: rows.length ? rows : [[tag("正常", "green"), "目前沒有下週優先事項", "沒有 7 天內到期任務、待付款、高風險或待決策事項。", "無"]],
+    }, "data-table"),
+    { submitLabel: "關閉", hideCancel: true, onSubmit: async () => closeModal() },
+  );
 }
 
 function weeklySummaryData() {
@@ -9523,6 +9561,7 @@ document.addEventListener("click", (event) => {
   if (action === "edit-expense-source") openEditExpenseSource(id);
   if (action === "cancel-expense-source") openCancelExpenseSource(id);
   if (action === "view-campaign-detail") {
+    closeModal();
     state.page = "campaigns";
     state.campaignInspectionMode = "";
     state.campaignDetailId = id;
@@ -9567,6 +9606,8 @@ document.addEventListener("click", (event) => {
     clearCampaignDrilldown();
     render();
   }
+  if (action === "view-weekly-changes") openWeeklyChangesModal();
+  if (action === "view-weekly-priorities") openWeeklyPrioritiesModal();
   if (action === "view-decisions") {
     if (state.role === "executive") {
       state.page = "decisions";
