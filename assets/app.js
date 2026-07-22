@@ -8909,7 +8909,7 @@ function buildCurrentKpis(page) {
     "marketing:requests": requestKpis(),
     "marketing:weekly": weeklyKpis(),
     "sales:dashboard": salesDashboardKpis(),
-    "sales:campaigns": salesCampaignKpis(),
+    "sales:campaigns": [],
     "sales:resources": salesResourceKnowledgeKpis(),
     "sales:requests": requestKpis(),
   };
