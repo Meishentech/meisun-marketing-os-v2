@@ -463,10 +463,6 @@ function campaignInspectionCardsSection() {
         "專案文件",
         `${activeDocuments} 份已建檔<br>${actionGroup([actionButton("查看文件", "view-campaign-inspection", "documents", "is-primary", !activeDocuments)])}`,
       ],
-      [
-        "管理方式",
-        "巡檢清單只做快速定位；實際新增、編輯、取消都回到單一專案詳情頁處理。",
-      ],
     ],
   };
 }
@@ -8744,12 +8740,12 @@ function primaryActionLabel(meta) {
   if (state.page === "associations" && state.associationDetailId) return "返回公會列表";
   if (state.page === "weekly") return "複製週報";
   if (state.role === "executive") return "查看待決策";
-  if (state.role === "marketing" && state.page === "campaigns") return "新增行銷案";
+  if (state.role === "marketing" && state.page === "campaigns" && !state.campaignDetailId && !state.campaignInspectionMode) return "新增行銷案";
   if (state.role === "marketing" && state.page === "requests") return "新增需求單";
   if (state.role === "marketing" && state.page === "vendors") return "新增廠商合作";
   if (state.role === "marketing" && state.page === "associations") return "新增公會";
   if (state.role === "marketing" && state.page === "knowledge") return "新增知識條目";
-  return meta.primaryAction;
+  return state.role === "marketing" ? "" : meta.primaryAction;
 }
 
 function secondaryActionLabel() {
