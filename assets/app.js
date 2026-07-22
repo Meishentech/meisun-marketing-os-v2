@@ -1188,7 +1188,7 @@ function weeklyNextPrioritySection(summary = weeklySummaryData()) {
     title: "下週優先事項",
     wide: true,
     headers: ["類型", "事項", "原因", "操作"],
-    rows: rows.length ? rows : [[tag("正常", "green"), "目前沒有下週優先事項", "沒有 7 天內到期任務、待付款、高風險或待決策事項。", "無"]],
+    rows: rows.length ? rows : [[tag("正常", "green"), "目前沒有下週優先事項", "沒有 7 天內到期任務、高風險或待決策事項。", "無"]],
   };
 }
 
@@ -1225,7 +1225,7 @@ function openWeeklyPrioritiesModal() {
     `下週優先事項：${summary.start} ~ ${summary.end}`,
     renderTable({
       headers: ["類型", "事項", "原因", "操作"],
-      rows: rows.length ? rows : [[tag("正常", "green"), "目前沒有下週優先事項", "沒有 7 天內到期任務、待付款、高風險或待決策事項。", "無"]],
+      rows: rows.length ? rows : [[tag("正常", "green"), "目前沒有下週優先事項", "沒有 7 天內到期任務、高風險或待決策事項。", "無"]],
     }, "data-table"),
     { submitLabel: "關閉", hideCancel: true, onSubmit: async () => closeModal() },
   );
@@ -1307,13 +1307,6 @@ function weeklySummaryData() {
       title: task.task_name || "未命名任務",
       detail: `${campaignName(task.campaign_id)} / 到期 ${formatDate(task.planned_end) || "未填"} / ${task.owner || "未填負責人"}`,
       campaign_id: task.campaign_id,
-    })),
-    ...pendingPayments.slice(0, 8).map((item) => ({
-      type: "付款",
-      tone: paymentDuePriority(item) === 0 ? "red" : "amber",
-      title: item.item_name || "未命名費用",
-      detail: `${campaignName(item.campaign_id)} / ${budgetAmountText(item)} / ${item.payment_status || "未請款"}`,
-      campaign_id: item.campaign_id,
     })),
     ...highRisks.filter((risk) => !isCampaignNotStarted(risk.campaign_id)).slice(0, 8).map((risk) => ({
       type: "風險",
