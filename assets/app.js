@@ -9164,7 +9164,7 @@ function buildCurrentSections(page) {
     "marketing:weekly": weeklySummarySections(),
     "sales:dashboard": [salesHomeResourcesSection(), salesTodoSection()],
     "sales:resources": [knowledgeSection(false), resourceLibrarySection()],
-    "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false), requestFormPreviewSection()],
+    "sales:requests": [salesRequestSection(false), cancelledSalesRequestSection(false)],
   };
 
   return dynamicSections[key] || [];
