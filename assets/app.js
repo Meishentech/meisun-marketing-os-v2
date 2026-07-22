@@ -8809,6 +8809,7 @@ function buildCurrentKpis(page) {
     "executive:channels": channelKpis(),
     "executive:decisions": approvalKpis(),
     "marketing:dashboard": marketingDashboardKpis(),
+    "marketing:campaigns": campaignKpis(),
     "marketing:budget": expenseKpis(),
     "marketing:channels": channelKpis(),
     "marketing:associations": associationKpis(),
@@ -8885,6 +8886,25 @@ function marketingDashboardKpis() {
     ["待審素材", String(pendingKnowledge), "點擊查看產品知識庫", "knowledge"],
     ["預算核銷中", String(unsettledExpenses), "點擊查看預算 / 付款", "budget"],
     ["業務需求", String(openRequests), "點擊查看需求單", "requests"],
+  ];
+}
+
+function campaignKpis() {
+  const campaigns = state.data.campaigns;
+  const highPriority = campaigns.filter((campaign) => ["高", "重要", "高重要性"].includes(campaign.priority || "")).length;
+  const inProgress = campaigns.filter((campaign) => !["已完成", "結案", "已結案"].includes(campaign.status || "")).length;
+  const pendingFollowup = campaigns.filter((campaign) => campaign.todo_next || campaign.pending_discussion || campaign.status === "補助申請").length;
+  const publications = activeAssociationPublications(state.data.associationPublications || []);
+  const upcomingPublicationDeadline = publications.filter((publication) => {
+    const deadline = formatDate(publication.deadline_date);
+    return deadline && deadline <= addDaysString(30);
+  }).length;
+
+  return [
+    ["行銷案", String(campaigns.length), `進行中 ${inProgress} 件`],
+    ["高重要性", String(highPriority), "需要優先追蹤"],
+    ["待處理", String(pendingFollowup), "含補助、討論與下一步"],
+    ["公會期刊排程", String(publications.length), `${upcomingPublicationDeadline} 筆 30 天內截稿`, "associations"],
   ];
 }
 
