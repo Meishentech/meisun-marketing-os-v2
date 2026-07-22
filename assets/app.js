@@ -1242,10 +1242,10 @@ function weeklySummaryData() {
   const nextTasks = state.data.campaignTasks.filter((task) => {
     const due = formatDate(task.planned_end);
     const status = task.status || "";
-    return due && due <= nextLimit && !["已完成", "完成", "結案"].includes(status);
+    return due && due <= nextLimit && !isCampaignNotStarted(task.campaign_id) && !["已完成", "完成", "結案"].includes(status);
   });
   const missingPerformanceCampaigns = state.data.campaigns
-    .filter((campaign) => campaign.priority === "高" && !performanceForCampaign(campaign.id));
+    .filter((campaign) => !isCampaignNotStarted(campaign.id) && campaign.priority === "高" && !performanceForCampaign(campaign.id));
 
   const nextPriorities = [
     ...nextTasks.map((task) => ({
@@ -1262,7 +1262,7 @@ function weeklySummaryData() {
       detail: `${campaignName(item.campaign_id)} / ${budgetAmountText(item)} / ${item.payment_status || "未請款"}`,
       campaign_id: item.campaign_id,
     })),
-    ...highRisks.slice(0, 8).map((risk) => ({
+    ...highRisks.filter((risk) => !isCampaignNotStarted(risk.campaign_id)).slice(0, 8).map((risk) => ({
       type: "風險",
       tone: "red",
       title: risk.title || "未命名風險",
@@ -1311,7 +1311,7 @@ function weeklySummaryData() {
     executiveRisks,
     pendingApprovals,
     bestChannel,
-    nextPriorities: uniqueWeeklyPriorities(nextPriorities),
+    nextPriorities: uniqueWeeklyPriorities(nextPriorities.filter((item) => !item.campaign_id || !isCampaignNotStarted(item.campaign_id))),
   };
 }
 
@@ -3885,12 +3885,16 @@ function upcomingCampaignTasks() {
 function pendingCampaignPayments() {
   return state.data.campaignBudgetItems
     .filter((item) => {
-      const campaign = findCampaign(item.campaign_id);
-      if (campaign?.status === "未啟動") return false;
+      if (isCampaignNotStarted(item.campaign_id)) return false;
       const paymentStatus = item.payment_status || "未請款";
       return !["已付款", "不需付款"].includes(paymentStatus) && hasBudgetAmount(item);
     })
     .sort(comparePendingCampaignPayments);
+}
+
+function isCampaignNotStarted(campaignOrId) {
+  const campaign = typeof campaignOrId === "object" ? campaignOrId : findCampaign(campaignOrId);
+  return ["未啟動", "尚未啟動"].includes(campaign?.status || "");
 }
 
 function comparePendingCampaignPayments(a = {}, b = {}) {
