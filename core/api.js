@@ -18,8 +18,48 @@ function getHeaders(options = {}) {
   return headers;
 }
 
+function isExpiredJwtMessage(message = "") {
+  const normalized = String(message).toLowerCase();
+  return normalized.includes("jwt expired") || normalized.includes("pgrst303");
+}
+
+function notifySessionExpired() {
+  clearStoredSession();
+  window.dispatchEvent(new CustomEvent("ms:session-expired"));
+}
+
+async function handleAuthFailure(message) {
+  if (!isExpiredJwtMessage(message)) return false;
+  if (await refreshSession()) return true;
+  notifySessionExpired();
+  throw new Error("登入已逾時，請重新登入後再操作。");
+}
+
+async function authenticatedFetch(url, options = {}, retryOnExpired = true) {
+  const response = await fetch(url, options);
+  if (response.ok || !retryOnExpired) return response;
+
+  const message = await response.text();
+  if (await handleAuthFailure(message)) {
+    const nextOptions = {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${getToken()}`,
+      },
+    };
+    return fetch(url, nextOptions);
+  }
+
+  return new Response(message || response.statusText, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
 async function api(method, path, body) {
-  const response = await fetch(`${SB}/rest/v1/${path}`, {
+  const response = await authenticatedFetch(`${SB}/rest/v1/${path}`, {
     method,
     headers: getHeaders({ requireAuth: true }),
     body: body ? JSON.stringify(body) : undefined,
@@ -46,7 +86,7 @@ async function safeGET(path, fallback = []) {
 }
 
 async function getSignedUrl(bucket, path, expiresIn = 3600) {
-  const response = await fetch(`${SB}/storage/v1/object/sign/${bucket}/${path}`, {
+  const response = await authenticatedFetch(`${SB}/storage/v1/object/sign/${bucket}/${path}`, {
     method: "POST",
     headers: getHeaders({ requireAuth: true }),
     body: JSON.stringify({ expiresIn }),
@@ -71,7 +111,7 @@ function storageSafeFileName(name) {
 
 async function uploadStorageFile(bucket, file) {
   const path = storageSafeFileName(file.name);
-  const response = await fetch(`${SB}/storage/v1/object/${bucket}/${path}`, {
+  const response = await authenticatedFetch(`${SB}/storage/v1/object/${bucket}/${path}`, {
     method: "POST",
     headers: getHeaders({ requireAuth: true, contentType: file.type || "application/octet-stream", prefer: "" }),
     body: file,
@@ -86,7 +126,7 @@ async function uploadStorageFile(bucket, file) {
 }
 
 async function deleteStorageFile(bucket, path) {
-  const response = await fetch(`${SB}/storage/v1/object/${bucket}/${path}`, {
+  const response = await authenticatedFetch(`${SB}/storage/v1/object/${bucket}/${path}`, {
     method: "DELETE",
     headers: getHeaders({ requireAuth: true, contentType: "", prefer: "" }),
   });
@@ -193,7 +233,7 @@ async function requestPasswordReset(email) {
 }
 
 async function updateCurrentUserPassword(password) {
-  const response = await fetch(`${SB}/auth/v1/user`, {
+  const response = await authenticatedFetch(`${SB}/auth/v1/user`, {
     method: "PUT",
     headers: getHeaders({ requireAuth: true }),
     body: JSON.stringify({ password }),

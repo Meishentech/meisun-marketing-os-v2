@@ -10428,6 +10428,11 @@ document.getElementById("logoutButton").addEventListener("click", async () => {
   showLogin();
 });
 
+window.addEventListener("ms:session-expired", () => {
+  closeModalNow();
+  showLogin("登入已逾時，請重新登入後再操作。");
+});
+
 async function loadExistingData() {
   state.dataStatus = "loading";
   state.subsidyRulesAvailable = false;
