@@ -5,6 +5,10 @@ const DEFAULT_HEADERS = {
   "User-Agent": "Mozilla/5.0 (compatible; MeisunTenderMonitor/2.0)",
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 };
+const MAX_SCAN_PAGES = 3;
+const MAX_CANDIDATES = 24;
+const MAX_DETAIL_FETCHES = 10;
+const MAX_SAVED_RESULTS = 12;
 
 const CATEGORY_RULES = {
   bid_open: { label: "招標 / 投標中", score: 30, terms: ["招標", "公開招標", "投標", "領標", "開標", "招商"] },
@@ -73,19 +77,25 @@ export async function onRequest({ request, env = {} }) {
       const html = await fetchHtml(pageUrl);
       for (const item of extractScanCandidates(html, pageUrl)) {
         if (!candidates.has(item.url)) candidates.set(item.url, item);
+        if (candidates.size >= MAX_CANDIDATES) break;
       }
+      if (candidates.size >= MAX_CANDIDATES) break;
     }
 
     let foundCount = 0;
     let newCount = 0;
+    let detailFetches = 0;
     const matches = [];
 
     for (const item of candidates.values()) {
       let detailHtml = "";
-      try {
-        detailHtml = await fetchHtml(item.url);
-      } catch {
-        detailHtml = "";
+      if (detailFetches < MAX_DETAIL_FETCHES) {
+        try {
+          detailHtml = await fetchHtml(item.url);
+          detailFetches += 1;
+        } catch {
+          detailHtml = "";
+        }
       }
 
       const detailText = htmlToText(detailHtml);
@@ -101,6 +111,7 @@ export async function onRequest({ request, env = {} }) {
       });
 
       if (!matchedKeywords.length && relevance.score < relevance.thresholds.review) continue;
+      if (foundCount >= MAX_SAVED_RESULTS) break;
 
       foundCount += 1;
       const existing = await sb.get(`tender_results?project_id=eq.${encodeURIComponent(project.id)}&url=eq.${encodeURIComponent(item.url)}&select=id&limit=1`);
@@ -148,6 +159,8 @@ export async function onRequest({ request, env = {} }) {
     return json({
       projectId: project.id,
       checkedPages: pages.length,
+      checkedCandidates: candidates.size,
+      detailFetches,
       foundCount,
       newCount,
       matches: matches.slice(0, 20),
@@ -197,7 +210,7 @@ function createSupabaseClient({ supabaseUrl, apiKey, authHeader }) {
 
 function projectPageUrls(sourceUrl, pageLimit = 1) {
   if (!sourceUrl || sourceUrl.startsWith("active-search://")) throw new Error("此版本即時掃描需要指定監測網址。");
-  const limit = Math.max(1, Math.min(Number(pageLimit) || 1, 10));
+  const limit = Math.max(1, Math.min(Number(pageLimit) || 1, MAX_SCAN_PAGES));
   const urls = [];
   for (let pageNo = 1; pageNo <= limit; pageNo += 1) {
     const url = new URL(sourceUrl);
