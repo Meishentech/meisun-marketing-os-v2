@@ -1027,7 +1027,7 @@ h1 {
 
 .filter-panel {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) repeat(6, minmax(120px, 1fr)) minmax(150px, auto);
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 10px;
   align-items: end;
   margin-bottom: 16px;
@@ -1040,6 +1040,12 @@ h1 {
 .filter-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
+}
+
+.filter-field.is-wide {
+  grid-column: span 2;
+  min-width: min(100%, 240px);
 }
 
 .filter-field span {
@@ -1068,6 +1074,8 @@ h1 {
   align-items: center;
   align-self: end;
   flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-width: 148px;
 }
 
 .filter-actions .btn {

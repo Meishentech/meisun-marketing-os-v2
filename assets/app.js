@@ -2734,7 +2734,7 @@ function contractorCompanyGroupSection(title, companies, allCompanies, fallbackT
       tag("未評估", "gray"),
       tag("待查證", "amber"),
       allCompanies.length ? "請調整上方篩選條件" : "請新增工程公司主檔",
-      allCompanies.length ? actionButton("清除篩選", "clear-contractor-filters", "", "is-primary") : (canManageContractors() ? actionButton("新增工程公司", "create-contractor-company", "", "is-primary") : ""),
+      allCompanies.length ? actionButton("清除篩選", "clear-contractor-filters", "", "is-primary") : "",
     ]],
   };
 }
