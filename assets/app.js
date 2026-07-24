@@ -2707,6 +2707,7 @@ function contractorCompanyListSection() {
         company.region || "未填",
         tag(company.relationship_status || "待整理", contractorRelationshipTone(company.relationship_status)),
         tag(company.potential_level || "未評估", contractorPotentialTone(company.potential_level)),
+        tag(company.web_research_status || "待查證", contractorWebResearchTone(company.web_research_status)),
         nextFollowup ? `${formatDate(nextFollowup.due_date) || "未排程"} / ${nextFollowup.title || "待追蹤"}` : "尚無追蹤",
         actionGroup([
           actionButton("詳情", "view-contractor-company", company.id, "is-primary"),
@@ -2722,7 +2723,7 @@ function contractorCompanyListSection() {
     wide: true,
     headerAction: actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
     topContent: contractorCompanyFilterHtml(filteredCompanies.length, allCompanies.length),
-    headers: ["公司", "統編", "類型", "區域", "關係", "潛力", "下次追蹤", "操作"],
+    headers: ["公司", "統編", "類型", "區域", "關係", "潛力", "查證", "下次追蹤", "操作"],
     rows: rows.length ? rows : [[
       allCompanies.length ? "沒有符合篩選條件的工程公司" : "目前尚未建立工程公司資料",
       "未填",
@@ -2730,6 +2731,7 @@ function contractorCompanyListSection() {
       "未填",
       tag("無資料", "amber"),
       tag("未評估", "gray"),
+      tag("待查證", "amber"),
       allCompanies.length ? "請調整上方篩選條件" : "請新增工程公司主檔",
       allCompanies.length ? actionButton("清除篩選", "clear-contractor-filters", "", "is-primary") : actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
     ]],
@@ -2764,6 +2766,10 @@ function contractorCompanyFilterHtml(visibleCount, totalCount) {
         <span>負責人</span>
         <select name="owner">${contractorFilterOptions("owner", filters.owner || "", "全部負責人")}</select>
       </label>
+      <label class="filter-field">
+        <span>查證</span>
+        <select name="webResearchStatus">${contractorFilterOptions("web_research_status", filters.webResearchStatus || "", "全部查證狀態")}</select>
+      </label>
       <div class="filter-actions">
         ${actionButton("套用篩選", "apply-contractor-filters", "", "is-primary")}
         ${actionButton("清除", "clear-contractor-filters")}
@@ -2790,6 +2796,7 @@ function contractorCompanyMatchesFilters(company = {}) {
   if (filters.relationshipStatus && String(company.relationship_status || "") !== filters.relationshipStatus) return false;
   if (filters.potentialLevel && String(company.potential_level || "") !== filters.potentialLevel) return false;
   if (filters.owner && String(company.owner || "") !== filters.owner) return false;
+  if (filters.webResearchStatus && String(company.web_research_status || "") !== filters.webResearchStatus) return false;
 
   const keyword = String(filters.keyword || "").trim().toLowerCase();
   if (!keyword) return true;
@@ -2806,6 +2813,9 @@ function contractorCompanyMatchesFilters(company = {}) {
     company.primary_contact_name,
     company.contractor_grade,
     company.source_note,
+    company.public_profile,
+    company.company_intro,
+    ...(Array.isArray(company.web_research_sources) ? company.web_research_sources : []),
     ...(Array.isArray(company.dealer_brands) ? company.dealer_brands : []),
     ...(Array.isArray(company.preferred_brands) ? company.preferred_brands : []),
   ].filter(Boolean).join(" ").toLowerCase();
@@ -2923,6 +2933,13 @@ function contractorCompanyProfileSection(company = {}) {
         <p><strong>地址：</strong>${escapeHtml(company.address || "未填")}</p>
         <p><strong>經銷 / 偏好品牌：</strong>${escapeHtml(contractorBrandText(company)) || "未填"}</p>
         <p><strong>專案經驗：</strong>${escapeHtml(company.project_experience || "未填")}</p>
+      </div>
+      <div class="detail-notes">
+        <p><strong>網路查證：</strong>${tag(company.web_research_status || "待查證", contractorWebResearchTone(company.web_research_status))}　<strong>查證時間：</strong>${escapeHtml(formatDate(company.web_researched_at) || "未查證")}</p>
+        <p><strong>公司簡介：</strong>${escapeHtml(company.company_intro || "未填")}</p>
+        <p><strong>完整資訊：</strong>${escapeHtml(company.public_profile || "未填")}</p>
+        <p><strong>查證來源：</strong>${contractorResearchSourcesHtml(company)}</p>
+        <p>${contractorSearchLink(company)}</p>
       </div>
     `,
   };
@@ -4745,6 +4762,28 @@ function contractorBrandText(company = {}) {
   return parts.join(" / ");
 }
 
+function contractorResearchSourcesHtml(company = {}) {
+  const sources = Array.isArray(company.web_research_sources) ? company.web_research_sources : [];
+  const links = sources
+    .map((source) => String(source || "").trim())
+    .filter(Boolean)
+    .map((source) => {
+      const safeUrl = escapeAttr(source);
+      const safeLabel = escapeHtml(source);
+      return /^https?:\/\//i.test(source)
+        ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeLabel}</a>`
+        : safeLabel;
+    });
+  return links.length ? links.join("<br>") : "未填";
+}
+
+function contractorSearchLink(company = {}) {
+  const query = `${company.company_name || ""} 公司簡介 統一編號 地址`.trim();
+  if (!query) return "";
+  const href = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  return `<a class="inline-action is-primary" href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">搜尋網頁</a>`;
+}
+
 function contractorContactsFor(companyId) {
   const id = String(companyId || "");
   return state.data.contractorContacts
@@ -4805,6 +4844,13 @@ function contractorPotentialTone(value = "") {
   if (["B", "中", "中潛力"].includes(value)) return "amber";
   if (["C", "低", "低潛力"].includes(value)) return "gray";
   return "";
+}
+
+function contractorWebResearchTone(value = "") {
+  if (value === "已查證") return "green";
+  if (value === "部分查證") return "blue";
+  if (value === "查無資料") return "gray";
+  return "amber";
 }
 
 function contractorFollowupPriorityTone(value = "") {
@@ -6014,6 +6060,15 @@ function contractorRelationshipOptions() {
     ["重點經營", "重點經營"],
     ["已合作", "已合作"],
     ["暫緩", "暫緩"],
+  ];
+}
+
+function contractorWebResearchStatusOptions() {
+  return [
+    ["待查證", "待查證"],
+    ["部分查證", "部分查證"],
+    ["已查證", "已查證"],
+    ["查無資料", "查無資料"],
   ];
 }
 
@@ -7512,9 +7567,16 @@ async function saveContractorCompany(payload = {}, companyId = "") {
   try {
     await api(method, endpoint, payload);
   } catch (error) {
-    if (!String(error?.message || "").includes("'tax_id' column")) throw error;
+    const message = String(error?.message || "");
+    if (!message.includes("column")) throw error;
     const legacyPayload = { ...payload };
     delete legacyPayload.tax_id;
+    delete legacyPayload.public_profile;
+    delete legacyPayload.company_intro;
+    delete legacyPayload.web_research_status;
+    delete legacyPayload.web_research_sources;
+    delete legacyPayload.web_researched_at;
+    delete legacyPayload.web_researched_by;
     await api(method, endpoint, legacyPayload);
   }
 }
@@ -7657,10 +7719,43 @@ function contractorCompanyFormHtml(company = {}) {
         </label>
       </div>
     </div>
+
+    <div class="form-section">
+      <h3>網路查證</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>查證狀態</span>
+          <select name="web_research_status">${selectOptions(contractorWebResearchStatusOptions(), company.web_research_status || "待查證")}</select>
+        </label>
+        <label class="form-field">
+          <span>查證時間</span>
+          <input value="${escapeAttr(formatDate(company.web_researched_at) || "尚未查證")}" readonly>
+        </label>
+        <label class="form-field is-wide">
+          <span>公司簡介</span>
+          <textarea name="company_intro" placeholder="依公開網頁整理公司簡介，查不到可留白。">${escapeHtml(company.company_intro || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>公司完整資訊</span>
+          <textarea name="public_profile" placeholder="例如：主要服務、營業項目、公開登記資訊、官方網站資訊。">${escapeHtml(company.public_profile || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>查證來源網址</span>
+          <textarea name="web_research_sources" placeholder="每行一個來源網址。">${escapeHtml(Array.isArray(company.web_research_sources) ? company.web_research_sources.join("\n") : "")}</textarea>
+        </label>
+      </div>
+    </div>
   `;
 }
 
 function contractorCompanyPayload(values = {}) {
+  const researchSources = splitLines(values.web_research_sources);
+  const hasResearchContent = Boolean(
+    values.public_profile?.trim()
+    || values.company_intro?.trim()
+    || researchSources.length
+    || (values.web_research_status && values.web_research_status !== "待查證")
+  );
   return {
     company_name: values.company_name?.trim(),
     company_type: values.company_type?.trim() || null,
@@ -7685,6 +7780,12 @@ function contractorCompanyPayload(values = {}) {
     potential_level: values.potential_level || null,
     owner: values.owner?.trim() || state.auth.email || null,
     source_note: values.source_note?.trim() || null,
+    public_profile: values.public_profile?.trim() || null,
+    company_intro: values.company_intro?.trim() || null,
+    web_research_status: values.web_research_status || "待查證",
+    web_research_sources: researchSources,
+    web_researched_at: hasResearchContent ? nowIso() : null,
+    web_researched_by: hasResearchContent ? state.auth.email || null : null,
     updated_at: nowIso(),
   };
 }
@@ -9385,6 +9486,13 @@ function parseCampaignVendors(value = "") {
 function splitDelimitedText(value = "") {
   return String(value)
     .split(/[、,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function splitLines(value = "") {
+  return String(value)
+    .split(/\n/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -11640,6 +11748,7 @@ function applyContractorCompanyFilters() {
     relationshipStatus: panel.querySelector('[name="relationshipStatus"]')?.value || "",
     potentialLevel: panel.querySelector('[name="potentialLevel"]')?.value || "",
     owner: panel.querySelector('[name="owner"]')?.value || "",
+    webResearchStatus: panel.querySelector('[name="webResearchStatus"]')?.value || "",
   };
   render();
 }
@@ -11652,6 +11761,7 @@ function clearContractorCompanyFilters() {
     relationshipStatus: "",
     potentialLevel: "",
     owner: "",
+    webResearchStatus: "",
   };
   render();
 }
@@ -11988,10 +12098,13 @@ async function loadContractorImportBatches() {
 }
 
 async function loadContractorCompanies() {
+  const withWebResearch = "id,company_name,tax_id,company_type,region,address,phone,fax,email,website,representative_name,primary_contact_name,mobile,capital_amount_text,annual_revenue_text,employee_count_text,contractor_grade,dealer_brands,preferred_brands,project_experience,public_profile,company_intro,web_research_status,web_research_sources,web_researched_at,web_researched_by,relationship_status,potential_level,owner,source_note,import_batch_id,archived_at,archived_by,archive_reason,created_at,updated_at";
   const withTaxId = "id,company_name,tax_id,company_type,region,address,phone,fax,email,website,representative_name,primary_contact_name,mobile,capital_amount_text,annual_revenue_text,employee_count_text,contractor_grade,dealer_brands,preferred_brands,project_experience,relationship_status,potential_level,owner,source_note,import_batch_id,archived_at,archived_by,archive_reason,created_at,updated_at";
   const legacy = "id,company_name,company_type,region,address,phone,fax,email,website,representative_name,primary_contact_name,mobile,capital_amount_text,annual_revenue_text,employee_count_text,contractor_grade,dealer_brands,preferred_brands,project_experience,relationship_status,potential_level,owner,source_note,import_batch_id,archived_at,archived_by,archive_reason,created_at,updated_at";
-  const rows = await safeGET(`contractor_companies?select=${withTaxId}&order=updated_at.desc.nullslast,created_at.desc&limit=500`, null);
-  return rows || safeGET(`contractor_companies?select=${legacy}&order=updated_at.desc.nullslast,created_at.desc&limit=500`, null);
+  const rows = await safeGET(`contractor_companies?select=${withWebResearch}&order=updated_at.desc.nullslast,created_at.desc&limit=500`, null);
+  if (rows) return rows;
+  const withTaxRows = await safeGET(`contractor_companies?select=${withTaxId}&order=updated_at.desc.nullslast,created_at.desc&limit=500`, null);
+  return withTaxRows || safeGET(`contractor_companies?select=${legacy}&order=updated_at.desc.nullslast,created_at.desc&limit=500`, null);
 }
 
 async function loadContractorContacts() {

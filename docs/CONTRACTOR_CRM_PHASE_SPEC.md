@@ -71,6 +71,11 @@
 | `dealer_brands` | 經銷品牌 |
 | `preferred_brands` | 慣用廠牌 |
 | `project_experience` | 相關工程案件 |
+| `public_profile` | 依公司名稱網路查證後整理的完整公開資訊，可留白 |
+| `company_intro` | 依公開資料整理的公司簡介，可留白 |
+| `web_research_status` | 待查證、已查證、部分查證、查無資料 |
+| `web_research_sources` | 查證來源網址清單 |
+| `web_researched_at` / `web_researched_by` | 查證時間與查證人 |
 | `relationship_status` | 洽談中、已拜訪、重點維護、暫緩、封存等自由狀態 |
 | `potential_level` | A/B/C 或 H/M/L，可先用文字 |
 | `owner` | 內部負責人，指向 `app_user_access.email` |
