@@ -242,6 +242,17 @@ const pages = {
       ],
       sections: [decisionListSection(), approvalFlowSection()],
     },
+    contractors: {
+      title: "工程公司 CRM",
+      subtitle: "查看工程公司、技師聯絡人、拜訪紀錄與後續追蹤摘要。",
+      kpis: [
+        ["工程公司", "0", "正式資料載入後顯示"],
+        ["待追蹤", "0", "尚未建立後續追蹤"],
+        ["本週互動", "0", "本週拜訪或聯繫"],
+        ["重點客戶", "0", "依潛力與關係判斷"],
+      ],
+      sections: [contractorPageSections()],
+    },
     requests: {
       title: "業務需求單",
       subtitle: "由總經理提出需要行銷補充的簡報、DM、市場分析、競品比較或活動資料需求。",
