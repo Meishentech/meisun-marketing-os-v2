@@ -96,6 +96,7 @@
 | `preferred_brands` | 慣用廠牌 |
 | `notes` | 備註 |
 | `owner` | 內部負責人 |
+| `import_batch_id` | 匯入批次 |
 | `archived_at` / `archived_by` / `archive_reason` | 封存紀錄 |
 | `created_at` / `updated_at` | 建立與更新時間 |
 
@@ -119,6 +120,8 @@
 | `next_followup_date` | 下次追蹤日 |
 | `potential_level` | 本次評估掌握度 H/M/L |
 | `needs_marketing_support` | 是否需要行銷支援 |
+| `import_batch_id` | 匯入批次 |
+| `cancelled_at` / `cancelled_by` / `cancel_reason` | 取消紀錄 |
 | `created_at` / `updated_at` | 建立與更新時間 |
 
 ### `contractor_followups`
@@ -179,6 +182,13 @@ Excel 匯入批次紀錄。
 3. 公司名稱不同但電話相同：列入人工確認。
 4. 技師資料有公司寶號但找不到公司：先建立待確認公司或未歸戶聯絡人。
 5. 原始 Excel 值不覆蓋使用者已手動更新的欄位；匯入時只補空欄位，衝突值保留在備註或來源紀錄。
+
+## 資料治理決策
+
+- `potential_level` 先不自動連動。公司主檔的 `potential_level` 代表目前整體評估；互動紀錄的 `potential_level` 代表單次拜訪或接觸當下的評估。
+- 匯入 Excel 時，若來源列有掌握度，先寫入該筆 `contractor_interactions.potential_level`；是否同步更新公司主檔，由匯入預覽或後續人工整理決定。
+- 聯絡人使用 `archived_*` 表示不再使用或不再追蹤；互動紀錄使用 `cancelled_*` 表示該次紀錄作廢但保留歷史，不做真刪除。
+- `contractor_contacts`、`contractor_interactions` 都保留 `import_batch_id`，方便日後追溯某筆聯絡人或拜訪紀錄來自哪一份 Excel / 哪一次匯入。
 
 ## 行銷端畫面
 
