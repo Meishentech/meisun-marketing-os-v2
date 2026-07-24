@@ -41,6 +41,7 @@ create table if not exists public.contractor_import_batches (
 create table if not exists public.contractor_companies (
   id uuid primary key default gen_random_uuid(),
   company_name text not null,
+  tax_id text,
   company_type text,
   region text,
   address text,
@@ -374,4 +375,3 @@ order by tablename;
 -- - is_marketing_or_admin = true.
 -- - visible_companies = 1.
 -- - updated_companies = 1.
-

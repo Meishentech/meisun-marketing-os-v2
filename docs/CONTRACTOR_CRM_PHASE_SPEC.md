@@ -53,6 +53,7 @@
 | --- | --- |
 | `id` | UUID 主鍵 |
 | `company_name` | 公司名稱 |
+| `tax_id` | 統一編號 |
 | `company_type` | 工程公司、技師事務所、顧問公司、承裝業、其他 |
 | `region` | 北部、中部、南部、東部、未分類 |
 | `address` | 地址 |

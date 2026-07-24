@@ -2702,6 +2702,7 @@ function contractorCompanyListSection() {
       const nextFollowup = nextContractorFollowup(company.id);
       return [
         contractorCompanyName(company),
+        company.tax_id || "未填",
         company.company_type || "未分類",
         company.region || "未填",
         tag(company.relationship_status || "待整理", contractorRelationshipTone(company.relationship_status)),
@@ -2721,9 +2722,10 @@ function contractorCompanyListSection() {
     wide: true,
     headerAction: actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
     topContent: contractorCompanyFilterHtml(filteredCompanies.length, allCompanies.length),
-    headers: ["公司", "類型", "區域", "關係", "潛力", "下次追蹤", "操作"],
+    headers: ["公司", "統編", "類型", "區域", "關係", "潛力", "下次追蹤", "操作"],
     rows: rows.length ? rows : [[
       allCompanies.length ? "沒有符合篩選條件的工程公司" : "目前尚未建立工程公司資料",
+      "未填",
       "工程公司",
       "未填",
       tag("無資料", "amber"),
@@ -2793,6 +2795,7 @@ function contractorCompanyMatchesFilters(company = {}) {
   if (!keyword) return true;
   const haystack = [
     company.company_name,
+    company.tax_id,
     company.company_type,
     company.region,
     company.address,
@@ -2905,6 +2908,10 @@ function contractorCompanyProfileSection(company = {}) {
         <div class="detail-summary-card">
           <span>主要聯絡</span>
           <strong>${escapeHtml(company.primary_contact_name || company.representative_name || "未填")}</strong>
+        </div>
+        <div class="detail-summary-card">
+          <span>統編</span>
+          <strong>${escapeHtml(company.tax_id || "未填")}</strong>
         </div>
         <div class="detail-summary-card">
           <span>負責人</span>
@@ -7468,16 +7475,25 @@ function openContractorCompanyModal(company = {}) {
       const payload = contractorCompanyPayload(values);
       if (!payload.company_name) throw new Error("請輸入工程公司名稱。");
 
-      if (isEdit) {
-        await api("PATCH", `contractor_companies?id=eq.${encodeURIComponent(company.id)}`, payload);
-      } else {
-        await api("POST", "contractor_companies", payload);
-      }
+      await saveContractorCompany(payload, company.id);
 
       closeModal();
       await loadExistingData();
     },
   });
+}
+
+async function saveContractorCompany(payload = {}, companyId = "") {
+  const method = companyId ? "PATCH" : "POST";
+  const endpoint = companyId ? `contractor_companies?id=eq.${encodeURIComponent(companyId)}` : "contractor_companies";
+  try {
+    await api(method, endpoint, payload);
+  } catch (error) {
+    if (!String(error?.message || "").includes("'tax_id' column")) throw error;
+    const legacyPayload = { ...payload };
+    delete legacyPayload.tax_id;
+    await api(method, endpoint, legacyPayload);
+  }
 }
 
 function openArchiveContractorCompanyModal(id) {
@@ -7527,6 +7543,10 @@ function contractorCompanyFormHtml(company = {}) {
         <label class="form-field">
           <span>區域</span>
           <input name="region" value="${escapeAttr(company.region || "")}" placeholder="例如：台北、新北、桃園">
+        </label>
+        <label class="form-field">
+          <span>統編</span>
+          <input name="tax_id" value="${escapeAttr(company.tax_id || "")}" inputmode="numeric" placeholder="8 位數統一編號">
         </label>
         <label class="form-field">
           <span>關係狀態</span>
@@ -7621,6 +7641,7 @@ function contractorCompanyPayload(values = {}) {
   return {
     company_name: values.company_name?.trim(),
     company_type: values.company_type?.trim() || null,
+    tax_id: values.tax_id?.trim() || null,
     region: values.region?.trim() || null,
     address: values.address?.trim() || null,
     phone: values.phone?.trim() || null,
@@ -11944,7 +11965,10 @@ async function loadContractorImportBatches() {
 }
 
 async function loadContractorCompanies() {
-  return safeGET("contractor_companies?select=id,company_name,company_type,region,address,phone,fax,email,website,representative_name,primary_contact_name,mobile,capital_amount_text,annual_revenue_text,employee_count_text,contractor_grade,dealer_brands,preferred_brands,project_experience,relationship_status,potential_level,owner,source_note,import_batch_id,archived_at,archived_by,archive_reason,created_at,updated_at&order=updated_at.desc.nullslast,created_at.desc&limit=500", null);
+  const withTaxId = "id,company_name,tax_id,company_type,region,address,phone,fax,email,website,representative_name,primary_contact_name,mobile,capital_amount_text,annual_revenue_text,employee_count_text,contractor_grade,dealer_brands,preferred_brands,project_experience,relationship_status,potential_level,owner,source_note,import_batch_id,archived_at,archived_by,archive_reason,created_at,updated_at";
+  const legacy = "id,company_name,company_type,region,address,phone,fax,email,website,representative_name,primary_contact_name,mobile,capital_amount_text,annual_revenue_text,employee_count_text,contractor_grade,dealer_brands,preferred_brands,project_experience,relationship_status,potential_level,owner,source_note,import_batch_id,archived_at,archived_by,archive_reason,created_at,updated_at";
+  const rows = await safeGET(`contractor_companies?select=${withTaxId}&order=updated_at.desc.nullslast,created_at.desc&limit=500`, null);
+  return rows || safeGET(`contractor_companies?select=${legacy}&order=updated_at.desc.nullslast,created_at.desc&limit=500`, null);
 }
 
 async function loadContractorContacts() {
