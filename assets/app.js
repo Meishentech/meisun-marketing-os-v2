@@ -73,6 +73,7 @@ const state = {
   campaignInspectionMode: "",
   associationDetailId: "",
   contractorCompanyId: "",
+  contractorFocus: "",
   contractorFilters: {
     keyword: "",
     companyType: "",
@@ -133,6 +134,7 @@ const roleMeta = {
       ["dashboard", "總經理戰情室"],
       ["budget", "預算 / 補助 / 付款"],
       ["decisions", "待決策中心"],
+      ["contractors", "工程公司 CRM"],
       ["requests", "業務需求單"],
       ["weekly", "週報摘要"],
     ],
@@ -2683,6 +2685,7 @@ function contractorPageSections() {
   if (state.contractorCompanyId) return contractorDetailSections();
   return [
     ...contractorCompanyListSections(),
+    contractorWeeklySummarySection(),
     contractorFollowupOverviewSection(),
     contractorRecentInteractionsSection(),
     archivedContractorCompaniesSection(),
@@ -2691,7 +2694,9 @@ function contractorPageSections() {
 
 function contractorCompanyListSections() {
   const allCompanies = state.data.contractorCompanies;
-  const filteredCompanies = allCompanies.filter(contractorCompanyMatchesFilters);
+  const filteredCompanies = allCompanies
+    .filter(contractorCompanyMatchesFilters)
+    .filter(contractorCompanyMatchesFocus);
   const contractorCompanies = filteredCompanies.filter((company) => !isContractorEngineerOffice(company));
   const engineerOffices = filteredCompanies.filter(isContractorEngineerOffice);
 
@@ -2700,12 +2705,16 @@ function contractorCompanyListSections() {
       type: "html",
       title: "工程公司主檔",
       wide: true,
-      headerAction: actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
+      headerAction: canManageContractors() ? actionButton("新增工程公司", "create-contractor-company", "", "is-primary") : "",
       html: contractorCompanyFilterHtml(filteredCompanies.length, allCompanies.length),
     },
     contractorCompanyGroupSection("工程公司", contractorCompanies, allCompanies, "工程公司"),
     contractorCompanyGroupSection("技師事務所", engineerOffices, allCompanies, "技師事務所"),
   ];
+}
+
+function canManageContractors() {
+  return state.role === "marketing";
 }
 
 function contractorCompanyGroupSection(title, companies, allCompanies, fallbackType) {
@@ -2725,7 +2734,7 @@ function contractorCompanyGroupSection(title, companies, allCompanies, fallbackT
       tag("未評估", "gray"),
       tag("待查證", "amber"),
       allCompanies.length ? "請調整上方篩選條件" : "請新增工程公司主檔",
-      allCompanies.length ? actionButton("清除篩選", "clear-contractor-filters", "", "is-primary") : actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
+      allCompanies.length ? actionButton("清除篩選", "clear-contractor-filters", "", "is-primary") : (canManageContractors() ? actionButton("新增工程公司", "create-contractor-company", "", "is-primary") : ""),
     ]],
   };
 }
@@ -2750,8 +2759,10 @@ function contractorCompanyRows(companies = []) {
         nextFollowup ? `${formatDate(nextFollowup.due_date) || "未排程"} / ${nextFollowup.title || "待追蹤"}` : "尚無追蹤",
         actionGroup([
           actionButton("詳情", "view-contractor-company", company.id, "is-primary"),
-          actionButton("編輯", "edit-contractor-company", company.id),
-          actionButton("封存", "archive-contractor-company", company.id, "is-danger"),
+          ...(canManageContractors() ? [
+            actionButton("編輯", "edit-contractor-company", company.id),
+            actionButton("封存", "archive-contractor-company", company.id, "is-danger"),
+          ] : []),
         ]),
       ];
     });
@@ -2763,6 +2774,7 @@ function isContractorEngineerOffice(company = {}) {
 
 function contractorCompanyFilterHtml(visibleCount, totalCount) {
   const filters = state.contractorFilters || {};
+  const focusLabel = contractorFocusLabel(state.contractorFocus);
   return `
     <div class="filter-panel" data-filter-scope="contractor-companies">
       <label class="filter-field is-wide">
@@ -2797,7 +2809,7 @@ function contractorCompanyFilterHtml(visibleCount, totalCount) {
         ${actionButton("套用篩選", "apply-contractor-filters", "", "is-primary")}
         ${actionButton("清除", "clear-contractor-filters")}
       </div>
-      <p class="filter-summary">目前顯示 ${visibleCount} / ${totalCount} 筆。</p>
+      <p class="filter-summary">目前顯示 ${visibleCount} / ${totalCount} 筆。${focusLabel ? `目前焦點：${escapeHtml(focusLabel)}。` : ""}</p>
     </div>
   `;
 }
@@ -2925,8 +2937,10 @@ function contractorCompanyProfileSection(company = {}) {
     wide: true,
     headerAction: actionGroup([
       actionButton("返回列表", "back-contractor-list"),
-      actionButton("編輯公司", "edit-contractor-company", company.id, "is-primary"),
-      actionButton("封存", "archive-contractor-company", company.id, "is-danger"),
+      ...(canManageContractors() ? [
+        actionButton("編輯公司", "edit-contractor-company", company.id, "is-primary"),
+        actionButton("封存", "archive-contractor-company", company.id, "is-danger"),
+      ] : []),
     ]),
     html: `
       <div class="detail-summary-grid">
@@ -2975,19 +2989,19 @@ function contractorContactsSection(company = {}) {
     contact.mobile || contact.phone || "未填",
     contact.email || "未填",
     tag(contact.practice_status || contact.engineer_level || "未評估", statusTone(contact.practice_status || "")),
-    actionGroup([
+    canManageContractors() ? actionGroup([
       actionButton("編輯", "edit-contractor-contact", contact.id, "is-primary"),
       actionButton("封存", "archive-contractor-contact", contact.id, "is-danger"),
-    ]),
+    ]) : "查看詳情",
   ]);
 
   return {
     type: "table",
     title: "聯絡人 / 技師",
     wide: true,
-    headerAction: actionButton("新增聯絡人", "create-contractor-contact", company.id, "is-primary"),
+    headerAction: canManageContractors() ? actionButton("新增聯絡人", "create-contractor-contact", company.id, "is-primary") : "",
     headers: ["姓名", "職稱 / 類型", "電話", "Email", "狀態", "操作"],
-    rows: rows.length ? rows : [["尚未建立聯絡人", "未填", "未填", "未填", tag("無資料", "amber"), actionButton("新增聯絡人", "create-contractor-contact", company.id, "is-primary")]],
+    rows: rows.length ? rows : [["尚未建立聯絡人", "未填", "未填", "未填", tag("無資料", "amber"), canManageContractors() ? actionButton("新增聯絡人", "create-contractor-contact", company.id, "is-primary") : "無"]],
   };
 }
 
@@ -3001,10 +3015,10 @@ function contractorInteractionsSection(company = {}) {
             <strong>${escapeHtml(formatDate(interaction.interaction_date) || "未填日期")}</strong>
             <span>${escapeHtml(interaction.interaction_type || "未分類")} / ${escapeHtml(contact?.contact_name || "未指定聯絡人")}</span>
           </div>
-          ${actionGroup([
+          ${canManageContractors() ? actionGroup([
             actionButton("編輯", "edit-contractor-interaction", interaction.id, "is-primary"),
             actionButton("取消", "cancel-contractor-interaction", interaction.id, "is-danger"),
-          ])}
+          ]) : ""}
         </div>
         <div class="interaction-summary">
           <span>摘要</span>
@@ -3032,10 +3046,10 @@ function contractorInteractionsSection(company = {}) {
     type: "html",
     title: "拜訪 / 聯繫紀錄",
     wide: true,
-    headerAction: actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary"),
+    headerAction: canManageContractors() ? actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary") : "",
     html: cards ? `<div class="interaction-list">${cards}</div>` : `
       <div class="empty-note">
-        尚未建立拜訪或聯繫紀錄。${actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary")}
+        尚未建立拜訪或聯繫紀錄。${canManageContractors() ? actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary") : ""}
       </div>
     `,
   };
@@ -3051,10 +3065,10 @@ function contractorFollowupsSection(company = {}) {
       tag(followup.status || "待處理", statusTone(followup.status)),
       formatDate(followup.due_date) || "未排程",
       followup.result_note || "未填",
-      actionGroup([
+      canManageContractors() ? actionGroup([
         actionButton("編輯", "edit-contractor-followup", followup.id, "is-primary"),
         actionButton("取消", "cancel-contractor-followup", followup.id, "is-danger"),
-      ]),
+      ]) : "查看詳情",
     ];
   });
 
@@ -3062,9 +3076,9 @@ function contractorFollowupsSection(company = {}) {
     type: "table",
     title: "後續追蹤",
     wide: true,
-    headerAction: actionButton("新增追蹤", "create-contractor-followup", company.id, "is-primary"),
+    headerAction: canManageContractors() ? actionButton("新增追蹤", "create-contractor-followup", company.id, "is-primary") : "",
     headers: ["事項", "聯絡人", "優先級", "狀態", "期限", "結果", "操作"],
-    rows: rows.length ? rows : [["尚未建立後續追蹤", "未指定", tag("一般", "gray"), tag("無待辦", "green"), "未排程", "無", actionButton("新增追蹤", "create-contractor-followup", company.id, "is-primary")]],
+    rows: rows.length ? rows : [["尚未建立後續追蹤", "未指定", tag("一般", "gray"), tag("無待辦", "green"), "未排程", "無", canManageContractors() ? actionButton("新增追蹤", "create-contractor-followup", company.id, "is-primary") : "無"]],
   };
 }
 
@@ -4885,19 +4899,16 @@ function contractorFollowupPriorityTone(value = "") {
 function contractorKpis() {
   const companies = state.data.contractorCompanies;
   const pendingFollowups = state.data.contractorFollowups.filter((followup) => !["已完成", "完成"].includes(followup.status || ""));
-  const since = new Date();
-  since.setDate(since.getDate() - 30);
   const recentInteractions = state.data.contractorInteractions.filter((interaction) => {
-    const date = new Date(interaction.interaction_date || interaction.created_at || "");
-    return !Number.isNaN(date.getTime()) && date >= since;
+    return isThisWeekDate(interaction.interaction_date || interaction.created_at);
   });
   const keyCompanies = companies.filter((company) => contractorPriorityScore(company) >= 3);
 
   return [
-    ["工程公司", String(companies.length), "目前維護中的公司"],
-    ["待追蹤", String(pendingFollowups.length), "尚未完成的追蹤事項"],
-    ["近期互動", String(recentInteractions.length), "近 30 天拜訪或聯繫"],
-    ["重點客戶", String(keyCompanies.length), "依潛力與關係判斷"],
+    ["工程公司", String(companies.length), "目前維護中的公司", "contractors", "contractor:all"],
+    ["待追蹤", String(pendingFollowups.length), "尚未完成的追蹤事項", "contractors", "contractor:pending"],
+    ["本週互動", String(recentInteractions.length), "本週拜訪或聯繫", "contractors", "contractor:recent"],
+    ["重點客戶", String(keyCompanies.length), "依潛力與關係判斷", "contractors", "contractor:key"],
   ];
 }
 
@@ -10803,6 +10814,7 @@ function buildCurrentKpis(page) {
     "executive:channels": channelKpis(),
     "executive:decisions": approvalKpis(),
     "executive:requests": requestKpis(),
+    "executive:contractors": contractorKpis(),
     "marketing:dashboard": marketingDashboardKpis(),
     "marketing:campaigns": campaignKpis(),
     "marketing:budget": expenseKpis(),
@@ -11237,6 +11249,7 @@ function buildCurrentSections(page) {
     "executive:channels": [channelSummarySection(false)],
     "executive:decisions": [decisionListSection(), campaignRiskSummarySection(), approvalFlowSection()],
     "executive:requests": [salesRequestSection("executive"), cancelledSalesRequestSection("executive")],
+    "executive:contractors": contractorPageSections(),
     "executive:weekly": weeklySummarySections(),
     "marketing:dashboard": [weeklySummaryEntrySection(), campaignSummarySection(), marketingRiskInspectionCardsSection(), campaignRiskSummarySection(), marketingWorklistSection(), marketingTodoSection()],
     "marketing:campaigns": campaignPageSections(),
@@ -11287,6 +11300,7 @@ function renderNav(navItems) {
   nav.querySelectorAll("button.nav-button[data-page]").forEach((button) => {
     button.addEventListener("click", () => {
       state.page = button.dataset.page;
+      if (state.page === "contractors") state.contractorFocus = "";
       clearCampaignDrilldown();
       render();
     });
@@ -11294,8 +11308,8 @@ function renderNav(navItems) {
 }
 
 function renderKpis(kpis) {
-  document.getElementById("kpiGrid").innerHTML = kpis.map(([label, value, note, pageTarget]) => `
-    <article class="kpi-card${pageTarget ? " is-clickable" : ""}"${pageTarget ? ` data-page-target="${escapeAttr(pageTarget)}"` : ""}>
+  document.getElementById("kpiGrid").innerHTML = kpis.map(([label, value, note, pageTarget, kpiAction]) => `
+    <article class="kpi-card${pageTarget || kpiAction ? " is-clickable" : ""}"${pageTarget ? ` data-page-target="${escapeAttr(pageTarget)}"` : ""}${kpiAction ? ` data-kpi-action="${escapeAttr(kpiAction)}"` : ""}>
       <div class="kpi-label">${label}</div>
       <div class="kpi-value">${value}</div>
       <div class="kpi-note">${note}</div>
@@ -11579,9 +11593,20 @@ document.getElementById("secondaryAction").addEventListener("click", () => {
   exportCurrentSummary();
 });
 
+function applyKpiAction(action = "") {
+  if (action === "contractor:all") {
+    state.contractorFocus = "";
+    return;
+  }
+  if (action.startsWith("contractor:")) {
+    state.contractorFocus = action.split(":")[1] || "";
+  }
+}
+
 document.addEventListener("click", (event) => {
   const kpiCard = event.target.closest("[data-page-target]");
   if (kpiCard) {
+    applyKpiAction(kpiCard.dataset.kpiAction || "");
     state.page = kpiCard.dataset.pageTarget;
     clearCampaignDrilldown();
     render();
@@ -11777,6 +11802,7 @@ function applyContractorCompanyFilters() {
 }
 
 function clearContractorCompanyFilters() {
+  state.contractorFocus = "";
   state.contractorFilters = {
     keyword: "",
     companyType: "",
@@ -11893,6 +11919,77 @@ async function handleRecoverySessionFromUrl() {
   }
 
   return true;
+}
+
+function contractorCompanyMatchesFocus(company = {}) {
+  const focus = state.contractorFocus || "";
+  if (!focus || focus === "all") return true;
+  if (focus === "pending") return Boolean(nextContractorFollowup(company.id));
+  if (focus === "recent") return contractorInteractionsFor(company.id).some((interaction) => isThisWeekDate(interaction.interaction_date || interaction.created_at));
+  if (focus === "key") return contractorPriorityScore(company) >= 3;
+  return true;
+}
+
+function isThisWeekDate(value) {
+  const date = formatDate(value);
+  return Boolean(date && date >= startOfWeekString() && date <= localDateString());
+}
+
+function contractorFocusLabel(focus = "") {
+  if (focus === "pending") return "待追蹤";
+  if (focus === "recent") return "本週互動";
+  if (focus === "key") return "重點客戶";
+  return "";
+}
+
+function contractorWeeklySummarySection() {
+  const start = startOfWeekString();
+  const end = localDateString();
+  const companyRows = state.data.contractorCompanies
+    .filter((company) => isThisWeekDate(company.updated_at || company.created_at))
+    .slice()
+    .sort((a, b) => String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || "")))
+    .slice(0, 8)
+    .map((company) => [
+      "公司更新",
+      contractorCompanyName(company),
+      `${company.company_type || "未分類"} / ${company.region || "未填區域"}`,
+      actionButton("詳情", "view-contractor-company", company.id, "is-primary"),
+    ]);
+
+  const interactionRows = state.data.contractorInteractions
+    .filter((interaction) => isThisWeekDate(interaction.interaction_date || interaction.created_at))
+    .slice()
+    .sort((a, b) => String(b.interaction_date || b.created_at || "").localeCompare(String(a.interaction_date || a.created_at || "")))
+    .slice(0, 8)
+    .map((interaction) => [
+      "互動紀錄",
+      contractorCompanyName(findContractorCompany(interaction.company_id)),
+      `${formatDate(interaction.interaction_date) || "未填日期"} / ${interaction.interaction_type || "未分類"}`,
+      actionButton("詳情", "view-contractor-company", interaction.company_id || "", "is-primary", !interaction.company_id),
+    ]);
+
+  const followupRows = state.data.contractorFollowups
+    .filter((followup) => !["已完成", "完成"].includes(followup.status || ""))
+    .filter((followup) => isThisWeekDate(followup.due_date || followup.updated_at || followup.created_at))
+    .slice()
+    .sort((a, b) => String(a.due_date || a.updated_at || "").localeCompare(String(b.due_date || b.updated_at || "")))
+    .slice(0, 8)
+    .map((followup) => [
+      "追蹤事項",
+      contractorCompanyName(findContractorCompany(followup.company_id)),
+      `${formatDate(followup.due_date) || "未排程"} / ${followup.title || "待追蹤"}`,
+      actionButton("詳情", "view-contractor-company", followup.company_id || "", "is-primary", !followup.company_id),
+    ]);
+
+  const rows = [...companyRows, ...interactionRows, ...followupRows].slice(0, 12);
+  return {
+    type: "table",
+    title: `本週更新與追蹤：${start} ~ ${end}`,
+    wide: true,
+    headers: ["類型", "公司", "內容", "操作"],
+    rows: rows.length ? rows : [["本週尚無更新或追蹤事項", "無", "工程公司資料、互動紀錄與追蹤事項目前沒有本週異動。", ""]],
+  };
 }
 
 document.getElementById("loginForm").addEventListener("submit", async (event) => {
