@@ -1086,6 +1086,89 @@ h1 {
   line-height: 1.6;
 }
 
+.interaction-list {
+  display: grid;
+  gap: 12px;
+}
+
+.interaction-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfdff;
+}
+
+.interaction-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.interaction-card-header strong,
+.interaction-card-header span {
+  display: block;
+}
+
+.interaction-card-header strong {
+  color: #173a59;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.interaction-card-header span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.interaction-summary {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.interaction-summary span,
+.interaction-meta-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.interaction-summary p {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-weight: 800;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.interaction-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.interaction-meta-grid div {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.interaction-meta-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: #173a59;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1529,6 +1612,12 @@ h1 {
     padding: 12px;
     font-size: 13px;
     line-height: 1.7;
+  }
+
+  .interaction-card-header,
+  .interaction-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .table,

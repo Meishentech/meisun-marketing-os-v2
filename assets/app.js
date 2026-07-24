@@ -2952,29 +2952,52 @@ function contractorContactsSection(company = {}) {
 }
 
 function contractorInteractionsSection(company = {}) {
-  const rows = contractorInteractionsFor(company.id).map((interaction) => {
+  const cards = contractorInteractionsFor(company.id).map((interaction) => {
     const contact = findContractorContact(interaction.contact_id);
-    return [
-      formatDate(interaction.interaction_date) || "未填",
-      interaction.interaction_type || "未分類",
-      contact?.contact_name || "未指定",
-      interaction.summary || "未填寫摘要",
-      interaction.next_step || "未填",
-      formatDate(interaction.next_followup_date) || "未排程",
-      actionGroup([
-        actionButton("編輯", "edit-contractor-interaction", interaction.id, "is-primary"),
-        actionButton("取消", "cancel-contractor-interaction", interaction.id, "is-danger"),
-      ]),
-    ];
-  });
+    return `
+      <div class="interaction-card">
+        <div class="interaction-card-header">
+          <div>
+            <strong>${escapeHtml(formatDate(interaction.interaction_date) || "未填日期")}</strong>
+            <span>${escapeHtml(interaction.interaction_type || "未分類")} / ${escapeHtml(contact?.contact_name || "未指定聯絡人")}</span>
+          </div>
+          ${actionGroup([
+            actionButton("編輯", "edit-contractor-interaction", interaction.id, "is-primary"),
+            actionButton("取消", "cancel-contractor-interaction", interaction.id, "is-danger"),
+          ])}
+        </div>
+        <div class="interaction-summary">
+          <span>摘要</span>
+          <p>${escapeHtml(interaction.summary || "未填寫摘要")}</p>
+        </div>
+        <div class="interaction-meta-grid">
+          <div>
+            <span>下一步</span>
+            <strong>${escapeHtml(interaction.next_step || "未填")}</strong>
+          </div>
+          <div>
+            <span>下次追蹤</span>
+            <strong>${escapeHtml(formatDate(interaction.next_followup_date) || "未排程")}</strong>
+          </div>
+          <div>
+            <span>負責人</span>
+            <strong>${escapeHtml(interaction.owner || "未填")}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
 
   return {
-    type: "table",
+    type: "html",
     title: "拜訪 / 聯繫紀錄",
     wide: true,
     headerAction: actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary"),
-    headers: ["日期", "類型", "聯絡人", "摘要", "下一步", "下次追蹤", "操作"],
-    rows: rows.length ? rows : [["尚未建立拜訪或聯繫紀錄", "未分類", "未指定", "可從右上角新增", "未填", "未排程", actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary")]],
+    html: cards ? `<div class="interaction-list">${cards}</div>` : `
+      <div class="empty-note">
+        尚未建立拜訪或聯繫紀錄。${actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary")}
+      </div>
+    `,
   };
 }
 
