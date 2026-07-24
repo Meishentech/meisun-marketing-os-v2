@@ -2682,17 +2682,56 @@ function associationPageSections() {
 function contractorPageSections() {
   if (state.contractorCompanyId) return contractorDetailSections();
   return [
-    contractorCompanyListSection(),
+    ...contractorCompanyListSections(),
     contractorFollowupOverviewSection(),
     contractorRecentInteractionsSection(),
     archivedContractorCompaniesSection(),
   ];
 }
 
-function contractorCompanyListSection() {
+function contractorCompanyListSections() {
   const allCompanies = state.data.contractorCompanies;
   const filteredCompanies = allCompanies.filter(contractorCompanyMatchesFilters);
-  const rows = filteredCompanies
+  const contractorCompanies = filteredCompanies.filter((company) => !isContractorEngineerOffice(company));
+  const engineerOffices = filteredCompanies.filter(isContractorEngineerOffice);
+
+  return [
+    {
+      type: "html",
+      title: "工程公司主檔",
+      wide: true,
+      headerAction: actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
+      html: contractorCompanyFilterHtml(filteredCompanies.length, allCompanies.length),
+    },
+    contractorCompanyGroupSection("工程公司", contractorCompanies, allCompanies, "工程公司"),
+    contractorCompanyGroupSection("技師事務所", engineerOffices, allCompanies, "技師事務所"),
+  ];
+}
+
+function contractorCompanyGroupSection(title, companies, allCompanies, fallbackType) {
+  const rows = contractorCompanyRows(companies);
+  return {
+    type: "details-table",
+    title: `${title}（${companies.length}）`,
+    summary: "展開查看名單",
+    wide: true,
+    headers: ["公司", "統編", "類型", "區域", "關係", "潛力", "查證", "下次追蹤", "操作"],
+    rows: rows.length ? rows : [[
+      allCompanies.length ? `沒有符合篩選條件的${title}` : "目前尚未建立工程公司資料",
+      "未填",
+      fallbackType,
+      "未填",
+      tag("無資料", "amber"),
+      tag("未評估", "gray"),
+      tag("待查證", "amber"),
+      allCompanies.length ? "請調整上方篩選條件" : "請新增工程公司主檔",
+      allCompanies.length ? actionButton("清除篩選", "clear-contractor-filters", "", "is-primary") : actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
+    ]],
+  };
+}
+
+function contractorCompanyRows(companies = []) {
+  return companies
     .slice()
     .sort((a, b) => (
       contractorPriorityScore(b) - contractorPriorityScore(a)
@@ -2716,26 +2755,10 @@ function contractorCompanyListSection() {
         ]),
       ];
     });
+}
 
-  return {
-    type: "table",
-    title: "工程公司主檔",
-    wide: true,
-    headerAction: actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
-    topContent: contractorCompanyFilterHtml(filteredCompanies.length, allCompanies.length),
-    headers: ["公司", "統編", "類型", "區域", "關係", "潛力", "查證", "下次追蹤", "操作"],
-    rows: rows.length ? rows : [[
-      allCompanies.length ? "沒有符合篩選條件的工程公司" : "目前尚未建立工程公司資料",
-      "未填",
-      "工程公司",
-      "未填",
-      tag("無資料", "amber"),
-      tag("未評估", "gray"),
-      tag("待查證", "amber"),
-      allCompanies.length ? "請調整上方篩選條件" : "請新增工程公司主檔",
-      allCompanies.length ? actionButton("清除篩選", "clear-contractor-filters", "", "is-primary") : actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
-    ]],
-  };
+function isContractorEngineerOffice(company = {}) {
+  return String(company.company_type || "").includes("技師");
 }
 
 function contractorCompanyFilterHtml(visibleCount, totalCount) {
@@ -4888,7 +4911,7 @@ function contractorDetailKpis(company = {}) {
     ["關係 / 潛力", `<div class="kpi-chip-row">${tag(company.relationship_status || "待整理", contractorRelationshipTone(company.relationship_status))}${tag(company.potential_level || "未評估", contractorPotentialTone(company.potential_level))}</div>`, "目前掌握狀態"],
     ["聯絡人", String(contacts.length), "可維護技師與窗口"],
     ["待追蹤", String(followups.length), "尚未完成事項"],
-    ["最近互動", latestInteraction ? formatDate(latestInteraction.interaction_date) : "尚無", latestInteraction?.summary || "尚未建立拜訪或聯繫紀錄"],
+    ["最近互動", latestInteraction ? formatDate(latestInteraction.interaction_date) : "尚無", latestInteraction ? "最近一次拜訪／聯繫日期" : "尚未建立拜訪或聯繫紀錄"],
   ];
 }
 
