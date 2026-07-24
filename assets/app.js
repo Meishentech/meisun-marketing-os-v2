@@ -58,11 +58,21 @@ const state = {
     knowledgeResourceLinks: [],
     subsidyRules: [],
     expenses: [],
+    contractorImportBatches: [],
+    contractorCompanies: [],
+    archivedContractorCompanies: [],
+    contractorContacts: [],
+    archivedContractorContacts: [],
+    contractorInteractions: [],
+    cancelledContractorInteractions: [],
+    contractorFollowups: [],
+    cancelledContractorFollowups: [],
   },
   dataStatus: "loading",
   campaignDetailId: "",
   campaignInspectionMode: "",
   associationDetailId: "",
+  contractorCompanyId: "",
   tenderProjectId: "",
   knowledgeArchiveAvailable: false,
   subsidyRulesAvailable: false,
@@ -130,6 +140,7 @@ const roleMeta = {
       ["tenders", "招標工具管理"],
       ["vendors", "合作廠商 / 交付物"],
       ["associations", "公會管理"],
+      ["contractors", "工程公司 CRM"],
       ["knowledge", "產品知識庫"],
       ["requests", "業務需求單"],
       ["weekly", "週報摘要"],
@@ -321,6 +332,17 @@ const pages = {
         ["待確認權益", "4", "會員名錄、曝光、名單權益"],
       ],
       sections: [associationSection(), associationTagsSection()],
+    },
+    contractors: {
+      title: "工程公司 CRM",
+      subtitle: "維護工程公司、技師聯絡人、拜訪紀錄與後續追蹤。",
+      kpis: [
+        ["工程公司", "0", "正式資料載入後顯示"],
+        ["待追蹤", "0", "尚未建立後續追蹤"],
+        ["近期互動", "0", "30 天內拜訪或聯繫"],
+        ["重點客戶", "0", "依潛力與關係判斷"],
+      ],
+      sections: [contractorPageSections()],
     },
     knowledge: {
       title: "產品知識庫",
@@ -2649,6 +2671,287 @@ function associationPageSections() {
   ];
 }
 
+function contractorPageSections() {
+  if (state.contractorCompanyId) return contractorDetailSections();
+  return [
+    contractorCompanyListSection(),
+    contractorFollowupOverviewSection(),
+    contractorRecentInteractionsSection(),
+    archivedContractorCompaniesSection(),
+  ];
+}
+
+function contractorCompanyListSection() {
+  const rows = state.data.contractorCompanies
+    .slice()
+    .sort((a, b) => (
+      contractorPriorityScore(b) - contractorPriorityScore(a)
+      || String(a.company_name || "").localeCompare(String(b.company_name || ""), "zh-Hant-TW")
+    ))
+    .map((company) => {
+      const nextFollowup = nextContractorFollowup(company.id);
+      return [
+        contractorCompanyName(company),
+        company.company_type || "未分類",
+        company.region || "未填",
+        tag(company.relationship_status || "待整理", contractorRelationshipTone(company.relationship_status)),
+        tag(company.potential_level || "未評估", contractorPotentialTone(company.potential_level)),
+        nextFollowup ? `${formatDate(nextFollowup.due_date) || "未排程"} / ${nextFollowup.title || "待追蹤"}` : "尚無追蹤",
+        actionGroup([
+          actionButton("詳情", "view-contractor-company", company.id, "is-primary"),
+          actionButton("編輯", "edit-contractor-company", company.id),
+          actionButton("封存", "archive-contractor-company", company.id, "is-danger"),
+        ]),
+      ];
+    });
+
+  return {
+    type: "table",
+    title: "工程公司主檔",
+    wide: true,
+    headerAction: actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
+    headers: ["公司", "類型", "區域", "關係", "潛力", "下次追蹤", "操作"],
+    rows: rows.length ? rows : [[
+      "目前尚未建立工程公司資料",
+      "工程公司",
+      "未填",
+      tag("無資料", "amber"),
+      tag("未評估", "gray"),
+      "請新增工程公司主檔",
+      actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
+    ]],
+  };
+}
+
+function contractorFollowupOverviewSection() {
+  const rows = state.data.contractorFollowups
+    .slice()
+    .sort((a, b) => (
+      String(a.due_date || "9999-12-31").localeCompare(String(b.due_date || "9999-12-31"))
+      || contractorFollowupPriorityScore(b.priority) - contractorFollowupPriorityScore(a.priority)
+    ))
+    .slice(0, 12)
+    .map((followup) => {
+      const company = findContractorCompany(followup.company_id);
+      return [
+        contractorCompanyName(company),
+        followup.title || "未命名追蹤",
+        tag(followup.priority || "一般", contractorFollowupPriorityTone(followup.priority)),
+        tag(followup.status || "待處理", statusTone(followup.status)),
+        formatDate(followup.due_date) || "未排程",
+        followup.owner || "未填",
+        actionButton("詳情", "view-contractor-company", followup.company_id || "", "is-primary", !followup.company_id),
+      ];
+    });
+
+  return {
+    type: "table",
+    title: "待追蹤工程公司",
+    wide: true,
+    headers: ["公司", "事項", "優先級", "狀態", "期限", "負責人", "操作"],
+    rows: rows.length ? rows : [["目前沒有待追蹤事項", "無", tag("完成", "green"), tag("無待辦", "green"), "未排程", "無", ""]],
+  };
+}
+
+function contractorRecentInteractionsSection() {
+  const rows = state.data.contractorInteractions
+    .slice()
+    .sort((a, b) => String(b.interaction_date || "").localeCompare(String(a.interaction_date || "")))
+    .slice(0, 10)
+    .map((interaction) => {
+      const company = findContractorCompany(interaction.company_id);
+      const contact = findContractorContact(interaction.contact_id);
+      return [
+        formatDate(interaction.interaction_date) || "未填",
+        contractorCompanyName(company),
+        contact?.contact_name || "未指定",
+        interaction.interaction_type || "未分類",
+        interaction.summary || "未填寫摘要",
+        actionButton("詳情", "view-contractor-company", interaction.company_id || "", "is-primary", !interaction.company_id),
+      ];
+    });
+
+  return {
+    type: "table",
+    title: "近期拜訪 / 聯繫紀錄",
+    wide: true,
+    headers: ["日期", "公司", "聯絡人", "類型", "摘要", "操作"],
+    rows: rows.length ? rows : [["目前尚未建立拜訪或聯繫紀錄", "無", "無", "無", "可從公司詳情新增", ""]],
+  };
+}
+
+function contractorDetailSections() {
+  const company = currentContractorDetail();
+  if (!company) {
+    state.contractorCompanyId = "";
+    return contractorPageSections();
+  }
+
+  return [
+    contractorCompanyProfileSection(company),
+    contractorContactsSection(company),
+    contractorInteractionsSection(company),
+    contractorFollowupsSection(company),
+    contractorHistorySection(company),
+  ];
+}
+
+function contractorCompanyProfileSection(company = {}) {
+  return {
+    type: "html",
+    title: "工程公司資料",
+    wide: true,
+    headerAction: actionGroup([
+      actionButton("返回列表", "back-contractor-list"),
+      actionButton("編輯公司", "edit-contractor-company", company.id, "is-primary"),
+      actionButton("封存", "archive-contractor-company", company.id, "is-danger"),
+    ]),
+    html: `
+      <div class="detail-summary-grid">
+        <div class="detail-summary-card">
+          <span>關係 / 潛力</span>
+          <strong>${tag(company.relationship_status || "待整理", contractorRelationshipTone(company.relationship_status))} ${tag(company.potential_level || "未評估", contractorPotentialTone(company.potential_level))}</strong>
+        </div>
+        <div class="detail-summary-card">
+          <span>區域 / 類型</span>
+          <strong>${escapeHtml([company.region, company.company_type].filter(Boolean).join(" / ") || "未填")}</strong>
+        </div>
+        <div class="detail-summary-card">
+          <span>主要聯絡</span>
+          <strong>${escapeHtml(company.primary_contact_name || company.representative_name || "未填")}</strong>
+        </div>
+        <div class="detail-summary-card">
+          <span>負責人</span>
+          <strong>${escapeHtml(company.owner || "未填")}</strong>
+        </div>
+      </div>
+      <div class="detail-notes">
+        <p><strong>電話：</strong>${escapeHtml(company.phone || "未填")}　<strong>手機：</strong>${escapeHtml(company.mobile || "未填")}　<strong>Email：</strong>${escapeHtml(company.email || "未填")}</p>
+        <p><strong>地址：</strong>${escapeHtml(company.address || "未填")}</p>
+        <p><strong>經銷 / 偏好品牌：</strong>${escapeHtml(contractorBrandText(company)) || "未填"}</p>
+        <p><strong>專案經驗：</strong>${escapeHtml(company.project_experience || "未填")}</p>
+      </div>
+    `,
+  };
+}
+
+function contractorContactsSection(company = {}) {
+  const rows = contractorContactsFor(company.id).map((contact) => [
+    contact.contact_name || "未命名聯絡人",
+    contact.role_title || contact.contact_type || "未填",
+    contact.mobile || contact.phone || "未填",
+    contact.email || "未填",
+    tag(contact.practice_status || contact.engineer_level || "未評估", statusTone(contact.practice_status || "")),
+    actionGroup([
+      actionButton("編輯", "edit-contractor-contact", contact.id, "is-primary"),
+      actionButton("封存", "archive-contractor-contact", contact.id, "is-danger"),
+    ]),
+  ]);
+
+  return {
+    type: "table",
+    title: "聯絡人 / 技師",
+    wide: true,
+    headerAction: actionButton("新增聯絡人", "create-contractor-contact", company.id, "is-primary"),
+    headers: ["姓名", "職稱 / 類型", "電話", "Email", "狀態", "操作"],
+    rows: rows.length ? rows : [["尚未建立聯絡人", "未填", "未填", "未填", tag("無資料", "amber"), actionButton("新增聯絡人", "create-contractor-contact", company.id, "is-primary")]],
+  };
+}
+
+function contractorInteractionsSection(company = {}) {
+  const rows = contractorInteractionsFor(company.id).map((interaction) => {
+    const contact = findContractorContact(interaction.contact_id);
+    return [
+      formatDate(interaction.interaction_date) || "未填",
+      interaction.interaction_type || "未分類",
+      contact?.contact_name || "未指定",
+      interaction.summary || "未填寫摘要",
+      interaction.next_step || "未填",
+      formatDate(interaction.next_followup_date) || "未排程",
+      actionGroup([
+        actionButton("編輯", "edit-contractor-interaction", interaction.id, "is-primary"),
+        actionButton("取消", "cancel-contractor-interaction", interaction.id, "is-danger"),
+      ]),
+    ];
+  });
+
+  return {
+    type: "table",
+    title: "拜訪 / 聯繫紀錄",
+    wide: true,
+    headerAction: actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary"),
+    headers: ["日期", "類型", "聯絡人", "摘要", "下一步", "下次追蹤", "操作"],
+    rows: rows.length ? rows : [["尚未建立拜訪或聯繫紀錄", "未分類", "未指定", "可從右上角新增", "未填", "未排程", actionButton("新增紀錄", "create-contractor-interaction", company.id, "is-primary")]],
+  };
+}
+
+function contractorFollowupsSection(company = {}) {
+  const rows = contractorFollowupsFor(company.id).map((followup) => {
+    const contact = findContractorContact(followup.contact_id);
+    return [
+      followup.title || "未命名追蹤",
+      contact?.contact_name || "未指定",
+      tag(followup.priority || "一般", contractorFollowupPriorityTone(followup.priority)),
+      tag(followup.status || "待處理", statusTone(followup.status)),
+      formatDate(followup.due_date) || "未排程",
+      followup.result_note || "未填",
+      actionGroup([
+        actionButton("編輯", "edit-contractor-followup", followup.id, "is-primary"),
+        actionButton("取消", "cancel-contractor-followup", followup.id, "is-danger"),
+      ]),
+    ];
+  });
+
+  return {
+    type: "table",
+    title: "後續追蹤",
+    wide: true,
+    headerAction: actionButton("新增追蹤", "create-contractor-followup", company.id, "is-primary"),
+    headers: ["事項", "聯絡人", "優先級", "狀態", "期限", "結果", "操作"],
+    rows: rows.length ? rows : [["尚未建立後續追蹤", "未指定", tag("一般", "gray"), tag("無待辦", "green"), "未排程", "無", actionButton("新增追蹤", "create-contractor-followup", company.id, "is-primary")]],
+  };
+}
+
+function contractorHistorySection(company = {}) {
+  const archivedContacts = state.data.archivedContractorContacts.filter((contact) => String(contact.company_id || "") === String(company.id || ""));
+  const cancelledInteractions = state.data.cancelledContractorInteractions.filter((interaction) => String(interaction.company_id || "") === String(company.id || ""));
+  const cancelledFollowups = state.data.cancelledContractorFollowups.filter((followup) => String(followup.company_id || "") === String(company.id || ""));
+  const rows = [
+    ...archivedContacts.map((contact) => ["封存聯絡人", contact.contact_name || "未命名聯絡人", archiveContractorMeta(contact)]),
+    ...cancelledInteractions.map((interaction) => ["取消拜訪紀錄", `${formatDate(interaction.interaction_date)} / ${interaction.summary || "未填摘要"}`, cancelContractorMeta(interaction)]),
+    ...cancelledFollowups.map((followup) => ["取消追蹤", followup.title || "未命名追蹤", cancelContractorMeta(followup)]),
+  ];
+  if (!rows.length) return null;
+
+  return {
+    type: "details-table",
+    title: `已封存 / 取消紀錄（${rows.length}）`,
+    summary: "預設收合",
+    wide: true,
+    headers: ["類型", "項目", "封存 / 取消資訊"],
+    rows,
+  };
+}
+
+function archivedContractorCompaniesSection() {
+  const rows = state.data.archivedContractorCompanies.map((company) => [
+    contractorCompanyName(company),
+    company.company_type || "未分類",
+    company.region || "未填",
+    archiveContractorMeta(company),
+  ]);
+  if (!rows.length) return null;
+
+  return {
+    type: "details-table",
+    title: `已封存工程公司（${rows.length}）`,
+    summary: "預設收合",
+    wide: true,
+    headers: ["公司", "類型", "區域", "封存資訊"],
+    rows,
+  };
+}
+
 function associationListSection() {
   const rows = state.data.associations
     .slice()
@@ -3661,6 +3964,30 @@ function findAssociation(associationId) {
     .find((item) => String(item.id || "") === id);
 }
 
+function findContractorCompany(companyId) {
+  const id = String(companyId || "");
+  return [...state.data.contractorCompanies, ...state.data.archivedContractorCompanies]
+    .find((item) => String(item.id || "") === id);
+}
+
+function findContractorContact(contactId) {
+  const id = String(contactId || "");
+  return [...state.data.contractorContacts, ...state.data.archivedContractorContacts]
+    .find((item) => String(item.id || "") === id);
+}
+
+function findContractorInteraction(interactionId) {
+  const id = String(interactionId || "");
+  return [...state.data.contractorInteractions, ...state.data.cancelledContractorInteractions]
+    .find((item) => String(item.id || "") === id);
+}
+
+function findContractorFollowup(followupId) {
+  const id = String(followupId || "");
+  return [...state.data.contractorFollowups, ...state.data.cancelledContractorFollowups]
+    .find((item) => String(item.id || "") === id);
+}
+
 function activeCampaigns(campaigns = []) {
   return campaigns.filter((campaign) => !campaign.archived_at);
 }
@@ -3686,6 +4013,42 @@ function activeAssociations(associations = []) {
 
 function archivedAssociations(associations = []) {
   return associations.filter((association) => Boolean(association.archived_at));
+}
+
+function activeContractorCompanies(companies = []) {
+  return companies.filter((company) => !company.archived_at);
+}
+
+function archivedContractorCompanies(companies = []) {
+  return companies.filter((company) => Boolean(company.archived_at));
+}
+
+function activeContractorContacts(contacts = []) {
+  return contacts.filter((contact) => !contact.archived_at);
+}
+
+function archivedContractorContacts(contacts = []) {
+  return contacts.filter((contact) => Boolean(contact.archived_at));
+}
+
+function activeContractorInteractions(interactions = []) {
+  return interactions.filter((interaction) => !interaction.cancelled_at);
+}
+
+function cancelledContractorInteractions(interactions = []) {
+  return interactions.filter((interaction) => Boolean(interaction.cancelled_at));
+}
+
+function isCancelledContractorFollowup(followup = {}) {
+  return Boolean(followup.cancelled_at) || ["取消", "已取消"].includes(followup.status);
+}
+
+function activeContractorFollowups(followups = []) {
+  return followups.filter((followup) => !isCancelledContractorFollowup(followup));
+}
+
+function cancelledContractorFollowups(followups = []) {
+  return followups.filter(isCancelledContractorFollowup);
 }
 
 function isCancelledAssociationTask(task = {}) {
@@ -4222,6 +4585,7 @@ function clearCampaignDrilldown() {
   state.campaignDetailId = "";
   state.campaignInspectionMode = "";
   state.associationDetailId = "";
+  state.contractorCompanyId = "";
 }
 
 function archiveCampaignMeta(campaign = {}) {
@@ -4236,6 +4600,134 @@ function archiveAssociationMeta(association = {}) {
   const by = association.archived_by || "未記錄";
   const reason = association.archive_reason ? ` / ${association.archive_reason}` : "";
   return date ? `${date} / ${by}${reason}` : `${by}${reason}`;
+}
+
+function archiveContractorMeta(item = {}) {
+  const date = formatDate(item.archived_at);
+  const by = item.archived_by || "未記錄";
+  const reason = item.archive_reason ? ` / ${item.archive_reason}` : "";
+  return date ? `${date} / ${by}${reason}` : `${by}${reason}`;
+}
+
+function cancelContractorMeta(item = {}) {
+  const date = formatDate(item.cancelled_at);
+  const by = item.cancelled_by || "未記錄";
+  const reason = item.cancel_reason ? ` / ${item.cancel_reason}` : "";
+  return date ? `${date} / ${by}${reason}` : `${by}${reason}`;
+}
+
+function contractorCompanyName(company = {}) {
+  return company?.company_name || "未命名工程公司";
+}
+
+function contractorBrandText(company = {}) {
+  const dealer = Array.isArray(company.dealer_brands) ? company.dealer_brands : [];
+  const preferred = Array.isArray(company.preferred_brands) ? company.preferred_brands : [];
+  const parts = [];
+  if (dealer.length) parts.push(`經銷：${dealer.join("、")}`);
+  if (preferred.length) parts.push(`偏好：${preferred.join("、")}`);
+  return parts.join(" / ");
+}
+
+function contractorContactsFor(companyId) {
+  const id = String(companyId || "");
+  return state.data.contractorContacts
+    .filter((contact) => String(contact.company_id || "") === id)
+    .sort((a, b) => String(a.contact_name || "").localeCompare(String(b.contact_name || ""), "zh-Hant-TW"));
+}
+
+function contractorInteractionsFor(companyId) {
+  const id = String(companyId || "");
+  return state.data.contractorInteractions
+    .filter((interaction) => String(interaction.company_id || "") === id)
+    .sort((a, b) => String(b.interaction_date || "").localeCompare(String(a.interaction_date || "")));
+}
+
+function contractorFollowupsFor(companyId) {
+  const id = String(companyId || "");
+  return state.data.contractorFollowups
+    .filter((followup) => String(followup.company_id || "") === id)
+    .sort((a, b) => (
+      String(a.due_date || "9999-12-31").localeCompare(String(b.due_date || "9999-12-31"))
+      || contractorFollowupPriorityScore(b.priority) - contractorFollowupPriorityScore(a.priority)
+    ));
+}
+
+function nextContractorFollowup(companyId) {
+  return contractorFollowupsFor(companyId).find((followup) => !["已完成", "完成"].includes(followup.status || ""));
+}
+
+function contractorPriorityScore(company = {}) {
+  const potential = contractorPotentialScore(company.potential_level);
+  const relationship = ["重點經營", "已合作", "已拜訪"].includes(company.relationship_status || "") ? 2 : 0;
+  return potential + relationship;
+}
+
+function contractorPotentialScore(value = "") {
+  if (["A", "高", "高潛力", "重點"].includes(value)) return 3;
+  if (["B", "中", "中潛力"].includes(value)) return 2;
+  if (["C", "低", "低潛力"].includes(value)) return 1;
+  return 0;
+}
+
+function contractorFollowupPriorityScore(value = "") {
+  if (value === "急件" || value === "高") return 3;
+  if (value === "中") return 2;
+  if (value === "低") return 1;
+  return 0;
+}
+
+function contractorRelationshipTone(value = "") {
+  if (["已合作", "已拜訪", "重點經營"].includes(value)) return "green";
+  if (["待追蹤", "待整理", "初步接觸"].includes(value)) return "amber";
+  if (["暫停", "不適合", "已封存"].includes(value)) return "gray";
+  return "";
+}
+
+function contractorPotentialTone(value = "") {
+  if (["A", "高", "高潛力", "重點"].includes(value)) return "red";
+  if (["B", "中", "中潛力"].includes(value)) return "amber";
+  if (["C", "低", "低潛力"].includes(value)) return "gray";
+  return "";
+}
+
+function contractorFollowupPriorityTone(value = "") {
+  if (value === "急件" || value === "高") return "red";
+  if (value === "中" || value === "一般") return "amber";
+  return "gray";
+}
+
+function contractorKpis() {
+  const companies = state.data.contractorCompanies;
+  const pendingFollowups = state.data.contractorFollowups.filter((followup) => !["已完成", "完成"].includes(followup.status || ""));
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
+  const recentInteractions = state.data.contractorInteractions.filter((interaction) => {
+    const date = new Date(interaction.interaction_date || interaction.created_at || "");
+    return !Number.isNaN(date.getTime()) && date >= since;
+  });
+  const keyCompanies = companies.filter((company) => contractorPriorityScore(company) >= 3);
+
+  return [
+    ["工程公司", String(companies.length), "目前維護中的公司"],
+    ["待追蹤", String(pendingFollowups.length), "尚未完成的追蹤事項"],
+    ["近期互動", String(recentInteractions.length), "近 30 天拜訪或聯繫"],
+    ["重點客戶", String(keyCompanies.length), "依潛力與關係判斷"],
+  ];
+}
+
+function contractorDetailKpis(company = {}) {
+  const contacts = contractorContactsFor(company.id);
+  const interactions = contractorInteractionsFor(company.id);
+  const followups = contractorFollowupsFor(company.id).filter((followup) => !["已完成", "完成"].includes(followup.status || ""));
+  const latestInteraction = interactions[0];
+
+  return [
+    ["關係 / 潛力", `<div class="kpi-chip-row">${tag(company.relationship_status || "待整理", contractorRelationshipTone(company.relationship_status))}${tag(company.potential_level || "未評估", contractorPotentialTone(company.potential_level))}</div>`, "目前掌握狀態"],
+    ["聯絡人", String(contacts.length), "可維護技師與窗口"],
+    ["待追蹤", String(followups.length), "尚未完成事項"],
+    ["最近互動", latestInteraction ? formatDate(latestInteraction.interaction_date) : "尚無", latestInteraction?.summary || "尚未建立拜訪或聯繫紀錄"],
+  ];
 }
 
 function associationTagsFor(associationId) {
@@ -5111,6 +5603,14 @@ function formatDate(value) {
   return String(value).slice(0, 10);
 }
 
+function formatDateTimeForInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
+}
+
 function formatFileSize(bytes) {
   const number = Number(bytes || 0);
   if (!number) return "";
@@ -5378,6 +5878,42 @@ function associationRoleSuggestions(selected = "") {
     .filter(Boolean);
   const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
   return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
+function contractorCompanyTypeSuggestions(selected = "") {
+  const fixed = ["工程公司", "技師事務所", "機電顧問", "空調承包商", "設備商", "其他"];
+  const existing = [...state.data.contractorCompanies, ...state.data.archivedContractorCompanies]
+    .map((company) => company.company_type)
+    .filter(Boolean);
+  const values = [...new Set([...fixed, ...existing, selected].filter(Boolean))];
+  return values.map((value) => `<option value="${escapeAttr(value)}"></option>`).join("");
+}
+
+function contractorRelationshipOptions() {
+  return [
+    ["待整理", "待整理"],
+    ["初步接觸", "初步接觸"],
+    ["已拜訪", "已拜訪"],
+    ["待追蹤", "待追蹤"],
+    ["重點經營", "重點經營"],
+    ["已合作", "已合作"],
+    ["暫緩", "暫緩"],
+  ];
+}
+
+function contractorContactOptions(companyId, selected = "") {
+  const options = [["", "不指定聯絡人"]];
+  contractorContactsFor(companyId).forEach((contact) => {
+    const role = contact.role_title ? ` / ${contact.role_title}` : "";
+    options.push([contact.id, `${contact.contact_name || "未命名聯絡人"}${role}`]);
+  });
+
+  if (selected && !contractorContactsFor(companyId).some((contact) => String(contact.id || "") === String(selected))) {
+    const archived = state.data.archivedContractorContacts.find((contact) => String(contact.id || "") === String(selected));
+    if (archived) options.push([archived.id, `${archived.contact_name || "未命名聯絡人"}（已封存）`]);
+  }
+
+  return selectOptions(options, selected);
 }
 
 function performanceChannelSuggestions(selected = "") {
@@ -6825,6 +7361,646 @@ function openRemoveAssociationTagModal(id) {
       await loadExistingData();
     },
   });
+}
+
+function openCreateContractorCompanyModal() {
+  openContractorCompanyModal({ owner: state.auth.email, relationship_status: "待整理" });
+}
+
+function openEditContractorCompanyModal(id) {
+  const company = findContractorCompany(id);
+  if (!company || company.archived_at) return;
+  openContractorCompanyModal(company);
+}
+
+function openContractorCompanyModal(company = {}) {
+  const isEdit = Boolean(company.id);
+  openModal(isEdit ? "編輯工程公司" : "新增工程公司", contractorCompanyFormHtml(company), {
+    submitLabel: isEdit ? "儲存變更" : "建立工程公司",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = contractorCompanyPayload(values);
+      if (!payload.company_name) throw new Error("請輸入工程公司名稱。");
+
+      if (isEdit) {
+        await api("PATCH", `contractor_companies?id=eq.${encodeURIComponent(company.id)}`, payload);
+      } else {
+        await api("POST", "contractor_companies", payload);
+      }
+
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openArchiveContractorCompanyModal(id) {
+  const company = state.data.contractorCompanies.find((item) => String(item.id || "") === String(id || ""));
+  if (!company) return;
+
+  openModal("封存工程公司", `
+    <p class="empty-note">確定要封存「${escapeHtml(contractorCompanyName(company))}」嗎？封存後會從工程公司列表移除，但聯絡人、拜訪紀錄與追蹤歷史會保留。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>封存原因</span>
+        <textarea name="archive_reason" placeholder="例如：資料重複、暫停經營、已併入其他公司。"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認封存",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `contractor_companies?id=eq.${encodeURIComponent(id)}`, {
+        archived_at: nowIso(),
+        archived_by: state.auth.email,
+        archive_reason: values.archive_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.contractorCompanyId = "";
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function contractorCompanyFormHtml(company = {}) {
+  return `
+    <div class="form-section">
+      <h3>基本資料</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>公司名稱 *</span>
+          <input name="company_name" value="${escapeAttr(company.company_name || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>類型</span>
+          <input name="company_type" list="contractorCompanyTypeOptions" value="${escapeAttr(company.company_type || "")}" placeholder="例如：工程公司、技師事務所">
+          <datalist id="contractorCompanyTypeOptions">${contractorCompanyTypeSuggestions(company.company_type || "")}</datalist>
+        </label>
+        <label class="form-field">
+          <span>區域</span>
+          <input name="region" value="${escapeAttr(company.region || "")}" placeholder="例如：台北、新北、桃園">
+        </label>
+        <label class="form-field">
+          <span>關係狀態</span>
+          <select name="relationship_status">${selectOptions(contractorRelationshipOptions(), company.relationship_status || "待整理")}</select>
+        </label>
+        <label class="form-field">
+          <span>潛力等級</span>
+          <select name="potential_level">${selectOptions([["", "未評估"], ["A", "A 高潛力"], ["B", "B 中潛力"], ["C", "C 低潛力"]], company.potential_level || "")}</select>
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(company.owner || state.auth.email || "")}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>聯絡資訊</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>代表人</span>
+          <input name="representative_name" value="${escapeAttr(company.representative_name || "")}">
+        </label>
+        <label class="form-field">
+          <span>主要聯絡人</span>
+          <input name="primary_contact_name" value="${escapeAttr(company.primary_contact_name || "")}">
+        </label>
+        <label class="form-field">
+          <span>電話</span>
+          <input name="phone" value="${escapeAttr(company.phone || "")}">
+        </label>
+        <label class="form-field">
+          <span>手機</span>
+          <input name="mobile" value="${escapeAttr(company.mobile || "")}">
+        </label>
+        <label class="form-field">
+          <span>Email</span>
+          <input name="email" type="email" value="${escapeAttr(company.email || "")}">
+        </label>
+        <label class="form-field">
+          <span>網站</span>
+          <input name="website" value="${escapeAttr(company.website || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>地址</span>
+          <input name="address" value="${escapeAttr(company.address || "")}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>業務判斷</h3>
+      <div class="form-grid">
+        <label class="form-field">
+          <span>甲種 / 等級</span>
+          <input name="contractor_grade" value="${escapeAttr(company.contractor_grade || "")}">
+        </label>
+        <label class="form-field">
+          <span>資本額</span>
+          <input name="capital_amount_text" value="${escapeAttr(company.capital_amount_text || "")}">
+        </label>
+        <label class="form-field">
+          <span>年營收</span>
+          <input name="annual_revenue_text" value="${escapeAttr(company.annual_revenue_text || "")}">
+        </label>
+        <label class="form-field">
+          <span>員工數</span>
+          <input name="employee_count_text" value="${escapeAttr(company.employee_count_text || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>經銷品牌</span>
+          <input name="dealer_brands" value="${escapeAttr(Array.isArray(company.dealer_brands) ? company.dealer_brands.join("、") : "")}" placeholder="用逗號或頓號分隔">
+        </label>
+        <label class="form-field is-wide">
+          <span>偏好品牌</span>
+          <input name="preferred_brands" value="${escapeAttr(Array.isArray(company.preferred_brands) ? company.preferred_brands.join("、") : "")}" placeholder="用逗號或頓號分隔">
+        </label>
+        <label class="form-field is-wide">
+          <span>專案經驗</span>
+          <textarea name="project_experience">${escapeHtml(company.project_experience || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>來源備註</span>
+          <textarea name="source_note">${escapeHtml(company.source_note || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function contractorCompanyPayload(values = {}) {
+  return {
+    company_name: values.company_name?.trim(),
+    company_type: values.company_type?.trim() || null,
+    region: values.region?.trim() || null,
+    address: values.address?.trim() || null,
+    phone: values.phone?.trim() || null,
+    fax: values.fax?.trim() || null,
+    email: values.email?.trim() || null,
+    website: values.website?.trim() || null,
+    representative_name: values.representative_name?.trim() || null,
+    primary_contact_name: values.primary_contact_name?.trim() || null,
+    mobile: values.mobile?.trim() || null,
+    capital_amount_text: values.capital_amount_text?.trim() || null,
+    annual_revenue_text: values.annual_revenue_text?.trim() || null,
+    employee_count_text: values.employee_count_text?.trim() || null,
+    contractor_grade: values.contractor_grade?.trim() || null,
+    dealer_brands: splitDelimitedText(values.dealer_brands),
+    preferred_brands: splitDelimitedText(values.preferred_brands),
+    project_experience: values.project_experience?.trim() || null,
+    relationship_status: values.relationship_status || "待整理",
+    potential_level: values.potential_level || null,
+    owner: values.owner?.trim() || state.auth.email || null,
+    source_note: values.source_note?.trim() || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateContractorContactModal(companyId) {
+  const company = findContractorCompany(companyId);
+  if (!company || company.archived_at) return;
+  openContractorContactModal({ company_id: company.id, owner: state.auth.email });
+}
+
+function openEditContractorContactModal(id) {
+  const contact = findContractorContact(id);
+  const company = findContractorCompany(contact?.company_id);
+  if (!contact || contact.archived_at || company?.archived_at) return;
+  openContractorContactModal(contact);
+}
+
+function openContractorContactModal(contact = {}) {
+  const isEdit = Boolean(contact.id);
+  const company = findContractorCompany(contact.company_id);
+  openModal(isEdit ? "編輯聯絡人 / 技師" : "新增聯絡人 / 技師", contractorContactFormHtml(contact), {
+    submitLabel: isEdit ? "儲存變更" : "建立聯絡人",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = contractorContactPayload(values);
+      if (!payload.company_id) throw new Error("缺少所屬工程公司。");
+      if (!payload.contact_name) throw new Error("請輸入聯絡人姓名。");
+
+      if (isEdit) {
+        await api("PATCH", `contractor_contacts?id=eq.${encodeURIComponent(contact.id)}`, payload);
+      } else {
+        await api("POST", "contractor_contacts", payload);
+      }
+
+      state.contractorCompanyId = payload.company_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openArchiveContractorContactModal(id) {
+  const contact = state.data.contractorContacts.find((item) => String(item.id || "") === String(id || ""));
+  if (!contact) return;
+
+  openModal("封存聯絡人", `
+    <p class="empty-note">確定要封存「${escapeHtml(contact.contact_name || "未命名聯絡人")}」嗎？封存後不會出現在可選聯絡人清單，但歷史紀錄會保留。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>封存原因</span>
+        <textarea name="archive_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認封存",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `contractor_contacts?id=eq.${encodeURIComponent(id)}`, {
+        archived_at: nowIso(),
+        archived_by: state.auth.email,
+        archive_reason: values.archive_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.contractorCompanyId = contact.company_id || state.contractorCompanyId;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function contractorContactFormHtml(contact = {}) {
+  const company = findContractorCompany(contact.company_id);
+  return `
+    <input type="hidden" name="company_id" value="${escapeAttr(contact.company_id || "")}">
+    <div class="form-section">
+      <h3>聯絡人資料</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公司</span>
+          <input value="${escapeAttr(contractorCompanyName(company))}" readonly>
+        </label>
+        <label class="form-field">
+          <span>姓名 *</span>
+          <input name="contact_name" value="${escapeAttr(contact.contact_name || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>類型</span>
+          <select name="contact_type">${selectOptions([["窗口", "窗口"], ["技師", "技師"], ["老闆", "老闆"], ["採購", "採購"], ["其他", "其他"]], contact.contact_type || "窗口")}</select>
+        </label>
+        <label class="form-field">
+          <span>職稱</span>
+          <input name="role_title" value="${escapeAttr(contact.role_title || "")}">
+        </label>
+        <label class="form-field">
+          <span>電話</span>
+          <input name="phone" value="${escapeAttr(contact.phone || "")}">
+        </label>
+        <label class="form-field">
+          <span>手機</span>
+          <input name="mobile" value="${escapeAttr(contact.mobile || "")}">
+        </label>
+        <label class="form-field">
+          <span>Email</span>
+          <input name="email" type="email" value="${escapeAttr(contact.email || "")}">
+        </label>
+        <label class="form-field">
+          <span>LINE</span>
+          <input name="line_id" value="${escapeAttr(contact.line_id || "")}">
+        </label>
+        <label class="form-field">
+          <span>區域</span>
+          <input name="region" value="${escapeAttr(contact.region || "")}">
+        </label>
+        <label class="form-field">
+          <span>技師等級</span>
+          <input name="engineer_level" value="${escapeAttr(contact.engineer_level || "")}">
+        </label>
+        <label class="form-field">
+          <span>執業狀態</span>
+          <input name="practice_status" value="${escapeAttr(contact.practice_status || "")}">
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(contact.owner || state.auth.email || "")}">
+        </label>
+        <label class="form-field is-wide">
+          <span>偏好品牌</span>
+          <input name="preferred_brands" value="${escapeAttr(Array.isArray(contact.preferred_brands) ? contact.preferred_brands.join("、") : "")}" placeholder="用逗號或頓號分隔">
+        </label>
+        <label class="form-field is-wide">
+          <span>備註</span>
+          <textarea name="notes">${escapeHtml(contact.notes || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function contractorContactPayload(values = {}) {
+  return {
+    company_id: values.company_id || null,
+    contact_name: values.contact_name?.trim(),
+    contact_type: values.contact_type || null,
+    role_title: values.role_title?.trim() || null,
+    phone: values.phone?.trim() || null,
+    mobile: values.mobile?.trim() || null,
+    email: values.email?.trim() || null,
+    line_id: values.line_id?.trim() || null,
+    region: values.region?.trim() || null,
+    engineer_level: values.engineer_level?.trim() || null,
+    practice_status: values.practice_status?.trim() || null,
+    preferred_brands: splitDelimitedText(values.preferred_brands),
+    notes: values.notes?.trim() || null,
+    owner: values.owner?.trim() || state.auth.email || null,
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateContractorInteractionModal(companyId) {
+  const company = findContractorCompany(companyId);
+  if (!company || company.archived_at) return;
+  openContractorInteractionModal({
+    company_id: company.id,
+    interaction_date: new Date().toISOString().slice(0, 10),
+    interaction_type: "拜訪",
+    owner: state.auth.email,
+  });
+}
+
+function openEditContractorInteractionModal(id) {
+  const interaction = findContractorInteraction(id);
+  const company = findContractorCompany(interaction?.company_id);
+  if (!interaction || interaction.cancelled_at || company?.archived_at) return;
+  openContractorInteractionModal(interaction);
+}
+
+function openContractorInteractionModal(interaction = {}) {
+  const isEdit = Boolean(interaction.id);
+  openModal(isEdit ? "編輯拜訪 / 聯繫紀錄" : "新增拜訪 / 聯繫紀錄", contractorInteractionFormHtml(interaction), {
+    submitLabel: isEdit ? "儲存變更" : "建立紀錄",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = contractorInteractionPayload(values);
+      if (!payload.company_id) throw new Error("缺少所屬工程公司。");
+
+      if (isEdit) {
+        await api("PATCH", `contractor_interactions?id=eq.${encodeURIComponent(interaction.id)}`, payload);
+      } else {
+        await api("POST", "contractor_interactions", payload);
+      }
+
+      state.contractorCompanyId = payload.company_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelContractorInteractionModal(id) {
+  const interaction = state.data.contractorInteractions.find((item) => String(item.id || "") === String(id || ""));
+  if (!interaction) return;
+
+  openModal("取消拜訪 / 聯繫紀錄", `
+    <p class="empty-note">確定要取消這筆紀錄嗎？資料會移到已封存 / 取消紀錄，不會真刪除。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `contractor_interactions?id=eq.${encodeURIComponent(id)}`, {
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.contractorCompanyId = interaction.company_id || state.contractorCompanyId;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function contractorInteractionFormHtml(interaction = {}) {
+  const company = findContractorCompany(interaction.company_id);
+  return `
+    <input type="hidden" name="company_id" value="${escapeAttr(interaction.company_id || "")}">
+    <div class="form-section">
+      <h3>互動資訊</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公司</span>
+          <input value="${escapeAttr(contractorCompanyName(company))}" readonly>
+        </label>
+        <label class="form-field">
+          <span>日期</span>
+          <input name="interaction_date" type="date" value="${escapeAttr(formatDate(interaction.interaction_date) || new Date().toISOString().slice(0, 10))}">
+        </label>
+        <label class="form-field">
+          <span>類型</span>
+          <select name="interaction_type">${selectOptions([["拜訪", "拜訪"], ["電話", "電話"], ["LINE", "LINE"], ["Email", "Email"], ["活動接觸", "活動接觸"], ["其他", "其他"]], interaction.interaction_type || "拜訪")}</select>
+        </label>
+        <label class="form-field">
+          <span>聯絡人</span>
+          <select name="contact_id">${contractorContactOptions(interaction.company_id, interaction.contact_id || "")}</select>
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(interaction.owner || state.auth.email || "")}">
+        </label>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h3>內容與下一步</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>摘要</span>
+          <textarea name="summary">${escapeHtml(interaction.summary || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>客戶反應</span>
+          <textarea name="customer_reaction">${escapeHtml(interaction.customer_reaction || "")}</textarea>
+        </label>
+        <label class="form-field">
+          <span>提到的案子</span>
+          <input name="mentioned_project" value="${escapeAttr(interaction.mentioned_project || "")}">
+        </label>
+        <label class="form-field">
+          <span>潛力等級</span>
+          <select name="potential_level">${selectOptions([["", "不更新"], ["A", "A 高潛力"], ["B", "B 中潛力"], ["C", "C 低潛力"]], interaction.potential_level || "")}</select>
+        </label>
+        <label class="form-field is-wide">
+          <span>競品資訊</span>
+          <textarea name="competitor_info">${escapeHtml(interaction.competitor_info || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
+          <span>下一步</span>
+          <textarea name="next_step">${escapeHtml(interaction.next_step || "")}</textarea>
+        </label>
+        <label class="form-field">
+          <span>下次追蹤日</span>
+          <input name="next_followup_date" type="date" value="${escapeAttr(formatDate(interaction.next_followup_date))}">
+        </label>
+        <label class="form-field checkbox-field">
+          <input name="needs_marketing_support" type="checkbox" value="true"${interaction.needs_marketing_support ? " checked" : ""}>
+          <span>需要行銷支援</span>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function contractorInteractionPayload(values = {}) {
+  return {
+    company_id: values.company_id || null,
+    contact_id: values.contact_id || null,
+    interaction_date: values.interaction_date || new Date().toISOString().slice(0, 10),
+    interaction_type: values.interaction_type || null,
+    owner: values.owner?.trim() || state.auth.email || null,
+    summary: values.summary?.trim() || null,
+    customer_reaction: values.customer_reaction?.trim() || null,
+    mentioned_project: values.mentioned_project?.trim() || null,
+    competitor_info: values.competitor_info?.trim() || null,
+    next_step: values.next_step?.trim() || null,
+    next_followup_date: values.next_followup_date || null,
+    potential_level: values.potential_level || null,
+    needs_marketing_support: values.needs_marketing_support === "true",
+    updated_at: nowIso(),
+  };
+}
+
+function openCreateContractorFollowupModal(companyId) {
+  const company = findContractorCompany(companyId);
+  if (!company || company.archived_at) return;
+  openContractorFollowupModal({ company_id: company.id, priority: "一般", status: "待處理", owner: state.auth.email });
+}
+
+function openEditContractorFollowupModal(id) {
+  const followup = findContractorFollowup(id);
+  const company = findContractorCompany(followup?.company_id);
+  if (!followup || isCancelledContractorFollowup(followup) || company?.archived_at) return;
+  openContractorFollowupModal(followup);
+}
+
+function openContractorFollowupModal(followup = {}) {
+  const isEdit = Boolean(followup.id);
+  openModal(isEdit ? "編輯後續追蹤" : "新增後續追蹤", contractorFollowupFormHtml(followup), {
+    submitLabel: isEdit ? "儲存變更" : "建立追蹤",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      const payload = contractorFollowupPayload(values);
+      if (!payload.company_id) throw new Error("缺少所屬工程公司。");
+      if (!payload.title) throw new Error("請輸入追蹤事項。");
+
+      if (isEdit) {
+        await api("PATCH", `contractor_followups?id=eq.${encodeURIComponent(followup.id)}`, payload);
+      } else {
+        await api("POST", "contractor_followups", payload);
+      }
+
+      state.contractorCompanyId = payload.company_id;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function openCancelContractorFollowupModal(id) {
+  const followup = state.data.contractorFollowups.find((item) => String(item.id || "") === String(id || ""));
+  if (!followup) return;
+
+  openModal("取消後續追蹤", `
+    <p class="empty-note">確定要取消「${escapeHtml(followup.title || "未命名追蹤")}」嗎？資料會保留在已封存 / 取消紀錄。</p>
+    <div class="form-grid">
+      <label class="form-field is-wide">
+        <span>取消原因</span>
+        <textarea name="cancel_reason"></textarea>
+      </label>
+    </div>
+  `, {
+    submitLabel: "確認取消",
+    submitTone: "danger",
+    onSubmit: async (form) => {
+      const values = formValues(form);
+      await api("PATCH", `contractor_followups?id=eq.${encodeURIComponent(id)}`, {
+        status: "取消",
+        cancelled_at: nowIso(),
+        cancelled_by: state.auth.email,
+        cancel_reason: values.cancel_reason?.trim() || null,
+        updated_at: nowIso(),
+      });
+      state.contractorCompanyId = followup.company_id || state.contractorCompanyId;
+      closeModal();
+      await loadExistingData();
+    },
+  });
+}
+
+function contractorFollowupFormHtml(followup = {}) {
+  const company = findContractorCompany(followup.company_id);
+  return `
+    <input type="hidden" name="company_id" value="${escapeAttr(followup.company_id || "")}">
+    <div class="form-section">
+      <h3>追蹤事項</h3>
+      <div class="form-grid">
+        <label class="form-field is-wide">
+          <span>所屬公司</span>
+          <input value="${escapeAttr(contractorCompanyName(company))}" readonly>
+        </label>
+        <label class="form-field is-wide">
+          <span>事項 *</span>
+          <input name="title" value="${escapeAttr(followup.title || "")}" required>
+        </label>
+        <label class="form-field">
+          <span>聯絡人</span>
+          <select name="contact_id">${contractorContactOptions(followup.company_id, followup.contact_id || "")}</select>
+        </label>
+        <label class="form-field">
+          <span>優先級</span>
+          <select name="priority">${selectOptions([["急件", "急件"], ["高", "高"], ["一般", "一般"], ["低", "低"]], followup.priority || "一般")}</select>
+        </label>
+        <label class="form-field">
+          <span>狀態</span>
+          <select name="status">${selectOptions([["待處理", "待處理"], ["跟進中", "跟進中"], ["已完成", "已完成"], ["暫緩", "暫緩"]], followup.status || "待處理")}</select>
+        </label>
+        <label class="form-field">
+          <span>期限</span>
+          <input name="due_date" type="date" value="${escapeAttr(formatDate(followup.due_date))}">
+        </label>
+        <label class="form-field">
+          <span>負責人</span>
+          <input name="owner" value="${escapeAttr(followup.owner || state.auth.email || "")}">
+        </label>
+        <label class="form-field">
+          <span>完成時間</span>
+          <input name="completed_at" type="datetime-local" value="${escapeAttr(formatDateTimeForInput(followup.completed_at))}">
+        </label>
+        <label class="form-field is-wide">
+          <span>結果 / 備註</span>
+          <textarea name="result_note">${escapeHtml(followup.result_note || "")}</textarea>
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function contractorFollowupPayload(values = {}) {
+  return {
+    company_id: values.company_id || null,
+    contact_id: values.contact_id || null,
+    title: values.title?.trim(),
+    priority: values.priority || "一般",
+    due_date: values.due_date || null,
+    status: values.status || "待處理",
+    owner: values.owner?.trim() || state.auth.email || null,
+    result_note: values.result_note?.trim() || null,
+    completed_at: values.completed_at ? new Date(values.completed_at).toISOString() : null,
+    updated_at: nowIso(),
+  };
 }
 
 function associationFormHtml(association = {}) {
@@ -9223,13 +10399,16 @@ function render() {
   const page = pages[state.role][state.page];
   const campaignDetail = currentCampaignDetail();
   const associationDetail = currentAssociationDetail();
+  const contractorDetail = currentContractorDetail();
 
   document.getElementById("roleEyebrow").textContent = welcomeLine();
-  document.getElementById("pageTitle").textContent = campaignDetail?.name || (associationDetail ? associationDisplayName(associationDetail) : page.title);
+  document.getElementById("pageTitle").textContent = campaignDetail?.name || (associationDetail ? associationDisplayName(associationDetail) : contractorDetail?.company_name || page.title);
   document.getElementById("pageSubtitle").textContent = campaignDetail
     ? (state.role === "sales" ? "專案詳情：查看期間、狀態與專案基本說明。" : "專案詳情：任務、預算、文件、風險與成效。")
     : associationDetail
       ? "公會詳情：主檔、年費、權益、合作項目與歷史紀錄。"
+      : contractorDetail
+        ? "工程公司詳情：聯絡人、拜訪紀錄與後續追蹤。"
       : page.subtitle;
   updateTopAction("primaryAction", primaryActionLabel(meta));
   updateTopAction("secondaryAction", secondaryActionLabel());
@@ -9256,6 +10435,11 @@ function currentCampaignDetail() {
 function currentAssociationDetail() {
   if (state.page !== "associations" || !state.associationDetailId) return null;
   return findAssociation(state.associationDetailId) || null;
+}
+
+function currentContractorDetail() {
+  if (state.page !== "contractors" || !state.contractorCompanyId) return null;
+  return findContractorCompany(state.contractorCompanyId) || null;
 }
 
 function normalizeCurrentPage() {
@@ -9318,6 +10502,7 @@ function primaryActionLabel(meta) {
   if (state.role === "sales") return state.page === "requests" ? "提出素材需求" : "";
   if (state.page === "campaigns" && state.campaignDetailId) return state.role === "executive" ? "返回戰情室" : "返回行銷專案";
   if (state.page === "associations" && state.associationDetailId) return "返回公會列表";
+  if (state.page === "contractors" && state.contractorCompanyId) return "返回工程公司";
   if (state.page === "weekly") return "複製週報";
   if (state.role === "executive" && state.page === "requests") return "提出需求";
   if (state.role === "executive") return "查看待決策";
@@ -9325,6 +10510,7 @@ function primaryActionLabel(meta) {
   if (state.role === "marketing" && state.page === "requests") return "新增需求單";
   if (state.role === "marketing" && state.page === "vendors") return "新增廠商合作";
   if (state.role === "marketing" && state.page === "associations") return "新增公會";
+  if (state.role === "marketing" && state.page === "contractors") return "新增工程公司";
   if (state.role === "marketing" && state.page === "knowledge") return "新增知識條目";
   if (state.role === "marketing" && state.page === "tenders") return "新增監測專案";
   return state.role === "marketing" ? "" : meta.primaryAction;
@@ -9333,6 +10519,7 @@ function primaryActionLabel(meta) {
 function secondaryActionLabel() {
   if (state.role === "marketing" && state.page === "campaigns" && state.campaignDetailId) return "編輯專案";
   if (state.role === "marketing" && state.page === "associations" && state.associationDetailId) return "編輯公會";
+  if (state.role === "marketing" && state.page === "contractors" && state.contractorCompanyId) return "編輯公司";
   if (state.page === "weekly") return "匯出週報";
   return "";
 }
@@ -9344,6 +10531,8 @@ function buildCurrentKpis(page) {
   const campaignDetail = currentCampaignDetail();
   if (campaignDetail) return state.role === "sales" ? salesCampaignDetailKpis(campaignDetail) : campaignDetailKpis(campaignDetail);
   if (currentAssociationDetail()) return [];
+  const contractorDetail = currentContractorDetail();
+  if (contractorDetail) return contractorDetailKpis(contractorDetail);
 
   const key = `${state.role}:${state.page}`;
   const dynamicKpis = {
@@ -9361,6 +10550,7 @@ function buildCurrentKpis(page) {
     "marketing:associations": associationKpis(),
     "marketing:vendors": vendorKpis(),
     "marketing:knowledge": knowledgeKpis(),
+    "marketing:contractors": contractorKpis(),
     "marketing:requests": requestKpis(),
     "marketing:weekly": weeklyKpis(),
     "sales:dashboard": salesDashboardKpis(),
@@ -9794,6 +10984,7 @@ function buildCurrentSections(page) {
     "marketing:tenders": tenderSections(),
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection()],
     "marketing:associations": associationPageSections(),
+    "marketing:contractors": contractorPageSections(),
     "marketing:knowledge": [knowledgeSection(true), archivedKnowledgeSection(), marketingResourceManagerSection(), archivedMarketingResourcesSection()],
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "marketing:weekly": weeklySummarySections(),
@@ -10033,6 +11224,12 @@ document.getElementById("primaryAction").addEventListener("click", () => {
     return;
   }
 
+  if (state.page === "contractors" && state.contractorCompanyId) {
+    state.contractorCompanyId = "";
+    render();
+    return;
+  }
+
   if (state.page === "weekly") {
     copyWeeklyReport();
     return;
@@ -10077,6 +11274,11 @@ document.getElementById("primaryAction").addEventListener("click", () => {
     return;
   }
 
+  if (state.role === "marketing" && state.page === "contractors") {
+    openCreateContractorCompanyModal();
+    return;
+  }
+
   if (state.role === "marketing" && state.page === "knowledge") {
     openCreateKnowledgeItemModal();
     return;
@@ -10104,6 +11306,11 @@ document.getElementById("secondaryAction").addEventListener("click", () => {
 
   if (state.role === "marketing" && state.page === "associations" && state.associationDetailId) {
     openEditAssociationModal(state.associationDetailId);
+    return;
+  }
+
+  if (state.role === "marketing" && state.page === "contractors" && state.contractorCompanyId) {
+    openEditContractorCompanyModal(state.contractorCompanyId);
     return;
   }
 
@@ -10157,6 +11364,28 @@ document.addEventListener("click", (event) => {
   }
   if (action === "edit-association") openEditAssociationModal(id);
   if (action === "archive-association") openArchiveAssociationModal(id);
+  if (action === "create-contractor-company") openCreateContractorCompanyModal();
+  if (action === "view-contractor-company") {
+    if (!id) return;
+    state.page = "contractors";
+    state.contractorCompanyId = id;
+    render();
+  }
+  if (action === "back-contractor-list") {
+    state.contractorCompanyId = "";
+    render();
+  }
+  if (action === "edit-contractor-company") openEditContractorCompanyModal(id);
+  if (action === "archive-contractor-company") openArchiveContractorCompanyModal(id);
+  if (action === "create-contractor-contact") openCreateContractorContactModal(id);
+  if (action === "edit-contractor-contact") openEditContractorContactModal(id);
+  if (action === "archive-contractor-contact") openArchiveContractorContactModal(id);
+  if (action === "create-contractor-interaction") openCreateContractorInteractionModal(id);
+  if (action === "edit-contractor-interaction") openEditContractorInteractionModal(id);
+  if (action === "cancel-contractor-interaction") openCancelContractorInteractionModal(id);
+  if (action === "create-contractor-followup") openCreateContractorFollowupModal(id);
+  if (action === "edit-contractor-followup") openEditContractorFollowupModal(id);
+  if (action === "cancel-contractor-followup") openCancelContractorFollowupModal(id);
   if (action === "add-association-tag") openAddAssociationTagModal(id);
   if (action === "remove-association-tag") openRemoveAssociationTagModal(id);
   if (action === "create-association-task") openCreateAssociationTaskModal(id);
@@ -10473,6 +11702,11 @@ async function loadExistingData() {
       associationFees,
       associationBenefits,
       associationNotes,
+      contractorImportBatches,
+      contractorCompanies,
+      contractorContacts,
+      contractorInteractions,
+      contractorFollowups,
     ] = await Promise.all([
       loadMarketingCampaigns(),
       loadMarketingResources(),
@@ -10507,6 +11741,11 @@ async function loadExistingData() {
       loadAssociationFees(),
       loadAssociationBenefits(),
       loadAssociationNotes(),
+      loadContractorImportBatches(),
+      loadContractorCompanies(),
+      loadContractorContacts(),
+      loadContractorInteractions(),
+      loadContractorFollowups(),
     ]);
 
     state.data.campaigns = Array.isArray(campaigns) ? activeCampaigns(campaigns) : [];
@@ -10560,6 +11799,15 @@ async function loadExistingData() {
     state.subsidyRulesAvailable = Array.isArray(subsidyRules);
     state.data.subsidyRules = Array.isArray(subsidyRules) ? subsidyRules : [];
     state.data.expenses = Array.isArray(expenses) ? expenses : [];
+    state.data.contractorImportBatches = Array.isArray(contractorImportBatches) ? contractorImportBatches : [];
+    state.data.contractorCompanies = Array.isArray(contractorCompanies) ? activeContractorCompanies(contractorCompanies) : [];
+    state.data.archivedContractorCompanies = Array.isArray(contractorCompanies) ? archivedContractorCompanies(contractorCompanies) : [];
+    state.data.contractorContacts = Array.isArray(contractorContacts) ? activeContractorContacts(contractorContacts) : [];
+    state.data.archivedContractorContacts = Array.isArray(contractorContacts) ? archivedContractorContacts(contractorContacts) : [];
+    state.data.contractorInteractions = Array.isArray(contractorInteractions) ? activeContractorInteractions(contractorInteractions) : [];
+    state.data.cancelledContractorInteractions = Array.isArray(contractorInteractions) ? cancelledContractorInteractions(contractorInteractions) : [];
+    state.data.contractorFollowups = Array.isArray(contractorFollowups) ? activeContractorFollowups(contractorFollowups) : [];
+    state.data.cancelledContractorFollowups = Array.isArray(contractorFollowups) ? cancelledContractorFollowups(contractorFollowups) : [];
 
     state.dataStatus = "live";
   } catch (error) {
@@ -10568,6 +11816,26 @@ async function loadExistingData() {
   }
 
   render();
+}
+
+async function loadContractorImportBatches() {
+  return safeGET("contractor_import_batches?select=id,file_name,sheet_name,imported_by,imported_at,row_count,created_count,matched_count,skipped_count,status,notes,created_at,updated_at&order=imported_at.desc&limit=50", null);
+}
+
+async function loadContractorCompanies() {
+  return safeGET("contractor_companies?select=id,company_name,company_type,region,address,phone,fax,email,website,representative_name,primary_contact_name,mobile,capital_amount_text,annual_revenue_text,employee_count_text,contractor_grade,dealer_brands,preferred_brands,project_experience,relationship_status,potential_level,owner,source_note,import_batch_id,archived_at,archived_by,archive_reason,created_at,updated_at&order=updated_at.desc.nullslast,created_at.desc&limit=500", null);
+}
+
+async function loadContractorContacts() {
+  return safeGET("contractor_contacts?select=id,company_id,contact_name,contact_type,role_title,phone,mobile,email,line_id,region,engineer_level,practice_status,preferred_brands,notes,owner,import_batch_id,archived_at,archived_by,archive_reason,created_at,updated_at&order=updated_at.desc.nullslast,created_at.desc&limit=800", null);
+}
+
+async function loadContractorInteractions() {
+  return safeGET("contractor_interactions?select=id,company_id,contact_id,interaction_date,interaction_type,owner,summary,customer_reaction,mentioned_project,competitor_info,next_step,next_followup_date,potential_level,needs_marketing_support,import_batch_id,cancelled_at,cancelled_by,cancel_reason,created_at,updated_at&order=interaction_date.desc.nullslast,updated_at.desc.nullslast,created_at.desc&limit=1000", null);
+}
+
+async function loadContractorFollowups() {
+  return safeGET("contractor_followups?select=id,company_id,contact_id,interaction_id,title,priority,due_date,status,owner,result_note,completed_at,cancelled_at,cancelled_by,cancel_reason,created_at,updated_at&order=due_date.asc.nullslast,updated_at.desc.nullslast,created_at.desc&limit=1000", null);
 }
 
 async function loadMarketingCampaigns() {
