@@ -272,6 +272,7 @@ Phase 1 不顯示工程公司 CRM。
 
 ### CRM-1：SQL schema + RLS
 
+- SQL 檔：`sql/phase1_batch23_contractor_crm.sql`。
 - 建立 `contractor_companies`。
 - 建立 `contractor_contacts`。
 - 建立 `contractor_interactions`。
