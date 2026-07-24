@@ -1025,6 +1025,57 @@ h1 {
   border: 1px solid var(--line-strong);
 }
 
+.filter-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(5, minmax(130px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.filter-field {
+  display: grid;
+  gap: 6px;
+}
+
+.filter-field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.filter-field input,
+.filter-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-summary {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .empty-note {
   padding: 24px;
   border: 1px dashed var(--line-strong);
@@ -1276,6 +1327,16 @@ h1 {
   .content-grid {
     grid-template-columns: 1fr;
   }
+
+  .filter-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-field.is-wide,
+  .filter-actions,
+  .filter-summary {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1390,11 +1451,21 @@ h1 {
   .kpi-grid,
   .mini-grid,
   .form-grid,
+  .filter-panel,
   .tender-detail-grid,
   .tender-keyword-form,
   .checkbox-grid,
   .content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .filter-panel {
+    padding: 12px;
+  }
+
+  .filter-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 
   .kpi-card {

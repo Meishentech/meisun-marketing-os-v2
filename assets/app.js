@@ -73,6 +73,14 @@ const state = {
   campaignInspectionMode: "",
   associationDetailId: "",
   contractorCompanyId: "",
+  contractorFilters: {
+    keyword: "",
+    companyType: "",
+    region: "",
+    relationshipStatus: "",
+    potentialLevel: "",
+    owner: "",
+  },
   tenderProjectId: "",
   knowledgeArchiveAvailable: false,
   subsidyRulesAvailable: false,
@@ -2682,7 +2690,9 @@ function contractorPageSections() {
 }
 
 function contractorCompanyListSection() {
-  const rows = state.data.contractorCompanies
+  const allCompanies = state.data.contractorCompanies;
+  const filteredCompanies = allCompanies.filter(contractorCompanyMatchesFilters);
+  const rows = filteredCompanies
     .slice()
     .sort((a, b) => (
       contractorPriorityScore(b) - contractorPriorityScore(a)
@@ -2710,17 +2720,93 @@ function contractorCompanyListSection() {
     title: "工程公司主檔",
     wide: true,
     headerAction: actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
+    topContent: contractorCompanyFilterHtml(filteredCompanies.length, allCompanies.length),
     headers: ["公司", "類型", "區域", "關係", "潛力", "下次追蹤", "操作"],
     rows: rows.length ? rows : [[
-      "目前尚未建立工程公司資料",
+      allCompanies.length ? "沒有符合篩選條件的工程公司" : "目前尚未建立工程公司資料",
       "工程公司",
       "未填",
       tag("無資料", "amber"),
       tag("未評估", "gray"),
-      "請新增工程公司主檔",
-      actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
+      allCompanies.length ? "請調整上方篩選條件" : "請新增工程公司主檔",
+      allCompanies.length ? actionButton("清除篩選", "clear-contractor-filters", "", "is-primary") : actionButton("新增工程公司", "create-contractor-company", "", "is-primary"),
     ]],
   };
+}
+
+function contractorCompanyFilterHtml(visibleCount, totalCount) {
+  const filters = state.contractorFilters || {};
+  return `
+    <div class="filter-panel" data-filter-scope="contractor-companies">
+      <label class="filter-field is-wide">
+        <span>搜尋</span>
+        <input name="keyword" value="${escapeAttr(filters.keyword || "")}" placeholder="公司、聯絡人、電話、地址、品牌">
+      </label>
+      <label class="filter-field">
+        <span>類型</span>
+        <select name="companyType">${contractorFilterOptions("company_type", filters.companyType || "", "全部類型")}</select>
+      </label>
+      <label class="filter-field">
+        <span>區域</span>
+        <select name="region">${contractorFilterOptions("region", filters.region || "", "全部區域")}</select>
+      </label>
+      <label class="filter-field">
+        <span>關係</span>
+        <select name="relationshipStatus">${contractorFilterOptions("relationship_status", filters.relationshipStatus || "", "全部關係")}</select>
+      </label>
+      <label class="filter-field">
+        <span>潛力</span>
+        <select name="potentialLevel">${contractorFilterOptions("potential_level", filters.potentialLevel || "", "全部潛力")}</select>
+      </label>
+      <label class="filter-field">
+        <span>負責人</span>
+        <select name="owner">${contractorFilterOptions("owner", filters.owner || "", "全部負責人")}</select>
+      </label>
+      <div class="filter-actions">
+        ${actionButton("套用篩選", "apply-contractor-filters", "", "is-primary")}
+        ${actionButton("清除", "clear-contractor-filters")}
+      </div>
+      <p class="filter-summary">目前顯示 ${visibleCount} / ${totalCount} 筆。</p>
+    </div>
+  `;
+}
+
+function contractorFilterOptions(field, selected = "", blankLabel = "全部") {
+  const values = uniqueSortedValues(state.data.contractorCompanies.map((company) => company[field]));
+  return selectOptions([["", blankLabel], ...values.map((value) => [value, value])], selected || "");
+}
+
+function uniqueSortedValues(values = []) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "zh-Hant-TW"));
+}
+
+function contractorCompanyMatchesFilters(company = {}) {
+  const filters = state.contractorFilters || {};
+  if (filters.companyType && String(company.company_type || "") !== filters.companyType) return false;
+  if (filters.region && String(company.region || "") !== filters.region) return false;
+  if (filters.relationshipStatus && String(company.relationship_status || "") !== filters.relationshipStatus) return false;
+  if (filters.potentialLevel && String(company.potential_level || "") !== filters.potentialLevel) return false;
+  if (filters.owner && String(company.owner || "") !== filters.owner) return false;
+
+  const keyword = String(filters.keyword || "").trim().toLowerCase();
+  if (!keyword) return true;
+  const haystack = [
+    company.company_name,
+    company.company_type,
+    company.region,
+    company.address,
+    company.phone,
+    company.mobile,
+    company.email,
+    company.representative_name,
+    company.primary_contact_name,
+    company.contractor_grade,
+    company.source_note,
+    ...(Array.isArray(company.dealer_brands) ? company.dealer_brands : []),
+    ...(Array.isArray(company.preferred_brands) ? company.preferred_brands : []),
+  ].filter(Boolean).join(" ").toLowerCase();
+  return haystack.includes(keyword);
 }
 
 function contractorFollowupOverviewSection() {
@@ -11060,6 +11146,7 @@ function renderSection(section) {
       <article class="panel${wideClass}">
         ${header}
         <div class="panel-body">
+          ${section.topContent || ""}
           ${renderTable(section, tableClass)}
           ${section.footer ? `<div class="section-footer">${section.footer}</div>` : ""}
         </div>
@@ -11365,6 +11452,14 @@ document.addEventListener("click", (event) => {
   if (action === "edit-association") openEditAssociationModal(id);
   if (action === "archive-association") openArchiveAssociationModal(id);
   if (action === "create-contractor-company") openCreateContractorCompanyModal();
+  if (action === "apply-contractor-filters") {
+    applyContractorCompanyFilters();
+    return;
+  }
+  if (action === "clear-contractor-filters") {
+    clearContractorCompanyFilters();
+    return;
+  }
   if (action === "view-contractor-company") {
     if (!id) return;
     state.page = "contractors";
@@ -11490,6 +11585,32 @@ document.addEventListener("click", (event) => {
   if (action === "open-tender-result") openTenderResult(id);
   if (action === "scan-tender-project") scanTenderProject(id);
 });
+
+function applyContractorCompanyFilters() {
+  const panel = document.querySelector('[data-filter-scope="contractor-companies"]');
+  if (!panel) return;
+  state.contractorFilters = {
+    keyword: panel.querySelector('[name="keyword"]')?.value.trim() || "",
+    companyType: panel.querySelector('[name="companyType"]')?.value || "",
+    region: panel.querySelector('[name="region"]')?.value || "",
+    relationshipStatus: panel.querySelector('[name="relationshipStatus"]')?.value || "",
+    potentialLevel: panel.querySelector('[name="potentialLevel"]')?.value || "",
+    owner: panel.querySelector('[name="owner"]')?.value || "",
+  };
+  render();
+}
+
+function clearContractorCompanyFilters() {
+  state.contractorFilters = {
+    keyword: "",
+    companyType: "",
+    region: "",
+    relationshipStatus: "",
+    potentialLevel: "",
+    owner: "",
+  };
+  render();
+}
 
 document.getElementById("modalClose").addEventListener("click", closeModal);
 document.getElementById("modalCancel").addEventListener("click", closeModal);
