@@ -72,6 +72,7 @@ const state = {
   campaignDetailId: "",
   campaignInspectionMode: "",
   associationDetailId: "",
+  associationFocus: "",
   contractorCompanyId: "",
   contractorFocus: "",
   contractorFilters: {
@@ -2684,6 +2685,15 @@ function associationSection() {
 
 function associationPageSections() {
   if (state.associationDetailId) return associationDetailSections();
+  const focusSection = associationFocusSection();
+  if (focusSection) {
+    return [
+      associationListSection(),
+      focusSection,
+      archivedAssociationsSection(),
+    ];
+  }
+
   return [
     associationListSection(),
     associationSection(),
@@ -3160,6 +3170,188 @@ function associationListSection() {
       "請新增公會主檔",
       "無",
       actionButton("新增公會", "create-association", "", "is-primary"),
+    ]],
+  };
+}
+
+function associationFocusSection() {
+  const focus = state.associationFocus;
+  if (!focus || focus === "all") return null;
+
+  if (focus === "fees") return associationFeeBenefitOverviewSection();
+  if (focus === "activities") return associationActivityPublicationOverviewSection();
+  if (focus === "pending") return associationPendingOverviewSection();
+  return null;
+}
+
+function associationNameById(associationId) {
+  const association = findAssociation(associationId);
+  return association ? associationDisplayName(association) : "未關聯公會";
+}
+
+function associationDetailButton(associationId) {
+  return associationId
+    ? actionButton("查看公會", "view-association-detail", associationId, "is-primary")
+    : "未關聯";
+}
+
+function associationFeeBenefitOverviewSection() {
+  const feeRows = state.data.associationFees.map((fee) => [
+    associationNameById(fee.association_id),
+    "年費 / 會費",
+    String(fee.year || "未填"),
+    tag(fee.payment_status || "未繳", statusTone(fee.payment_status || "未繳")),
+    `${formatMoney(fee.fee_amount)} / 到期 ${formatDate(fee.due_date) || "未填"}`,
+    associationDetailButton(fee.association_id),
+  ]);
+
+  const benefitRows = state.data.associationBenefits.map((benefit) => [
+    associationNameById(benefit.association_id),
+    "會員權益",
+    benefit.benefit_name || "未命名權益",
+    tag(benefit.usage_status || "未使用", statusTone(benefit.usage_status || "未使用")),
+    `${benefit.benefit_type || "其他"} / 有效 ${formatDate(benefit.valid_until) || "未填"}`,
+    associationDetailButton(benefit.association_id),
+  ]);
+
+  const rows = [...feeRows, ...benefitRows];
+  return {
+    type: "table",
+    title: `年費 / 權益檢視（${rows.length}）`,
+    wide: true,
+    headers: ["公會", "類型", "項目", "狀態", "資訊", "操作"],
+    rows: rows.length ? rows : [[
+      "目前沒有年費或權益資料",
+      "無",
+      "無",
+      tag("無資料", "amber"),
+      "請進入公會詳情新增資料",
+      "無",
+    ]],
+  };
+}
+
+function associationActivityPublicationOverviewSection() {
+  const eventRows = state.data.associationEvents.map((event) => [
+    associationNameById(event.association_id),
+    event.event_type || "活動",
+    event.event_name || "未命名活動",
+    associationStageCell({ source_table: "event", stage: event.event_status || "待確認" }),
+    formatDate(event.event_date) || "未排定",
+    associationDetailButton(event.association_id),
+  ]);
+
+  const publicationRows = state.data.associationPublications.map((publication) => [
+    associationNameById(publication.association_id),
+    "期刊排程",
+    publication.publication_name || "未命名期刊",
+    associationStageCell({ source_table: "publication", stage: publication.material_status || "待確認主題" }),
+    `${formatDate(publication.deadline_date) || "未填"} / 刊出 ${formatDate(publication.publish_date) || "未填"}`,
+    associationDetailButton(publication.association_id),
+  ]);
+
+  const rows = [...eventRows, ...publicationRows]
+    .sort((a, b) => String(a[4] || "9999-12-31").localeCompare(String(b[4] || "9999-12-31"), "zh-Hant-TW"));
+
+  return {
+    type: "table",
+    title: `活動 / 期刊檢視（${rows.length}）`,
+    wide: true,
+    headers: ["公會", "類型", "項目", "階段", "日期", "操作"],
+    rows: rows.length ? rows : [[
+      "目前沒有活動或期刊資料",
+      "無",
+      "無",
+      tag("無資料", "amber"),
+      "請進入公會詳情新增資料",
+      "無",
+    ]],
+  };
+}
+
+function associationPendingOverviewSection() {
+  const activeCooperations = state.data.associationCooperations.filter((item) => !isCancelledAssociationCooperation(item));
+  const cooperationRows = activeCooperations
+    .filter((item) => String(item.stage || "").includes("待") || !item.due_date)
+    .map((item) => [
+      item.item_type || sourceTableLabel(item.source_table),
+      associationNameById(item.association_id),
+      item.item_name || "未命名合作項目",
+      associationStageCell(item),
+      formatDate(item.due_date) || "未排定",
+      associationDetailButton(item.association_id),
+    ]);
+
+  const taskRows = state.data.associationTasks
+    .filter((task) => String(task.task_status || "").includes("待") || !task.due_date || !["已完成"].includes(task.task_status))
+    .map((task) => [
+      "任務",
+      associationNameById(task.association_id),
+      task.task_name || "未命名任務",
+      tag(task.task_status || "待確認", statusTone(task.task_status || "待確認")),
+      formatDate(task.due_date) || "未排定",
+      associationDetailButton(task.association_id),
+    ]);
+
+  const eventRows = state.data.associationEvents
+    .filter((event) => String(event.event_status || "").includes("待") || !event.event_date || !["已結束", "已完成"].includes(event.event_status))
+    .map((event) => [
+      event.event_type || "活動",
+      associationNameById(event.association_id),
+      event.event_name || "未命名活動",
+      associationStageCell({ source_table: "event", stage: event.event_status || "待確認" }),
+      formatDate(event.event_date) || "未排定",
+      associationDetailButton(event.association_id),
+    ]);
+
+  const publicationRows = state.data.associationPublications
+    .filter((publication) => String(publication.material_status || "").includes("待") || !publication.deadline_date || !["已確認刊出", "已刊登"].includes(publication.material_status))
+    .map((publication) => [
+      "期刊",
+      associationNameById(publication.association_id),
+      publication.publication_name || "未命名期刊",
+      associationStageCell({ source_table: "publication", stage: publication.material_status || "待確認主題" }),
+      formatDate(publication.deadline_date) || "未排定",
+      associationDetailButton(publication.association_id),
+    ]);
+
+  const feeRows = state.data.associationFees
+    .filter((fee) => !["已繳", "不適用"].includes(fee.payment_status))
+    .map((fee) => [
+      "年費",
+      associationNameById(fee.association_id),
+      String(fee.year || "未填"),
+      tag(fee.payment_status || "未繳", statusTone(fee.payment_status || "未繳")),
+      formatDate(fee.due_date) || "未排定",
+      associationDetailButton(fee.association_id),
+    ]);
+
+  const expenseRows = state.data.associationTaskExpenses
+    .filter((expense) => !["已付款", "不適用"].includes(expense.payment_status))
+    .map((expense) => [
+      "任務費用",
+      associationNameById(expense.association_id),
+      expense.expense_type || "其他",
+      tag(expense.payment_status || "未付款", statusTone(expense.payment_status || "未付款")),
+      formatDate(expense.payment_date) || "未排定",
+      associationDetailButton(expense.association_id),
+    ]);
+
+  const rows = [...cooperationRows, ...taskRows, ...eventRows, ...publicationRows, ...feeRows, ...expenseRows]
+    .sort((a, b) => String(a[4] || "9999-12-31").localeCompare(String(b[4] || "9999-12-31"), "zh-Hant-TW"));
+
+  return {
+    type: "table",
+    title: `待確認 / 待追蹤（${rows.length}）`,
+    wide: true,
+    headers: ["類型", "公會", "項目", "狀態", "日期", "操作"],
+    rows: rows.length ? rows : [[
+      "目前沒有待確認事項",
+      "無",
+      "無",
+      tag("已清空", "green"),
+      "無",
+      "無",
     ]],
   };
 }
@@ -11050,18 +11242,18 @@ function associationKpis() {
   if (!state.data.associations.length && !state.data.associationCooperations.length && !state.data.associationTags.length && !state.data.associationTasks.length && !state.data.associationTaskExpenses.length && !state.data.associationEvents.length && !state.data.associationPublications.length && !state.data.associationFees.length && !state.data.associationBenefits.length && !state.data.associationNotes.length) {
     if (state.dataStatus === "live") {
       return [
-        ["公會 / 單位", "0", "尚未建立公會資料"],
-        ["合作紀錄", "0", "尚未建立合作紀錄"],
-        ["關係標籤", "0", "尚未建立關係標籤"],
-        ["待確認", "0", "目前沒有待確認公會資料"],
+        ["公會 / 單位", "0", "尚未建立公會資料", "associations", "association:all"],
+        ["合作紀錄", "0", "尚未建立合作紀錄", "associations", "association:all"],
+        ["關係標籤", "0", "尚未建立關係標籤", "associations", "association:all"],
+        ["待確認", "0", "目前沒有待確認公會資料", "associations", "association:pending"],
       ];
     }
 
     return [
-      ["公會 / 單位", "0", "尚未建立公會資料"],
-      ["年費 / 權益", "0", "尚未建立年費或權益"],
-      ["活動 / 期刊", "0", "尚未建立活動或期刊"],
-      ["待確認", "0", "目前沒有待確認公會資料"],
+      ["公會 / 單位", "0", "尚未建立公會資料", "associations", "association:all"],
+      ["年費 / 權益", "0", "尚未建立年費或權益", "associations", "association:fees"],
+      ["活動 / 期刊", "0", "尚未建立活動或期刊", "associations", "association:activities"],
+      ["待確認", "0", "目前沒有待確認公會資料", "associations", "association:pending"],
     ];
   }
 
@@ -11081,10 +11273,10 @@ function associationKpis() {
     + pendingExpenses;
 
   return [
-    ["公會 / 單位", String(totalAssociations), "既有公會資料"],
-    ["年費 / 權益", String(state.data.associationFees.length + state.data.associationBenefits.length), `年費 ${pendingFees} 筆待處理、權益 ${state.data.associationBenefits.length} 筆`],
-    ["活動 / 期刊", String(state.data.associationEvents.length + state.data.associationPublications.length), `活動 ${openEvents}、期刊 ${openPublications} 筆待追蹤`],
-    ["待確認", String(pending), `任務 ${openTasks}、合作概覽 ${openCooperations} 筆仍需追蹤`],
+    ["公會 / 單位", String(totalAssociations), "既有公會資料", "associations", "association:all"],
+    ["年費 / 權益", String(state.data.associationFees.length + state.data.associationBenefits.length), `年費 ${pendingFees} 筆待處理、權益 ${state.data.associationBenefits.length} 筆`, "associations", "association:fees"],
+    ["活動 / 期刊", String(state.data.associationEvents.length + state.data.associationPublications.length), `活動 ${openEvents}、期刊 ${openPublications} 筆待追蹤`, "associations", "association:activities"],
+    ["待確認", String(pending), `任務 ${openTasks}、合作概覽 ${openCooperations} 筆仍需追蹤`, "associations", "association:pending"],
   ];
 }
 
@@ -11311,6 +11503,10 @@ function renderNav(navItems) {
   nav.querySelectorAll("button.nav-button[data-page]").forEach((button) => {
     button.addEventListener("click", () => {
       state.page = button.dataset.page;
+      if (state.page === "associations") {
+        state.associationDetailId = "";
+        state.associationFocus = "";
+      }
       if (state.page === "contractors") state.contractorFocus = "";
       clearCampaignDrilldown();
       render();
@@ -11605,6 +11801,16 @@ document.getElementById("secondaryAction").addEventListener("click", () => {
 });
 
 function applyKpiAction(action = "") {
+  if (action === "association:all") {
+    state.associationDetailId = "";
+    state.associationFocus = "";
+    return;
+  }
+  if (action.startsWith("association:")) {
+    state.associationDetailId = "";
+    state.associationFocus = action.split(":")[1] || "";
+    return;
+  }
   if (action === "contractor:all") {
     state.contractorFocus = "";
     return;
