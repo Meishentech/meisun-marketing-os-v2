@@ -108,6 +108,23 @@ const TENDER_SCAN_CATEGORIES = [
   ["exclude_residential", "降低家用冷氣"],
 ];
 const DEFAULT_TENDER_SCAN_CATEGORIES = TENDER_SCAN_CATEGORIES.map(([id]) => id);
+
+function marketingResourceUploadErrorMessage(error) {
+  const message = String(error?.message || error || "").trim();
+  const lower = message.toLowerCase();
+  if (lower.includes("jwt expired") || lower.includes("pgrst303")) {
+    return "檔案上傳失敗：登入已逾時，請重新登入後再上傳。";
+  }
+  if (lower.includes("payload too large") || lower.includes("413") || lower.includes("exceeded") || lower.includes("file size") || lower.includes("maximum")) {
+    return `檔案上傳失敗：檔案可能超過目前 Storage 上限，請確認檔案小於 ${formatFileSize(RESOURCE_FILE_MAX_BYTES)}。`;
+  }
+  if (lower.includes("row-level security") || lower.includes("permission") || lower.includes("not allowed") || lower.includes("unauthorized") || lower.includes("403")) {
+    return "檔案上傳失敗：目前帳號沒有文宣檔案上傳權限，請確認使用行銷或管理者帳號登入。";
+  }
+  return message
+    ? `檔案上傳失敗：${message}`
+    : "檔案上傳失敗，請確認 Storage 權限與檔案大小。";
+}
 const BUSINESS_MANAGEMENT_URL = "https://magenta-hotteok-62c0dc.netlify.app/";
 
 const roleAliases = {
@@ -7493,11 +7510,7 @@ function openMarketingResourceModal(resource = {}) {
           payload.file_name = file.name;
           payload.file_size = file.size;
         } catch (error) {
-          const message = error?.message || "";
-          const isTooLarge = message.includes("Payload too large") || message.includes("413");
-          throw new Error(isTooLarge
-            ? `檔案上傳失敗：檔案超過目前 Storage 上限。請先套用 schema_v16_resource_file_size_limit.sql，或確認檔案小於 ${formatFileSize(RESOURCE_FILE_MAX_BYTES)}。`
-            : "檔案上傳失敗，請確認 Storage 權限與檔案大小。");
+          throw new Error(marketingResourceUploadErrorMessage(error));
         }
       }
 
