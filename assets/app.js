@@ -646,7 +646,7 @@ function documentInspectionSection() {
     formatDate(document.uploaded_at) || "未填",
     actionGroup([
       actionButton("進入專案", "view-campaign-detail", document.campaign_id, "is-primary"),
-      document.file_path ? actionButton("開啟", "open-campaign-document", document.id) : disabledInlineAction("無檔案"),
+      campaignDocumentHasSource(document) ? actionButton("開啟", "open-campaign-document", document.id) : disabledInlineAction("無來源"),
     ]),
   ]);
 
@@ -869,15 +869,15 @@ function campaignDocumentsSection(campaign = {}) {
     document.doc_type || "其他",
     document.title || document.file_name || "未命名文件",
     document.version_note || "未填",
-    document.file_name || "未上傳檔案",
+    campaignDocumentSourceText(document),
     formatDate(document.uploaded_at) || "未填",
     canManageCampaignDetails()
       ? actionGroup([
-        document.file_path ? actionButton("開啟", "open-campaign-document", document.id, "is-primary") : disabledInlineAction("無檔案"),
+        campaignDocumentHasSource(document) ? actionButton("開啟", "open-campaign-document", document.id, "is-primary") : disabledInlineAction("無來源"),
         actionButton("編輯", "edit-campaign-document", document.id, "is-primary"),
         actionButton("封存", "archive-campaign-document", document.id, "is-danger"),
       ])
-      : (document.file_path ? actionButton("開啟", "open-campaign-document", document.id, "is-primary") : "無"),
+      : (campaignDocumentHasSource(document) ? actionButton("開啟", "open-campaign-document", document.id, "is-primary") : "無"),
   ]);
 
   return {
@@ -885,7 +885,7 @@ function campaignDocumentsSection(campaign = {}) {
     title: "文件 / 版本",
     headerAction: canManageCampaignDetails() ? actionButton("新增文件", "create-campaign-document", campaign.id, "is-primary") : "",
     wide: true,
-    headers: ["類型", "標題", "版本", "檔案", "上傳日", "操作"],
+    headers: ["類型", "標題", "版本", "檔案 / 連結", "上傳日", "操作"],
     rows: rows.length ? rows : [["無", "尚未建立文件", "無", "無", "無", "無"]],
   };
 }
@@ -4531,6 +4531,17 @@ function activeCampaignDocuments(documents = state.data.campaignDocuments) {
 
 function archivedCampaignDocuments(documents = state.data.campaignDocuments) {
   return documents.filter((document) => Boolean(document.archived_at));
+}
+
+function campaignDocumentHasSource(document = {}) {
+  return Boolean(document.file_path || document.external_url);
+}
+
+function campaignDocumentSourceText(document = {}) {
+  if (document.file_path && document.external_url) return `${document.file_name || "已上傳檔案"} / 外部連結`;
+  if (document.file_path) return document.file_name || "已上傳檔案";
+  if (document.external_url) return "外部連結";
+  return "尚未提供來源";
 }
 
 function activeCampaignRisks(risks = state.data.campaignRisks) {
@@ -10303,6 +10314,7 @@ function campaignDocumentTypeOptions() {
 
 function campaignDocumentFormHtml(document = {}, isCreate = false) {
   const fileLabel = document.file_path ? (document.file_name || document.file_path) : "尚未上傳檔案";
+  const sourceHint = isCreate ? "請上傳檔案或填寫外部連結，至少擇一。" : "可補充或更新外部連結。";
   return `
     <div class="form-grid">
       <label class="form-field">
@@ -10318,6 +10330,10 @@ function campaignDocumentFormHtml(document = {}, isCreate = false) {
         <input name="version_note" value="${escapeAttr(document.version_note || "")}" placeholder="例如：v1、廠商報價初版、核定版">
       </label>
       <label class="form-field is-wide">
+        <span>外部連結</span>
+        <input name="external_url" value="${escapeAttr(document.external_url || "")}" placeholder="https://drive.google.com/...">
+      </label>
+      <label class="form-field is-wide">
         <span>備註</span>
         <textarea name="notes">${escapeHtml(document.notes || "")}</textarea>
       </label>
@@ -10327,10 +10343,11 @@ function campaignDocumentFormHtml(document = {}, isCreate = false) {
       </label>
       ${isCreate ? `
         <label class="form-field is-wide">
-          <span>上傳文件</span>
-          <input name="document_file" type="file" required>
+          <span>上傳文件（選填）</span>
+          <input name="document_file" type="file">
         </label>
       ` : ""}
+      <p class="empty-note is-wide">${escapeHtml(sourceHint)}</p>
     </div>
   `;
 }
@@ -10341,6 +10358,7 @@ function campaignDocumentPayload(values = {}, campaignId = "") {
     doc_type: values.doc_type || "其他",
     title: values.title.trim(),
     version_note: values.version_note?.trim() || null,
+    external_url: values.external_url?.trim() || null,
     notes: values.notes?.trim() || null,
   };
 }
@@ -10353,19 +10371,22 @@ function openCreateCampaignDocumentModal(campaignId) {
     onSubmit: async (form) => {
       const values = formValues(form);
       const file = form.elements.document_file?.files?.[0] || null;
-      if (!file) throw new Error("請選擇要上傳的文件。");
-      if (file.size > CAMPAIGN_DOCUMENT_FILE_MAX_BYTES) {
+      if (!file && !values.external_url?.trim()) throw new Error("請上傳文件或填寫外部連結，至少擇一。");
+      if (file && file.size > CAMPAIGN_DOCUMENT_FILE_MAX_BYTES) {
         throw new Error(`檔案超過上傳上限 ${formatFileSize(CAMPAIGN_DOCUMENT_FILE_MAX_BYTES)}，請壓縮後再上傳。`);
       }
 
       let uploadedPath = "";
       try {
-        uploadedPath = await uploadStorageFile("campaign-documents", file);
-        await api("POST", "marketing_campaign_documents", {
+        const payload = {
           ...campaignDocumentPayload(values, campaignId),
-          file_path: uploadedPath,
-          file_name: file.name,
-        });
+        };
+        if (file) {
+          uploadedPath = await uploadStorageFile("campaign-documents", file);
+          payload.file_path = uploadedPath;
+          payload.file_name = file.name;
+        }
+        await api("POST", "marketing_campaign_documents", payload);
       } catch (error) {
         if (uploadedPath) {
           try {
@@ -10429,7 +10450,7 @@ function openArchiveCampaignDocumentModal(id) {
 
 async function openCampaignDocumentFile(id, button) {
   const document = findCampaignDocument(id);
-  if (!document?.file_path) return;
+  if (!campaignDocumentHasSource(document)) return;
 
   const popup = window.open("about:blank", "_blank");
   if (popup) popup.opener = null;
@@ -10440,11 +10461,13 @@ async function openCampaignDocumentFile(id, button) {
   }
 
   try {
-    const signedUrl = await getSignedUrl("campaign-documents", document.file_path);
+    const targetUrl = document.file_path
+      ? await getSignedUrl("campaign-documents", document.file_path)
+      : document.external_url;
     if (popup) {
-      popup.location.href = signedUrl;
+      popup.location.href = targetUrl;
     } else {
-      window.open(signedUrl, "_blank", "noopener");
+      window.open(targetUrl, "_blank", "noopener");
     }
   } catch (error) {
     if (popup) popup.close();
@@ -12677,6 +12700,9 @@ async function loadCampaignBudgetItems() {
 }
 
 async function loadCampaignDocuments() {
+  const withExternalUrl = await safeGET("marketing_campaign_documents?select=id,campaign_id,doc_type,title,version_note,external_url,file_path,file_name,notes,vendor_id,deliverable_id,uploaded_at,archived_at,archived_by,archive_reason&order=uploaded_at.desc.nullslast,id.desc&limit=300", null);
+  if (Array.isArray(withExternalUrl)) return withExternalUrl;
+
   const withLifecycle = await safeGET("marketing_campaign_documents?select=id,campaign_id,doc_type,title,version_note,file_path,file_name,notes,vendor_id,deliverable_id,uploaded_at,archived_at,archived_by,archive_reason&order=uploaded_at.desc.nullslast,id.desc&limit=300", null);
   if (Array.isArray(withLifecycle)) return withLifecycle;
 
