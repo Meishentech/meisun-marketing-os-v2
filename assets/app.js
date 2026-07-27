@@ -9989,7 +9989,7 @@ function campaignBudgetItemFormHtml(item = {}) {
           <input name="exchange_rate" type="number" min="0" step="0.0001" value="${escapeAttr(item.exchange_rate ?? "")}">
           <button class="inline-action" type="button" data-action="fetch-exchange-rate">抓今日匯率</button>
         </div>
-        <small class="field-hint" data-exchange-rate-status>人民幣換算台幣；按鈕會填入最近可取得匯率。</small>
+        <small class="field-hint" data-exchange-rate-status>1 人民幣換算台幣；輸入台幣或人民幣會自動換算另一欄。</small>
       </label>
       <label class="form-field">
         <span>人民幣金額</span>
@@ -10083,6 +10083,7 @@ function openCreateCampaignBudgetItemModal(campaignId) {
       await loadExistingData();
     },
   });
+  initializeBudgetExchangeForm();
 }
 
 function openEditCampaignBudgetItemModal(id) {
@@ -10098,6 +10099,7 @@ function openEditCampaignBudgetItemModal(id) {
       await loadExistingData();
     },
   });
+  initializeBudgetExchangeForm();
 }
 
 function openCancelCampaignBudgetItemModal(id) {
@@ -11824,7 +11826,65 @@ function applyKpiAction(action = "") {
   }
 }
 
-async function fetchExchangeRateForCurrentForm(button) {
+function initializeBudgetExchangeForm() {
+  const form = document.getElementById("modalForm");
+  const twdInput = form?.querySelector('input[name="amount_twd"]');
+  const rmbInput = form?.querySelector('input[name="amount_rmb"]');
+  const rateInput = form?.querySelector('input[name="exchange_rate"]');
+  const rateButton = form?.querySelector('[data-action="fetch-exchange-rate"]');
+  if (!form || !twdInput || !rmbInput || !rateInput) return;
+
+  form.dataset.budgetLastCurrency = rmbInput.value ? "rmb" : "twd";
+
+  twdInput.addEventListener("input", () => {
+    form.dataset.budgetLastCurrency = "twd";
+    updateBudgetCurrencyConversion(form, "twd");
+  });
+  rmbInput.addEventListener("input", () => {
+    form.dataset.budgetLastCurrency = "rmb";
+    updateBudgetCurrencyConversion(form, "rmb");
+  });
+  rateInput.addEventListener("input", () => {
+    updateBudgetCurrencyConversion(form, form.dataset.budgetLastCurrency || "rmb");
+  });
+
+  if (!rateInput.value && rateButton) {
+    fetchExchangeRateForCurrentForm(rateButton, { silent: true });
+  } else {
+    updateBudgetCurrencyConversion(form, form.dataset.budgetLastCurrency || "rmb");
+  }
+}
+
+function updateBudgetCurrencyConversion(form, sourceCurrency = "") {
+  if (!form || form.dataset.budgetConversionLock === "true") return;
+  const twdInput = form.querySelector('input[name="amount_twd"]');
+  const rmbInput = form.querySelector('input[name="amount_rmb"]');
+  const rateInput = form.querySelector('input[name="exchange_rate"]');
+  const status = form.querySelector("[data-exchange-rate-status]");
+  const rate = Number(rateInput?.value || 0);
+  if (!twdInput || !rmbInput || !Number.isFinite(rate) || rate <= 0) {
+    if (status) status.textContent = "請先填入匯率，系統才能自動換算台幣與人民幣。";
+    return;
+  }
+
+  form.dataset.budgetConversionLock = "true";
+  try {
+    if (sourceCurrency === "twd") {
+      const twd = Number(twdInput.value || 0);
+      if (!twdInput.value) rmbInput.value = "";
+      else if (Number.isFinite(twd) && twd > 0) rmbInput.value = String(Math.round(twd / rate));
+    } else if (sourceCurrency === "rmb") {
+      const rmb = Number(rmbInput.value || 0);
+      if (!rmbInput.value) twdInput.value = "";
+      else if (Number.isFinite(rmb) && rmb > 0) twdInput.value = String(Math.round(rmb * rate));
+    }
+    if (status) status.textContent = `目前以 1 人民幣 = ${rate} 台幣換算。`;
+  } finally {
+    form.dataset.budgetConversionLock = "false";
+  }
+}
+
+async function fetchExchangeRateForCurrentForm(button, options = {}) {
   const form = button.closest("form");
   const input = form?.querySelector('input[name="exchange_rate"]');
   const status = form?.querySelector("[data-exchange-rate-status]");
@@ -11848,13 +11908,14 @@ async function fetchExchangeRateForCurrentForm(button) {
     const data = await response.json();
     if (!Number.isFinite(Number(data.rate))) throw new Error("匯率資料格式不正確。");
     input.value = String(data.rate);
+    updateBudgetCurrencyConversion(form, form.dataset.budgetLastCurrency || "rmb");
     if (status) {
       const dateText = data.rateDate ? `，日期 ${data.rateDate}` : "";
       status.textContent = `${data.source || "匯率來源"}${dateText}；1 人民幣約 ${data.rate} 台幣。`;
     }
   } catch (error) {
     if (status) status.textContent = "匯率讀取失敗，請手動填入。";
-    alert(`匯率讀取失敗：${error.message || error}`);
+    if (!options.silent) alert(`匯率讀取失敗：${error.message || error}`);
   } finally {
     button.disabled = false;
     button.textContent = originalText;
