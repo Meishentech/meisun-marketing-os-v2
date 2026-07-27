@@ -9985,7 +9985,11 @@ function campaignBudgetItemFormHtml(item = {}) {
       </label>
       <label class="form-field">
         <span>匯率</span>
-        <input name="exchange_rate" type="number" min="0" step="0.0001" value="${escapeAttr(item.exchange_rate ?? "")}">
+        <div class="inline-input-action">
+          <input name="exchange_rate" type="number" min="0" step="0.0001" value="${escapeAttr(item.exchange_rate ?? "")}">
+          <button class="inline-action" type="button" data-action="fetch-exchange-rate">抓今日匯率</button>
+        </div>
+        <small class="field-hint" data-exchange-rate-status>人民幣換算台幣；按鈕會填入最近可取得匯率。</small>
       </label>
       <label class="form-field">
         <span>人民幣金額</span>
@@ -11820,6 +11824,43 @@ function applyKpiAction(action = "") {
   }
 }
 
+async function fetchExchangeRateForCurrentForm(button) {
+  const form = button.closest("form");
+  const input = form?.querySelector('input[name="exchange_rate"]');
+  const status = form?.querySelector("[data-exchange-rate-status]");
+  if (!input) return;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "抓取中...";
+  if (status) status.textContent = "正在讀取匯率...";
+
+  try {
+    const response = await authenticatedFetch("/api/exchange-rate", {
+      method: "GET",
+      headers: getHeaders({ requireAuth: true, contentType: "", prefer: "" }),
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || "匯率讀取失敗。");
+    }
+
+    const data = await response.json();
+    if (!Number.isFinite(Number(data.rate))) throw new Error("匯率資料格式不正確。");
+    input.value = String(data.rate);
+    if (status) {
+      const dateText = data.rateDate ? `，日期 ${data.rateDate}` : "";
+      status.textContent = `${data.source || "匯率來源"}${dateText}；1 人民幣約 ${data.rate} 台幣。`;
+    }
+  } catch (error) {
+    if (status) status.textContent = "匯率讀取失敗，請手動填入。";
+    alert(`匯率讀取失敗：${error.message || error}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
 document.addEventListener("click", (event) => {
   const kpiCard = event.target.closest("[data-page-target]");
   if (kpiCard) {
@@ -11952,6 +11993,7 @@ document.addEventListener("click", (event) => {
   if (action === "create-campaign-budget-item") openCreateCampaignBudgetItemModal(id);
   if (action === "edit-campaign-budget-item") openEditCampaignBudgetItemModal(id);
   if (action === "cancel-campaign-budget-item") openCancelCampaignBudgetItemModal(id);
+  if (action === "fetch-exchange-rate") fetchExchangeRateForCurrentForm(button);
   if (action === "view-subsidy-checklist") openSubsidyChecklistModal(id);
   if (action === "create-campaign-document") openCreateCampaignDocumentModal(id);
   if (action === "edit-campaign-document") openEditCampaignDocumentModal(id);

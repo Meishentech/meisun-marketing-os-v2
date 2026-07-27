@@ -1304,6 +1304,20 @@ h1 {
   resize: vertical;
 }
 
+.inline-input-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .checkbox-row {
   display: flex;
   align-items: flex-start;
@@ -1616,6 +1630,14 @@ h1 {
   .form-field select,
   .form-field textarea {
     min-height: 46px;
+  }
+
+  .inline-input-action {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-input-action .inline-action {
+    min-height: 42px;
   }
 
   .checklist-row {
