@@ -7423,6 +7423,12 @@ function marketingResourceFormHtml(resource = {}) {
         <span>目前檔案</span>
         <input value="${escapeAttr(fileLabel)}" readonly>
       </label>
+      ${resource.file_path ? `
+        <label class="form-field is-wide checkbox-field">
+          <input name="remove_existing_file" type="checkbox">
+          <span>移除目前檔案</span>
+        </label>
+      ` : ""}
       <label class="form-field is-wide">
         <span>上傳 / 替換檔案</span>
         <input name="resource_file" type="file" accept=".pdf,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.csv,image/*,application/pdf">
@@ -7497,12 +7503,14 @@ function openMarketingResourceModal(resource = {}) {
     onSubmit: async (form) => {
       const values = formValues(form);
       const file = form.elements.resource_file?.files?.[0] || null;
+      const removeExistingFile = isEditing && resource.file_path && values.remove_existing_file === "on" && !file;
       if (file && file.size > RESOURCE_FILE_MAX_BYTES) {
         throw new Error(`檔案超過上傳上限 ${formatFileSize(RESOURCE_FILE_MAX_BYTES)}，請壓縮後再上傳。`);
       }
 
       const payload = marketingResourcePayload(values);
       let uploadedPath = null;
+      let fileToDelete = null;
       if (file) {
         try {
           uploadedPath = await uploadStorageFile("marketing-resource-files", file);
@@ -7513,19 +7521,30 @@ function openMarketingResourceModal(resource = {}) {
           throw new Error(marketingResourceUploadErrorMessage(error));
         }
       }
+      if (removeExistingFile) {
+        payload.file_path = null;
+        payload.file_name = null;
+        payload.file_size = null;
+      }
 
       try {
         if (isEditing) {
           await api("PATCH", `marketing_resources?id=eq.${encodeURIComponent(resource.id)}`, payload);
           if (file && resource.file_path && resource.file_path !== uploadedPath) {
-            try {
-              await deleteStorageFile("marketing-resource-files", resource.file_path);
-            } catch (error) {
-              console.warn("old resource file cleanup failed", error);
-            }
+            fileToDelete = resource.file_path;
+          }
+          if (removeExistingFile) {
+            fileToDelete = resource.file_path;
           }
         } else {
           await api("POST", "marketing_resources", payload);
+        }
+        if (fileToDelete) {
+          try {
+            await deleteStorageFile("marketing-resource-files", fileToDelete);
+          } catch (error) {
+            console.warn("old resource file cleanup failed", error);
+          }
         }
       } catch (error) {
         if (uploadedPath) {
