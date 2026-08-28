@@ -82,6 +82,7 @@ const state = {
     relationshipStatus: "",
     potentialLevel: "",
     owner: "",
+    emailStatus: "",
   },
   tenderProjectId: "",
   knowledgeArchiveAvailable: false,
@@ -2840,6 +2841,16 @@ function contractorCompanyFilterHtml(visibleCount, totalCount) {
         <select name="owner">${contractorFilterOptions("owner", filters.owner || "", "全部負責人")}</select>
       </label>
       <label class="filter-field">
+        <span>Email</span>
+        <select name="emailStatus">
+          ${selectOptions([
+            ["", "Email 狀態不限"],
+            ["has-email", "有 Email"],
+            ["no-email", "無 Email"],
+          ], filters.emailStatus || "")}
+        </select>
+      </label>
+      <label class="filter-field">
         <span>查證</span>
         <select name="webResearchStatus">${contractorFilterOptions("web_research_status", filters.webResearchStatus || "", "全部查證狀態")}</select>
       </label>
@@ -2870,6 +2881,9 @@ function contractorCompanyMatchesFilters(company = {}) {
   if (filters.potentialLevel && String(company.potential_level || "") !== filters.potentialLevel) return false;
   if (filters.owner && String(company.owner || "") !== filters.owner) return false;
   if (filters.webResearchStatus && String(company.web_research_status || "") !== filters.webResearchStatus) return false;
+  const hasEmail = contractorCompanyHasEmail(company);
+  if (filters.emailStatus === "has-email" && !hasEmail) return false;
+  if (filters.emailStatus === "no-email" && hasEmail) return false;
 
   const keyword = String(filters.keyword || "").trim().toLowerCase();
   if (!keyword) return true;
@@ -2893,6 +2907,15 @@ function contractorCompanyMatchesFilters(company = {}) {
     ...(Array.isArray(company.preferred_brands) ? company.preferred_brands : []),
   ].filter(Boolean).join(" ").toLowerCase();
   return haystack.includes(keyword);
+}
+
+function contractorCompanyHasEmail(company = {}) {
+  const isValidEmail = (email = "") => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+  if (isValidEmail(company.email)) return true;
+  return state.data.contractorContacts.some((contact) => (
+    String(contact.company_id || "") === String(company.id || "")
+    && isValidEmail(contact.email)
+  ));
 }
 
 function contractorFollowupOverviewSection() {
@@ -12171,6 +12194,7 @@ function applyContractorCompanyFilters() {
     relationshipStatus: panel.querySelector('[name="relationshipStatus"]')?.value || "",
     potentialLevel: panel.querySelector('[name="potentialLevel"]')?.value || "",
     owner: panel.querySelector('[name="owner"]')?.value || "",
+    emailStatus: panel.querySelector('[name="emailStatus"]')?.value || "",
     webResearchStatus: panel.querySelector('[name="webResearchStatus"]')?.value || "",
   };
   render();
@@ -12185,6 +12209,7 @@ function clearContractorCompanyFilters() {
     relationshipStatus: "",
     potentialLevel: "",
     owner: "",
+    emailStatus: "",
     webResearchStatus: "",
   };
   render();
