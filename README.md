@@ -7,6 +7,7 @@
 - 提供 Cloudflare Pages 綁定與部署用的初始版本。
 - 作為 v2 開發主專案，不影響既有 `marketing-a4l.pages.dev`。
 - 後續會依角色權限與 Phase 1 MVP 逐步實作。
+- 行銷、美編、平面設計與素材治理參考 `docs/design/`。
 
 ## Cloudflare Pages 初始設定
 
