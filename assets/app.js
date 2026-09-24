@@ -84,9 +84,17 @@ const state = {
     owner: "",
     emailStatus: "",
   },
+  emailCustomerFilters: {
+    keyword: "",
+    source: "",
+    segment: "",
+    owner: "",
+  },
   tenderProjectId: "",
   knowledgeArchiveAvailable: false,
   subsidyRulesAvailable: false,
+  reimbursementInfoAvailable: false,
+  budgetReimbursementInfoAvailable: false,
 };
 
 let modalSubmitHandler = null;
@@ -109,6 +117,7 @@ const TENDER_SCAN_CATEGORIES = [
   ["exclude_residential", "降低家用冷氣"],
 ];
 const DEFAULT_TENDER_SCAN_CATEGORIES = TENDER_SCAN_CATEGORIES.map(([id]) => id);
+const EMAIL_AUDIENCE_SEGMENT_OPTIONS = ["業主 / 飯店 / 商辦", "機電顧問 / 技師", "工程公司 / 總包", "醫療 / 科技廠 / 資料中心", "其他"];
 
 function marketingResourceUploadErrorMessage(error) {
   const message = String(error?.message || error || "").trim();
@@ -170,6 +179,7 @@ const roleMeta = {
       ["vendors", "合作廠商 / 交付物"],
       ["associations", "公會管理"],
       ["contractors", "工程公司 CRM"],
+      ["email", "Email 客戶"],
       ["knowledge", "產品知識庫"],
       ["requests", "業務需求單"],
       ["weekly", "週報摘要"],
@@ -384,6 +394,17 @@ const pages = {
       ],
       sections: [contractorPageSections()],
     },
+    email: {
+      title: "Email 客戶名單",
+      subtitle: "從名單與工程公司 CRM 篩選出有 Email 的客戶，供匯出或到外部系統發信使用。",
+      kpis: [
+        ["有 Email", "0", "依正式資料顯示"],
+        ["名單來源", "0", "leads 裡有 email"],
+        ["工程公司", "0", "公司或聯絡人有 email"],
+        ["可篩選", "來源 / 分眾", "用於外部寄信系統"],
+      ],
+      sections: [emailCustomerPageSections()],
+    },
     knowledge: {
       title: "產品知識庫",
       subtitle: "管理差異化、技術比較、競品分析、FAQ、證據等級與可對外使用範圍。",
@@ -507,8 +528,8 @@ function projectOverviewSection() {
       title: "專案管理排序",
       wide: true,
       headers: marketingActions
-        ? ["專案", "重要性", "執行狀態", "進度", "預算", "待處理", "操作"]
-        : ["專案", "重要性", "執行狀態", "進度", "預算", "待處理"],
+        ? ["專案", "重要性", "執行狀態", "進度", "預算", "核銷資料", "待處理", "操作"]
+        : ["專案", "重要性", "執行狀態", "進度", "預算", "核銷資料", "待處理"],
       rows: sortedCampaignsForExecutive(state.data.campaigns).slice(0, 10).map((campaign) => formatCampaignRow(campaign, marketingActions)),
     };
   }
@@ -827,6 +848,7 @@ function campaignBudgetItemsSection(campaign = {}) {
     trustedTableHtml(budgetItemSubsidyCell(item)),
     tag(item.quote_status || "待報價", statusTone(item.quote_status || "待報價")),
     tag(item.payment_status || "未請款", statusTone(item.payment_status || "未請款")),
+    trustedTableHtml(reimbursementInfoCell(item)),
     canManageCampaignDetails() ? actionGroup([
       actionButton("檢核", "view-subsidy-checklist", `budget:${item.id}`, "is-primary"),
       actionButton("編輯", "edit-campaign-budget-item", item.id, "is-primary"),
@@ -839,8 +861,8 @@ function campaignBudgetItemsSection(campaign = {}) {
     title: "預算 / 補助 / 付款項目",
     headerAction: canManageCampaignDetails() ? actionButton("新增預算", "create-campaign-budget-item", campaign.id, "is-primary") : "",
     wide: true,
-    headers: ["排序", "項目", "性質", "金額", "補助檢核", "報價", "付款", "操作"],
-    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未申請", "gray"), tag("未開始", "gray"), tag("未請款", "gray"), "無"]],
+    headers: ["排序", "項目", "性質", "金額", "補助檢核", "報價", "付款", "核銷資料", "操作"],
+    rows: rows.length ? rows : [["無", "尚未建立預算項目", "無", "無", tag("未申請", "gray"), tag("未開始", "gray"), tag("未請款", "gray"), "未填", "無"]],
   };
 }
 
@@ -1661,6 +1683,7 @@ function formatCampaignRow(campaign, includeActions = false) {
     tag(campaign.status || "未填", campaignStatusTone(campaign.status)),
     progress(progressLabel.label, progressLabel.tone),
     budget,
+    trustedTableHtml(reimbursementInfoCell(campaign)),
     nextStep,
   ];
 
@@ -2004,11 +2027,12 @@ function budgetSection() {
       type: "table",
       title: "未結案專案預算 / 補助 / 付款進度",
       wide: true,
-      headers: ["專案 / 時程", "預算與實支", "補助編號", "補助申請進度", "補助款結案", "付款結案", "操作"],
+      headers: ["專案 / 時程", "預算與實支", "補助編號", "核銷資料", "補助申請進度", "補助款結案", "付款結案", "操作"],
       rows: campaigns.map((campaign) => [
         trustedTableHtml(campaignBudgetProjectCell(campaign)),
         trustedTableHtml(campaignBudgetAmountCell(campaign)),
         campaign.midea_budget_code || "未建立",
+        trustedTableHtml(reimbursementInfoCell(campaign)),
         trustedTableHtml(campaignSubsidyProgressCell(campaign)),
         trustedTableHtml(campaignSubsidyClosureCell(campaign)),
         trustedTableHtml(campaignPaymentClosureCell(campaign)),
@@ -2077,6 +2101,18 @@ function campaignBudgetAmountCell(campaign = {}) {
   return lines.join("");
 }
 
+function reimbursementInfoCell(record = {}) {
+  const info = String(record.reimbursement_info || "").trim();
+  if (info) return `<span class="cell-main">${escapeHtml(info)}</span>`;
+
+  const status = record.claim_status || record.subsidy_reimbursement_status || "";
+  if (status && !["未核銷", "未申請", "不適用"].includes(status)) {
+    return `${tag(status, statusTone(status))}<span class="cell-sub">尚未填報銷單號</span>`;
+  }
+
+  return `<span class="cell-sub">未填</span>`;
+}
+
 function campaignSubsidyProgressCell(campaign = {}) {
   const status = campaign.claim_status || (campaign.status === "補助申請" ? "補助申請" : "");
   const hasSubsidy = hasCampaignSubsidy(campaign);
@@ -2129,7 +2165,7 @@ function campaignPaymentClosureCell(campaign = {}) {
 }
 
 function hasCampaignSubsidy(campaign = {}) {
-  return Boolean(campaign.midea_budget_code || campaign.subsidy_rule_id || Number(campaign.subsidy_planned || 0) || Number(campaign.subsidy_received || 0) || campaign.claim_status || campaignSubsidyItems(campaign.id).length);
+  return Boolean(campaign.midea_budget_code || campaign.subsidy_rule_id || Number(campaign.subsidy_planned || 0) || Number(campaign.subsidy_received || 0) || campaign.claim_status || campaign.reimbursement_info || campaignSubsidyItems(campaign.id).length);
 }
 
 function campaignSubsidyMissingCount(campaign = {}) {
@@ -6180,6 +6216,258 @@ function openCreateSalesLeadModal() {
   });
 }
 
+function emailCustomerPageSections() {
+  return [
+    emailCustomerListSection(),
+    emailCustomerSourceSummarySection(),
+  ];
+}
+
+function emailCustomerListSection() {
+  const customers = filteredEmailCustomers();
+  return {
+    type: "table",
+    title: `有 Email 客戶清單（${customers.length}）`,
+    wide: true,
+    topContent: emailCustomerFilterHtml(),
+    headers: ["客戶 / 聯絡人", "Email", "來源", "分眾", "電話 / 手機", "負責 / 狀態", "操作"],
+    rows: customers.length ? customers.slice(0, 300).map((customer) => [
+      trustedTableHtml(`<span class="cell-main">${escapeHtml(customer.company_name || "未填公司")}</span><span class="cell-sub">${escapeHtml(customer.contact_name || "未填聯絡人")}</span>`),
+      customer.email,
+      emailSourceLabel(customer.source_table),
+      customer.audience_segment || "其他",
+      customer.phone || "未填",
+      trustedTableHtml(`<span class="cell-main">${escapeHtml(customer.owner || "未指派")}</span><span class="cell-sub">${escapeHtml(customer.status || "未填狀態")}</span>`),
+      trustedTableHtml(emailCustomerAction(customer)),
+    ]) : [[tag("無資料", "amber"), "目前篩選條件下沒有有 Email 的客戶。", "無", "無", "無", "無", "無"]],
+    footer: customers.length > 300 ? `目前顯示前 300 筆，共 ${customers.length} 筆；請縮小篩選條件後再複製到外部寄信系統。` : "",
+  };
+}
+
+function emailCustomerFilterHtml() {
+  const filters = state.emailCustomerFilters;
+  return `
+    <div class="filter-panel" data-filter-scope="email-customers">
+      <label>
+        <span>關鍵字</span>
+        <input name="keyword" value="${escapeAttr(filters.keyword)}" placeholder="公司、聯絡人、Email">
+      </label>
+      <label>
+        <span>來源</span>
+        <select name="source">
+          ${selectOptions([
+            ["", "全部來源"],
+            ["leads", "名單 / leads"],
+            ["contractor_companies", "工程公司主檔"],
+            ["contractor_contacts", "工程公司聯絡人"],
+          ], filters.source)}
+        </select>
+      </label>
+      <label>
+        <span>分眾</span>
+        <select name="segment">
+          ${selectOptions([["", "全部分眾"], ...EMAIL_AUDIENCE_SEGMENT_OPTIONS.map((value) => [value, value])], filters.segment)}
+        </select>
+      </label>
+      <label>
+        <span>負責人</span>
+        <input name="owner" value="${escapeAttr(filters.owner)}" placeholder="Email 或姓名">
+      </label>
+      <div class="filter-actions">
+        ${actionButton("套用篩選", "apply-email-customer-filters", "", "is-primary")}
+        ${actionButton("清除", "clear-email-customer-filters")}
+      </div>
+    </div>
+  `;
+}
+
+function emailCustomerSourceSummarySection() {
+  const customers = emailCustomers();
+  const bySource = ["leads", "contractor_companies", "contractor_contacts"].map((source) => {
+    const rows = customers.filter((customer) => customer.source_table === source);
+    return [
+      emailSourceLabel(source),
+      String(rows.length),
+      `${new Set(rows.map((row) => normalizeEmail(row.email))).size} 個不重複 Email`,
+      rows.length ? rows.slice(0, 3).map((row) => row.company_name || row.contact_name || row.email).join("、") : "無",
+    ];
+  });
+
+  return {
+    type: "details-table",
+    title: "來源摘要",
+    summary: "查看有 Email 客戶來自哪個資料表",
+    wide: true,
+    headers: ["來源", "筆數", "不重複 Email", "範例"],
+    rows: bySource,
+  };
+}
+
+function emailCustomers() {
+  const rows = [];
+
+  state.data.leads.forEach((lead) => {
+    if (!hasValidEmail(lead.contact_email)) return;
+    rows.push({
+      id: `leads:${lead.id}`,
+      source_table: "leads",
+      source_record_id: lead.id,
+      company_name: lead.company_name || "",
+      contact_name: lead.contact_name || "",
+      email: normalizeEmail(lead.contact_email),
+      audience_segment: inferEmailAudienceSegment({ source_table: "leads", source: lead }),
+      phone: lead.contact_phone || "",
+      owner: lead.assigned_sales || "",
+      status: lead.stage || lead.importance || "",
+    });
+  });
+
+  state.data.contractorCompanies.forEach((company) => {
+    if (!hasValidEmail(company.email)) return;
+    rows.push({
+      id: `contractor_companies:${company.id}`,
+      source_table: "contractor_companies",
+      source_record_id: company.id,
+      company_name: company.company_name || "",
+      contact_name: company.primary_contact_name || company.representative_name || "",
+      email: normalizeEmail(company.email),
+      audience_segment: inferEmailAudienceSegment({ source_table: "contractor_companies", source: company }),
+      phone: company.phone || company.mobile || "",
+      owner: company.owner || "",
+      status: company.relationship_status || company.potential_level || "",
+      company_id: company.id,
+    });
+  });
+
+  state.data.contractorContacts.forEach((contact) => {
+    if (!hasValidEmail(contact.email)) return;
+    const company = findContractorCompany(contact.company_id);
+    rows.push({
+      id: `contractor_contacts:${contact.id}`,
+      source_table: "contractor_contacts",
+      source_record_id: contact.id,
+      company_name: company?.company_name || "",
+      contact_name: contact.contact_name || "",
+      email: normalizeEmail(contact.email),
+      audience_segment: inferEmailAudienceSegment({ source_table: "contractor_contacts", source: contact }),
+      phone: contact.mobile || contact.phone || "",
+      owner: contact.owner || company?.owner || "",
+      status: contact.contact_type || contact.role_title || "",
+      company_id: contact.company_id || "",
+    });
+  });
+
+  return rows.sort((a, b) => {
+    const sourceDiff = emailSourceRank(a.source_table) - emailSourceRank(b.source_table);
+    if (sourceDiff) return sourceDiff;
+    return String(a.company_name || a.contact_name || a.email).localeCompare(String(b.company_name || b.contact_name || b.email), "zh-Hant-TW");
+  });
+}
+
+function filteredEmailCustomers() {
+  const filters = state.emailCustomerFilters;
+  const keyword = String(filters.keyword || "").trim().toLowerCase();
+  const owner = String(filters.owner || "").trim().toLowerCase();
+
+  return emailCustomers().filter((customer) => {
+    if (filters.source && customer.source_table !== filters.source) return false;
+    if (filters.segment && customer.audience_segment !== filters.segment) return false;
+    if (owner && !String(customer.owner || "").toLowerCase().includes(owner)) return false;
+    if (keyword) {
+      const haystack = [
+        customer.company_name,
+        customer.contact_name,
+        customer.email,
+        customer.phone,
+        customer.status,
+        emailSourceLabel(customer.source_table),
+        customer.audience_segment,
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(keyword)) return false;
+    }
+    return true;
+  });
+}
+
+function emailCustomerKpis() {
+  const customers = emailCustomers();
+  const leads = customers.filter((customer) => customer.source_table === "leads").length;
+  const contractorRows = customers.filter((customer) => customer.source_table !== "leads").length;
+  const uniqueEmails = new Set(customers.map((customer) => customer.email)).size;
+  return [
+    ["有 Email", String(customers.length), `${uniqueEmails} 個不重複 Email`],
+    ["名單來源", String(leads), "leads 裡有 contact_email"],
+    ["工程公司", String(contractorRows), "公司或聯絡人有 email"],
+    ["目前篩選", String(filteredEmailCustomers().length), "套用條件後筆數"],
+  ];
+}
+
+function applyEmailCustomerFilters() {
+  const panel = document.querySelector('[data-filter-scope="email-customers"]');
+  if (!panel) return;
+  state.emailCustomerFilters = {
+    keyword: panel.querySelector('[name="keyword"]')?.value.trim() || "",
+    source: panel.querySelector('[name="source"]')?.value || "",
+    segment: panel.querySelector('[name="segment"]')?.value || "",
+    owner: panel.querySelector('[name="owner"]')?.value.trim() || "",
+  };
+  render();
+}
+
+function clearEmailCustomerFilters() {
+  state.emailCustomerFilters = {
+    keyword: "",
+    source: "",
+    segment: "",
+    owner: "",
+  };
+  render();
+}
+
+function hasValidEmail(email = "") {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+}
+
+function emailSourceRank(source = "") {
+  return { leads: 0, contractor_companies: 1, contractor_contacts: 2 }[source] ?? 9;
+}
+
+function emailCustomerAction(customer = {}) {
+  if (customer.company_id) {
+    return actionButton("工程公司詳情", "view-contractor-company", customer.company_id, "is-primary");
+  }
+  return "可複製 Email";
+}
+
+function emailSourceLabel(source = "") {
+  const labels = {
+    leads: "名單 / leads",
+    contractor_companies: "工程公司主檔",
+    contractor_contacts: "工程公司聯絡人",
+  };
+  return labels[source] || source || "未分類";
+}
+
+function inferEmailAudienceSegment({ source_table: sourceTable = "", source = {} } = {}) {
+  const text = [
+    source.company_type,
+    source.contact_type,
+    source.role_title,
+    source.source_channel,
+    source.requirement_note,
+    source.project_experience,
+    source.notes,
+  ].filter(Boolean).join(" ");
+  if (/技師|顧問|設計|機電/.test(text)) return "機電顧問 / 技師";
+  if (/醫院|醫療|科技|資料中心|商辦|飯店|酒店|業主/.test(text)) return "業主 / 飯店 / 商辦";
+  if (sourceTable.startsWith("contractor")) return "工程公司 / 總包";
+  return "其他";
+}
+
+function normalizeEmail(email = "") {
+  return String(email || "").trim().toLowerCase();
+}
+
 function campaignOptions(selected = "") {
   const options = state.data.campaigns.map((campaign) => [campaign.id, campaign.name || "未命名行銷案"]);
   return selectOptions(options, selected);
@@ -9722,6 +10010,10 @@ function campaignFormHtml(campaign = {}) {
           <input name="claim_status" value="${escapeAttr(campaign.claim_status || "")}">
         </label>
         <label class="form-field is-wide">
+          <span>核銷資料</span>
+          <textarea name="reimbursement_info" placeholder="例如：CNY 30053.35 已完成報銷；報銷單號 EC260622620960。">${escapeHtml(campaign.reimbursement_info || "")}</textarea>
+        </label>
+        <label class="form-field is-wide">
           <span>對應美的補助規則</span>
           <select name="subsidy_rule_id">${subsidyRuleOptions(campaign.subsidy_rule_id || "", state.subsidyRulesAvailable ? "不指定補助規則" : "尚未建立補助規則表")}</select>
         </label>
@@ -9833,6 +10125,9 @@ function campaignPayload(values = {}) {
   if (state.subsidyRulesAvailable) {
     payload.subsidy_rule_id = values.subsidy_rule_id || null;
     payload.subsidy_rule_notes = values.subsidy_rule_notes?.trim() || null;
+  }
+  if (state.reimbursementInfoAvailable) {
+    payload.reimbursement_info = values.reimbursement_info?.trim() || null;
   }
   return payload;
 }
@@ -10101,6 +10396,10 @@ function campaignBudgetItemFormHtml(item = {}) {
         </select>
       </label>
       <label class="form-field is-wide">
+        <span>核銷資料</span>
+        <textarea name="reimbursement_info" placeholder="例如：CNY 30053.35 已完成報銷；報銷單號 EC260622620960。">${escapeHtml(item.reimbursement_info || "")}</textarea>
+      </label>
+      <label class="form-field is-wide">
         <span>估算依據 / 備註</span>
         <textarea name="basis_note">${escapeHtml(item.basis_note || "")}</textarea>
       </label>
@@ -10132,6 +10431,9 @@ function campaignBudgetItemPayload(values = {}, campaignId = "") {
     payload.subsidy_application_status = values.subsidy_application_status || "未申請";
     payload.subsidy_reimbursement_status = values.subsidy_reimbursement_status || "未核銷";
     payload.subsidy_missing_notes = values.subsidy_missing_notes?.trim() || null;
+  }
+  if (state.budgetReimbursementInfoAvailable) {
+    payload.reimbursement_info = values.reimbursement_info?.trim() || null;
   }
   return payload;
 }
@@ -10224,11 +10526,13 @@ function openSubsidyChecklistModal(target = "") {
 function campaignSubsidyChecklistHtml(campaign = {}) {
   const rule = campaignSubsidyRule(campaign);
   const items = campaignSubsidyItems(campaign.id);
+  const reimbursementDocuments = campaignDocumentsFor(campaign.id)
+    .filter((document) => document.doc_type === "核銷資料");
   const itemRows = items.map((item) => `
     <div class="checklist-row">
       <strong>${escapeHtml(item.item_name || "未命名費用")}</strong>
       <span>${tag(item.subsidy_application_status || "未申請", statusTone(item.subsidy_application_status || "未申請"))}${tag(item.subsidy_reimbursement_status || "未核銷", statusTone(item.subsidy_reimbursement_status || "未核銷"))}</span>
-      <span>${escapeHtml(item.subsidy_missing_notes || "無缺件備註")}</span>
+      <span>${escapeHtml(item.reimbursement_info || item.subsidy_missing_notes || "無缺件備註")}</span>
     </div>
   `).join("");
 
@@ -10236,6 +10540,21 @@ function campaignSubsidyChecklistHtml(campaign = {}) {
     <div class="form-section">
       <h3>${escapeHtml(campaign.name || "未命名專案")}</h3>
       ${subsidyRuleOverviewHtml(rule, campaign.subsidy_rule_notes)}
+      <div class="checklist-stack">
+        <div class="checklist-row">
+          <strong>核銷資料</strong>
+          <span>${escapeHtml(campaign.reimbursement_info || campaign.claim_status || "尚未填寫核銷資料")}</span>
+        </div>
+        <div class="checklist-row">
+          <strong>核銷附件</strong>
+          <span>${reimbursementDocuments.length
+            ? reimbursementDocuments.map((document) => campaignDocumentHasSource(document)
+              ? actionButton(document.title || document.file_name || "開啟附件", "open-campaign-document", document.id, "is-primary")
+              : escapeHtml(document.title || document.file_name || "未命名附件")).join(" ")
+            : "尚未上傳"}</span>
+          <span>${canManageCampaignDetails() ? actionButton("新增核銷附件", "create-reimbursement-document", campaign.id, "is-primary") : ""}</span>
+        </div>
+      </div>
     </div>
     <div class="form-section">
       <h3>已標記補助預算項目</h3>
@@ -10260,6 +10579,10 @@ function budgetItemSubsidyChecklistHtml(item = {}, campaign = {}) {
         <div class="checklist-row">
           <strong>申請 / 核銷狀態</strong>
           <span>${tag(item.subsidy_application_status || "未申請", statusTone(item.subsidy_application_status || "未申請"))}${tag(item.subsidy_reimbursement_status || "未核銷", statusTone(item.subsidy_reimbursement_status || "未核銷"))}</span>
+        </div>
+        <div class="checklist-row">
+          <strong>核銷資料</strong>
+          <span>${escapeHtml(item.reimbursement_info || "尚未填寫核銷資料")}</span>
         </div>
         <div class="checklist-row">
           <strong>缺件提醒</strong>
@@ -10322,6 +10645,7 @@ function checklistItemsHtml(items = [], emptyText = "尚無項目") {
 
 function campaignDocumentTypeOptions() {
   return [
+    ["核銷資料", "核銷資料"],
     ["報價單", "報價單"],
     ["合約", "合約"],
     ["設計稿", "設計稿"],
@@ -10386,10 +10710,10 @@ function campaignDocumentPayload(values = {}, campaignId = "") {
   };
 }
 
-function openCreateCampaignDocumentModal(campaignId) {
+function openCreateCampaignDocumentModal(campaignId, defaults = {}) {
   const campaign = findCampaign(campaignId);
   if (!campaign) return;
-  openModal("新增專案文件版本", campaignDocumentFormHtml({}, true), {
+  openModal("新增專案文件版本", campaignDocumentFormHtml(defaults, true), {
     submitLabel: "建立文件",
     onSubmit: async (form) => {
       const values = formValues(form);
@@ -11106,6 +11430,7 @@ function buildCurrentKpis(page) {
     "marketing:campaigns": campaignKpis(),
     "marketing:budget": expenseKpis(),
     "marketing:channels": channelKpis(),
+    "marketing:email": emailCustomerKpis(),
     "marketing:tenders": tenderKpis(),
     "marketing:associations": associationKpis(),
     "marketing:vendors": vendorKpis(),
@@ -11546,6 +11871,7 @@ function buildCurrentSections(page) {
     "marketing:vendors": [vendorSection(), cancelledVendorRecordsSection()],
     "marketing:associations": associationPageSections(),
     "marketing:contractors": contractorPageSections(),
+    "marketing:email": emailCustomerPageSections(),
     "marketing:knowledge": [knowledgeSection(true), archivedKnowledgeSection(), marketingResourceManagerSection(), archivedMarketingResourcesSection()],
     "marketing:requests": [salesRequestSection(true), cancelledSalesRequestSection(true), requestKanbanSection()],
     "marketing:weekly": weeklySummarySections(),
@@ -12078,6 +12404,8 @@ document.addEventListener("click", (event) => {
   if (action === "create-contractor-followup") openCreateContractorFollowupModal(id);
   if (action === "edit-contractor-followup") openEditContractorFollowupModal(id);
   if (action === "cancel-contractor-followup") openCancelContractorFollowupModal(id);
+  if (action === "apply-email-customer-filters") applyEmailCustomerFilters();
+  if (action === "clear-email-customer-filters") clearEmailCustomerFilters();
   if (action === "add-association-tag") openAddAssociationTagModal(id);
   if (action === "remove-association-tag") openRemoveAssociationTagModal(id);
   if (action === "create-association-task") openCreateAssociationTaskModal(id);
@@ -12135,6 +12463,10 @@ document.addEventListener("click", (event) => {
   if (action === "fetch-exchange-rate") fetchExchangeRateForCurrentForm(button);
   if (action === "view-subsidy-checklist") openSubsidyChecklistModal(id);
   if (action === "create-campaign-document") openCreateCampaignDocumentModal(id);
+  if (action === "create-reimbursement-document") openCreateCampaignDocumentModal(id, {
+    doc_type: "核銷資料",
+    title: "核銷資料",
+  });
   if (action === "edit-campaign-document") openEditCampaignDocumentModal(id);
   if (action === "archive-campaign-document") openArchiveCampaignDocumentModal(id);
   if (action === "open-campaign-document") openCampaignDocumentFile(id, button);
@@ -12460,6 +12792,8 @@ window.addEventListener("ms:session-expired", () => {
 async function loadExistingData() {
   state.dataStatus = "loading";
   state.subsidyRulesAvailable = false;
+  state.reimbursementInfoAvailable = false;
+  state.budgetReimbursementInfoAvailable = false;
   render();
 
   try {
@@ -12509,7 +12843,7 @@ async function loadExistingData() {
       loadTenderProjects(),
       loadTenderKeywords(),
       loadTenderRuns(),
-      safeGET("leads?select=id,company_name,contact_name,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=50"),
+      safeGET("leads?select=id,company_name,contact_name,contact_email,contact_phone,source_channel,requirement_note,importance,assigned_sales,stage,next_step,next_followup_date,created_at&order=created_at.desc&limit=1000"),
       safeGET("associations?limit=50"),
       safeGET("association_relationship_tags?select=id,association_id,tag,created_at&order=created_at.desc&limit=100"),
       safeGET("association_cooperation_overview?select=id,association_id,item_name,item_type,stage,owner,due_date,progress_pct,next_step,notes,created_at,source_table&order=due_date.asc.nullslast,created_at.desc&limit=80"),
@@ -12640,9 +12974,19 @@ async function loadContractorFollowups() {
 }
 
 async function loadMarketingCampaigns() {
-  const fullSelect = "id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,midea_budget_code,subsidy_rule_id,subsidy_rule_notes,payment_status,claim_status,flight_cost,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,owner,owner_unit,vendors,association_id,association_activity_type,sort_order,archived_at,archived_by,archive_reason,created_at";
+  const fullSelect = "id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,midea_budget_code,subsidy_rule_id,subsidy_rule_notes,payment_status,claim_status,reimbursement_info,flight_cost,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,owner,owner_unit,vendors,association_id,association_activity_type,sort_order,archived_at,archived_by,archive_reason,created_at";
   const withArchive = await safeGET(`marketing_campaigns?select=${fullSelect}&order=sort_order.asc.nullslast,created_at.desc&limit=100`, null);
-  if (Array.isArray(withArchive)) return withArchive;
+  if (Array.isArray(withArchive)) {
+    state.reimbursementInfoAvailable = true;
+    return withArchive;
+  }
+
+  const reimbursementSelect = "id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,midea_budget_code,payment_status,claim_status,reimbursement_info,flight_cost,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,owner,owner_unit,vendors,association_id,association_activity_type,sort_order,archived_at,archived_by,archive_reason,created_at";
+  const reimbursementArchive = await safeGET(`marketing_campaigns?select=${reimbursementSelect}&order=sort_order.asc.nullslast,created_at.desc&limit=100`, null);
+  if (Array.isArray(reimbursementArchive)) {
+    state.reimbursementInfoAvailable = true;
+    return reimbursementArchive;
+  }
 
   const legacyFullSelect = "id,name,status,priority,budget,actual_spend,subsidy_planned,subsidy_received,midea_budget_code,payment_status,claim_status,flight_cost,partner,purpose,notes,planned_start,planned_end,actual_start,actual_end,owner,owner_unit,vendors,association_id,association_activity_type,sort_order,archived_at,archived_by,archive_reason,created_at";
   const legacyArchive = await safeGET(`marketing_campaigns?select=${legacyFullSelect}&order=sort_order.asc.nullslast,created_at.desc&limit=100`, null);
@@ -12712,6 +13056,18 @@ async function loadAssociationNotes() {
 }
 
 async function loadCampaignBudgetItems() {
+  const withReimbursement = await safeGET("marketing_campaign_budget_items?select=id,campaign_id,seq,item_name,budget_nature,amount_twd,exchange_rate,amount_rmb,basis_note,quote_status,payment_status,payment_date,is_subsidy_applicable,subsidy_rule_id,subsidy_application_status,subsidy_reimbursement_status,subsidy_missing_notes,reimbursement_info,cancelled_at,cancelled_by,cancel_reason,created_at&order=seq.asc,created_at.asc&limit=300", null);
+  if (Array.isArray(withReimbursement)) {
+    state.budgetReimbursementInfoAvailable = true;
+    return withReimbursement;
+  }
+
+  const withLifecycleReimbursement = await safeGET("marketing_campaign_budget_items?select=id,campaign_id,seq,item_name,budget_nature,amount_twd,exchange_rate,amount_rmb,basis_note,quote_status,payment_status,payment_date,reimbursement_info,cancelled_at,cancelled_by,cancel_reason,created_at&order=seq.asc,created_at.asc&limit=300", null);
+  if (Array.isArray(withLifecycleReimbursement)) {
+    state.budgetReimbursementInfoAvailable = true;
+    return withLifecycleReimbursement;
+  }
+
   const withSubsidy = await safeGET("marketing_campaign_budget_items?select=id,campaign_id,seq,item_name,budget_nature,amount_twd,exchange_rate,amount_rmb,basis_note,quote_status,payment_status,payment_date,is_subsidy_applicable,subsidy_rule_id,subsidy_application_status,subsidy_reimbursement_status,subsidy_missing_notes,cancelled_at,cancelled_by,cancel_reason,created_at&order=seq.asc,created_at.asc&limit=300", null);
   if (Array.isArray(withSubsidy)) return withSubsidy;
 
